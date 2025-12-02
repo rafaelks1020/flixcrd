@@ -2,15 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 
-interface RouteParams {
-  params: {
+interface RouteContext {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(_request: NextRequest, context: RouteContext) {
+  const { id } = await context.params;
   const title = await prisma.title.findUnique({
-    where: { id: params.id },
+    where: { id },
   });
 
   if (!title) {
@@ -20,8 +21,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   return NextResponse.json(title);
 }
 
-export async function PATCH(request: NextRequest, { params }: RouteParams) {
+export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
+    const { id } = await context.params;
     const body = await request.json();
 
     const {
@@ -52,7 +54,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (hlsPath !== undefined) data.hlsPath = hlsPath;
 
     const updated = await prisma.title.update({
-      where: { id: params.id },
+      where: { id },
       data,
     });
 
@@ -66,10 +68,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: RouteParams) {
+export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
+    const { id } = await context.params;
     await prisma.title.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     return NextResponse.json({ ok: true });

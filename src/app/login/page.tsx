@@ -2,12 +2,10 @@
 
 import { FormEvent, useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const error = searchParams.get("error");
 
   const [email, setEmail] = useState("admin@flixcrd.local");
   const [password, setPassword] = useState("admin123");
@@ -43,9 +41,9 @@ export default function LoginPage() {
           FlixCRD – Login
         </h1>
 
-        {(error || formError) && (
+        {formError && (
           <div className="mb-4 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-            {formError ?? "Não foi possível fazer login. Tente novamente."}
+            {formError}
           </div>
         )}
 
