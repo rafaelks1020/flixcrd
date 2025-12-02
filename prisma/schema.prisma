@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TitleType {
+  MOVIE
+  SERIES
+  ANIME
+  OTHER
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  subscription Subscription?
+}
+
+model Subscription {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id])
+  status             String   // e.g. ACTIVE, CANCELED, TRIALING
+  plan               String?  // e.g. BASIC, PREMIUM
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Title {
+  id           String    @id @default(cuid())
+  tmdbId       Int?      @unique
+  type         TitleType
+  slug         String    @unique
+  name         String
+  originalName String?
+  overview     String?
+  releaseDate  DateTime?
+  posterUrl    String?
+  backdropUrl  String?
+  hlsPath      String?   // path prefix in Wasabi, e.g. movie-id/
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}

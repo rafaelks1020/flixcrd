@@ -1,0 +1,34 @@
+# FlixCRD – Diário Cascade
+
+## 1. Visão geral do projeto
+- Tipo: Plataforma de streaming estilo Netflix com HLS adaptativo.
+- Documento base: `streaming-architecture-hls-netflix.md`.
+- Objetivo: Catálogo organizado, player HLS com múltiplas qualidades e proteção via presigned URLs.
+
+## 2. Stack principal
+- Next.js (deploy Vercel) – frontend e API routes.
+- Wasabi S3 – armazenamento e entrega de vídeos.
+- HLS (`.m3u8` e segmentos `.ts`).
+- `hls.js` – player no navegador.
+- Presigned URLs – controle de acesso aos vídeos.
+
+## 3. Convenção de documentação Cascade
+Pasta `cascade/` na raiz do projeto:
+- `cascade/log.md` – linha do tempo do que foi feito.
+- `cascade/decisions.md` – decisões de arquitetura (ADR simples).
+- `cascade/tasks.md` – backlog e status das tarefas.
+
+Este arquivo `.cascade` resume como a documentação funciona e o estado atual de alto nível.
+
+## 4. Fluxo de uso
+- Registrar cada mudança relevante em `cascade/log.md`.
+- Registrar decisões técnicas em `cascade/decisions.md`.
+- Manter tarefas em `cascade/tasks.md` sempre atualizadas.
+
+## 5. Fase atual
+- Status: Início do projeto.
+- Próximos passos de alto nível:
+  - Extrair requisitos detalhados do documento de arquitetura.
+  - Definir modelo de dados inicial (catálogo, usuários, permissões).
+  - Especificar as primeiras telas (home tipo Netflix + página de player).
+  - Definir estratégia de integração com Wasabi e geração de presigned URLs.
