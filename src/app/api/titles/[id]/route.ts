@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 
 import { prisma } from "@/lib/prisma";
+import { wasabiClient } from "@/lib/wasabi";
+
+const bucketName = process.env.WASABI_BUCKET_NAME;
 
 interface RouteContext {
   params: Promise<{
@@ -71,6 +75,44 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params;
+
+    const title = await prisma.title.findUnique({ where: { id } });
+
+    if (!title) {
+      return NextResponse.json(
+        { error: "Título não encontrado." },
+        { status: 404 },
+      );
+    }
+
+    if (bucketName && title.hlsPath) {
+      try {
+        const listCommand = new ListObjectsV2Command({
+          Bucket: bucketName,
+          Prefix: title.hlsPath,
+        });
+
+        const listed = await wasabiClient.send(listCommand);
+
+        if (listed.Contents && listed.Contents.length > 0) {
+          const objects = listed.Contents.filter((obj) => obj.Key).map((obj) => ({
+            Key: obj.Key as string,
+          }));
+
+          if (objects.length > 0) {
+            const deleteCommand = new DeleteObjectsCommand({
+              Bucket: bucketName,
+              Delete: { Objects: objects },
+            });
+
+            await wasabiClient.send(deleteCommand);
+          }
+        }
+      } catch (err) {
+        console.error("Erro ao excluir objetos do Wasabi para o título", id, err);
+      }
+    }
+
     await prisma.title.delete({
       where: { id },
     });

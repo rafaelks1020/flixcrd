@@ -17,6 +17,7 @@ export default function AdminUploadPage() {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   async function loadTitles() {
     setLoadingTitles(true);
@@ -52,45 +53,278 @@ export default function AdminUploadPage() {
       setError("Escolha um arquivo para enviar.");
       return;
     }
-
     try {
       setUploading(true);
+      setUploadProgress(0);
 
-      // 1) Solicita URL de upload para Wasabi
-      const res = await fetch("/api/wasabi/upload-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          titleId: selectedTitleId,
-          filename: file.name,
-          contentType: file.type,
-        }),
-      });
+      const MAX_SINGLE_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024;
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error ?? "Erro ao gerar URL de upload");
-      }
+      const uploadSimple = async () => {
+        const res = await fetch("/api/wasabi/upload-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            titleId: selectedTitleId,
+            filename: file.name,
+            contentType: file.type,
+          }),
+        });
 
-      const { uploadUrl, prefix } = data as {
-        uploadUrl: string;
-        prefix: string;
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.error ?? "Erro ao gerar URL de upload");
+        }
+
+        const { uploadUrl, prefix } = data as {
+          uploadUrl: string;
+          prefix: string;
+        };
+
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+
+          xhr.open("PUT", uploadUrl, true);
+          xhr.setRequestHeader(
+            "Content-Type",
+            file.type || "application/octet-stream",
+          );
+
+          xhr.upload.onprogress = (event) => {
+            if (!event.lengthComputable) return;
+            const percent = Math.round((event.loaded / event.total) * 100);
+            setUploadProgress(percent);
+          };
+
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              setUploadProgress(100);
+              resolve();
+            } else {
+              const responseText = xhr.responseText || xhr.statusText || "Erro desconhecido";
+              reject(
+                new Error(
+                  `Falha ao enviar arquivo para o Wasabi (status ${xhr.status}): ${responseText}`,
+                ),
+              );
+            }
+          };
+
+          xhr.onerror = () => {
+            const responseText = xhr.responseText || xhr.statusText || "Erro de rede";
+            reject(
+              new Error(
+                `Erro de rede ao enviar arquivo para o Wasabi: ${responseText}`,
+              ),
+            );
+          };
+
+          xhr.send(file);
+        });
+
+        return prefix;
       };
 
-      // 2) Envia o arquivo direto para o Wasabi usando a presigned URL
-      const putRes = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-        },
-        body: file,
-      });
+      const uploadMultipart = async () => {
+        const startRes = await fetch("/api/wasabi/multipart/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            titleId: selectedTitleId,
+            filename: file.name,
+            contentType: file.type,
+          }),
+        });
 
-      if (!putRes.ok) {
-        throw new Error("Falha ao enviar arquivo para o Wasabi");
-      }
+        const startData = await startRes.json();
+        if (!startRes.ok) {
+          throw new Error(startData?.error ?? "Erro ao iniciar upload multipart");
+        }
 
-      // 3) Recarrega os títulos para refletir hlsPath atualizado
+        const { uploadId, key, prefix } = startData as {
+          uploadId: string;
+          key: string;
+          prefix: string;
+        };
+
+        const PART_SIZE = 50 * 1024 * 1024;
+        const totalSize = file.size;
+
+        const parts: { partNumber: number; start: number; end: number }[] = [];
+        let partNumber = 1;
+        for (let start = 0; start < totalSize; start += PART_SIZE) {
+          const end = Math.min(start + PART_SIZE, totalSize);
+          parts.push({ partNumber, start, end });
+          partNumber += 1;
+        }
+
+        const completedParts: { partNumber: number; eTag: string }[] = [];
+        const loadedPerPart = new Map<number, number>();
+        let uploadedBytes = 0;
+
+        const uploadPart = async (part: { partNumber: number; start: number; end: number }) => {
+          const partRes = await fetch("/api/wasabi/multipart/part-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              key,
+              uploadId,
+              partNumber: part.partNumber,
+            }),
+          });
+
+          const partData = await partRes.json();
+          if (!partRes.ok) {
+            throw new Error(partData?.error ?? `Erro ao gerar URL da parte ${part.partNumber}`);
+          }
+
+          const { uploadUrl } = partData as { uploadUrl: string };
+
+          await new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open("PUT", uploadUrl, true);
+            xhr.setRequestHeader(
+              "Content-Type",
+              file.type || "application/octet-stream",
+            );
+
+            xhr.upload.onprogress = (event) => {
+              if (!event.lengthComputable) return;
+              const previousLoaded = loadedPerPart.get(part.partNumber) ?? 0;
+              loadedPerPart.set(part.partNumber, event.loaded);
+              uploadedBytes += event.loaded - previousLoaded;
+              const percent = Math.round((uploadedBytes / totalSize) * 100);
+              setUploadProgress(percent);
+            };
+
+            xhr.onload = () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                const eTag = xhr.getResponseHeader("ETag");
+                if (!eTag) {
+                  reject(
+                    new Error(
+                      `ETag não retornado pelo Wasabi para a parte ${part.partNumber}`,
+                    ),
+                  );
+                  return;
+                }
+                completedParts.push({
+                  partNumber: part.partNumber,
+                  eTag,
+                });
+                resolve();
+              } else {
+                const responseText = xhr.responseText || xhr.statusText || "Erro desconhecido";
+                reject(
+                  new Error(
+                    `Falha ao enviar parte ${part.partNumber} para o Wasabi (status ${xhr.status}): ${responseText}`,
+                  ),
+                );
+              }
+            };
+
+            xhr.onerror = () => {
+              const responseText = xhr.responseText || xhr.statusText || "Erro de rede";
+              reject(
+                new Error(
+                  `Erro de rede ao enviar parte ${part.partNumber} para o Wasabi: ${responseText}`,
+                ),
+              );
+            };
+
+            const blob = file.slice(part.start, part.end);
+            xhr.send(blob);
+          });
+        };
+
+        const queue = [...parts];
+
+        const estimateConcurrency = () => {
+          let base = 4;
+
+          if (typeof navigator !== "undefined") {
+            const anyNavigator = navigator as any;
+            const connection =
+              anyNavigator.connection ||
+              anyNavigator.mozConnection ||
+              anyNavigator.webkitConnection;
+
+            if (connection && typeof connection.downlink === "number") {
+              const downlink = connection.downlink as number;
+              if (downlink >= 800) {
+                base = 16;
+              } else if (downlink >= 400) {
+                base = 12;
+              } else if (downlink >= 100) {
+                base = 8;
+              } else if (downlink >= 50) {
+                base = 6;
+              }
+            }
+          }
+
+          const sizeGb = totalSize / (1024 * 1024 * 1024);
+          if (sizeGb >= 50) {
+            base = Math.max(base, 16);
+          } else if (sizeGb >= 20) {
+            base = Math.max(base, 12);
+          } else if (sizeGb >= 10) {
+            base = Math.max(base, 8);
+          }
+
+          return Math.min(Math.max(base, 2), 16);
+        };
+
+        const CONCURRENCY = estimateConcurrency();
+
+        const worker = async () => {
+          while (true) {
+            const next = queue.shift();
+            if (!next) break;
+            await uploadPart(next);
+          }
+        };
+
+        const workers = Array.from(
+          { length: Math.min(CONCURRENCY, parts.length) },
+          () => worker(),
+        );
+
+        await Promise.all(workers);
+
+        if (completedParts.length !== parts.length) {
+          throw new Error("Nem todas as partes foram enviadas com sucesso.");
+        }
+
+        const completeRes = await fetch("/api/wasabi/multipart/complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            key,
+            uploadId,
+            parts: completedParts,
+          }),
+        });
+
+        const completeData = await completeRes.json();
+        if (!completeRes.ok) {
+          throw new Error(
+            completeData?.error ?? "Erro ao finalizar upload multipart no Wasabi",
+          );
+        }
+
+        setUploadProgress(100);
+        return prefix;
+      };
+
+      const MIN_MULTIPART_BYTES = 0;
+
+      const prefix =
+        file.size > MAX_SINGLE_UPLOAD_BYTES
+          ? await uploadMultipart()
+          : file.size >= MIN_MULTIPART_BYTES
+            ? await uploadMultipart()
+            : await uploadSimple();
+
       await loadTitles();
 
       setMessage(
@@ -101,6 +335,7 @@ export default function AdminUploadPage() {
       setError(err.message ?? "Erro no upload para o Wasabi");
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   }
 
@@ -165,6 +400,21 @@ export default function AdminUploadPage() {
         >
           {uploading ? "Enviando..." : "Enviar para Wasabi"}
         </button>
+        {uploading && (
+          <div className="mt-3 space-y-1">
+            <div className="h-2 w-full overflow-hidden rounded bg-zinc-800">
+              <div
+                className="h-2 bg-zinc-100"
+                style={{ width: `${uploadProgress ?? 0}%` }}
+              />
+            </div>
+            <p className="text-xs text-zinc-400">
+              {uploadProgress !== null
+                ? `Enviando arquivo... ${uploadProgress}%`
+                : "Preparando upload..."}
+            </p>
+          </div>
+        )}
       </form>
 
       <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 text-xs text-zinc-400">

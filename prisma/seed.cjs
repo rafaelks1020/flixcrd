@@ -5,6 +5,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   const passwordHash = await bcrypt.hash("admin123", 10);
+  const userPasswordHash = await bcrypt.hash("user123", 10);
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@flixcrd.local" },
@@ -13,10 +14,24 @@ async function main() {
       email: "admin@flixcrd.local",
       name: "Admin FlixCRD",
       passwordHash,
+      role: "ADMIN",
     },
   });
 
-  console.log("Seed concluído. Usuário admin:", admin.email);
+  const user = await prisma.user.upsert({
+    where: { email: "user@flixcrd.local" },
+    update: {},
+    create: {
+      email: "user@flixcrd.local",
+      name: "Usuário FlixCRD",
+      passwordHash: userPasswordHash,
+      role: "USER",
+    },
+  });
+
+  console.log("Seed concluído.");
+  console.log("Usuário admin:", admin.email);
+  console.log("Usuário comum:", user.email);
 }
 
 main()

@@ -44,6 +44,10 @@ export default function AdminCatalogPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [transcodingId, setTranscodingId] = useState<string | null>(null);
+  const [transcodingProgress, setTranscodingProgress] = useState<number | null>(null);
+  const [transcodingStatus, setTranscodingStatus] = useState<string | null>(null);
 
   const [tmdbQuery, setTmdbQuery] = useState("");
   const [tmdbResults, setTmdbResults] = useState<TmdbResult[]>([]);
@@ -67,6 +71,7 @@ export default function AdminCatalogPage() {
   async function loadTitles() {
     setLoading(true);
     setError(null);
+    setInfo(null);
     try {
       const res = await fetch("/api/titles");
       if (!res.ok) {
@@ -78,6 +83,92 @@ export default function AdminCatalogPage() {
       setError(err.message ?? "Erro ao carregar títulos");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleTranscode(id: string) {
+    setError(null);
+    setInfo(null);
+    setTranscodingId(id);
+    setTranscodingProgress(null);
+    setTranscodingStatus(null);
+    try {
+      const res = await fetch(`/api/transcode/hls/${id}`, {
+        method: "POST",
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error ?? "Erro ao gerar HLS para este título");
+      }
+      const jobId: string | undefined = data?.jobId;
+      if (!jobId) {
+        throw new Error("Serviço de transcodificação não retornou jobId.");
+      }
+
+      // Polling de status
+      const poll = async () => {
+        try {
+          const statusRes = await fetch(
+            `/api/transcode/hls/${id}?job_id=${encodeURIComponent(jobId)}`,
+          );
+          const statusData = await statusRes.json();
+
+          if (!statusRes.ok) {
+            throw new Error(statusData?.error ?? "Erro ao consultar status do job");
+          }
+
+          const status: string = statusData.status ?? "";
+          const progress: number =
+            typeof statusData.progress === "number" ? statusData.progress : 0;
+          const message: string | null = statusData.message ?? null;
+
+          setTranscodingStatus(status);
+          setTranscodingProgress(progress);
+
+          if (status === "completed") {
+            await loadTitles();
+            setInfo("Transcodificação HLS concluída. Arquivos gerados no prefixo do título.");
+            setTranscodingId(null);
+            setTranscodingProgress(null);
+            setTranscodingStatus(null);
+            return false;
+          }
+
+          if (status === "error") {
+            setError(
+              message || "Job de transcodificação falhou. Verifique os logs do transcoder.",
+            );
+            setTranscodingId(null);
+            setTranscodingProgress(null);
+            setTranscodingStatus(null);
+            return false;
+          }
+
+          return true;
+        } catch (err: any) {
+          setError(err.message ?? "Erro ao consultar status do job");
+          setTranscodingId(null);
+          setTranscodingProgress(null);
+          setTranscodingStatus(null);
+          return false;
+        }
+      };
+
+      // Primeiro poll imediato
+      let keepPolling = await poll();
+      if (keepPolling) {
+        const interval = setInterval(async () => {
+          const cont = await poll();
+          if (!cont) {
+            clearInterval(interval);
+          }
+        }, 5000);
+      }
+    } catch (err: any) {
+      setError(err.message ?? "Erro ao iniciar transcodificação HLS");
+    } finally {
+      // o estado é finalizado no próprio polling
     }
   }
 
@@ -144,6 +235,7 @@ export default function AdminCatalogPage() {
     e.preventDefault();
     setSaving(true);
     setError(null);
+    setInfo(null);
 
     try {
       const payload: any = {
@@ -232,6 +324,11 @@ export default function AdminCatalogPage() {
           {error}
         </div>
       )}
+      {info && !error && (
+        <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+          {info}
+        </div>
+      )}
 
       <div className="grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <div className="space-y-4 rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
@@ -262,20 +359,29 @@ export default function AdminCatalogPage() {
                   key={`${r.type}-${r.tmdbId}`}
                   type="button"
                   onClick={() => applyTmdbResult(r)}
-                  className="flex w-full items-start justify-between gap-2 rounded-md px-2 py-1 text-left hover:bg-zinc-800/80"
+                  className="flex w-full items-start gap-2 rounded-md px-2 py-1 text-left hover:bg-zinc-800/80"
                 >
-                  <span>
-                    <span className="font-medium text-zinc-50">{r.name}</span>
-                    {r.releaseDate && (
-                      <span className="ml-1 text-zinc-400">
-                        ({r.releaseDate.slice(0, 4)})
+                  {r.posterUrl && (
+                    <img
+                      src={r.posterUrl}
+                      alt={r.name}
+                      className="h-16 w-11 flex-shrink-0 rounded object-cover"
+                    />
+                  )}
+                  <div className="flex-1 flex items-start justify-between gap-2">
+                    <span>
+                      <span className="font-medium text-zinc-50">{r.name}</span>
+                      {r.releaseDate && (
+                        <span className="ml-1 text-zinc-400">
+                          ({r.releaseDate.slice(0, 4)})
+                        </span>
+                      )}
+                      <span className="block text-[10px] uppercase text-zinc-500">
+                        {r.type === "MOVIE" ? "Filme" : "Série"}
                       </span>
-                    )}
-                    <span className="block text-[10px] uppercase text-zinc-500">
-                      {r.type === "MOVIE" ? "Filme" : "Série"}
                     </span>
-                  </span>
-                  <span className="text-[10px] text-zinc-500">TMDb #{r.tmdbId}</span>
+                    <span className="text-[10px] text-zinc-500">TMDb #{r.tmdbId}</span>
+                  </div>
                 </button>
               ))}
             </div>
@@ -384,6 +490,18 @@ export default function AdminCatalogPage() {
                   onChange={(e) => setForm({ ...form, posterUrl: e.target.value })}
                   className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
                 />
+                {form.posterUrl && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <img
+                      src={form.posterUrl}
+                      alt={form.name || "Poster"}
+                      className="h-24 w-16 rounded border border-zinc-800 object-cover"
+                    />
+                    <span className="text-[10px] text-zinc-500">
+                      Pré-visualização do poster
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">
@@ -394,6 +512,18 @@ export default function AdminCatalogPage() {
                   onChange={(e) => setForm({ ...form, backdropUrl: e.target.value })}
                   className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
                 />
+                {form.backdropUrl && (
+                  <div className="mt-2 flex flex-col gap-1">
+                    <img
+                      src={form.backdropUrl}
+                      alt={form.name || "Backdrop"}
+                      className="h-20 w-full rounded border border-zinc-800 object-cover"
+                    />
+                    <span className="text-[10px] text-zinc-500">
+                      Pré-visualização do backdrop
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">
@@ -486,6 +616,18 @@ export default function AdminCatalogPage() {
                             className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-200 hover:bg-zinc-800"
                           >
                             Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleTranscode(t.id)}
+                            disabled={transcodingId === t.id}
+                            className="rounded-md border border-emerald-700 px-2 py-1 text-[10px] text-emerald-200 hover:bg-emerald-900/60 disabled:opacity-60"
+                          >
+                            {transcodingId === t.id
+                              ? transcodingStatus === "running" && transcodingProgress !== null
+                                ? `Gerando HLS... ${Math.round(transcodingProgress)}%`
+                                : "Gerando HLS..."
+                              : "Gerar HLS"}
                           </button>
                           <button
                             type="button"
