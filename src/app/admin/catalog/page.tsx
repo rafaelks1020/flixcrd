@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 
 type TitleType = "MOVIE" | "SERIES" | "ANIME" | "OTHER";
@@ -557,6 +558,14 @@ export default function AdminCatalogPage() {
                     </td>
                     <td className="px-3 py-2 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {(t.type === "SERIES" || t.type === "ANIME") && (
+                          <Link
+                            href={`/admin/catalog/${t.id}`}
+                            className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-200 hover:bg-zinc-800"
+                          >
+                            Temporadas
+                          </Link>
+                        )}
                         <button
                           type="button"
                           onClick={() => {

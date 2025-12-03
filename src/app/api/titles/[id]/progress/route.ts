@@ -10,7 +10,7 @@ interface RouteContext {
   }>;
 }
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context: RouteContext) {
   try {
     const session = await getServerSession(authOptions);
 
@@ -20,20 +20,32 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
     const { id } = await context.params;
     const userId = (session.user as any).id as string;
+    const episodeIdParam = request.nextUrl.searchParams.get("episodeId");
+    const episodeId = episodeIdParam && episodeIdParam.trim().length > 0 ? episodeIdParam : null;
 
-    const prismaAny = prisma as any;
-    if (!prismaAny.playbackProgress?.findUnique) {
-      return NextResponse.json({ positionSeconds: 0, durationSeconds: 0 });
-    }
+    let progress = null;
 
-    const progress = await prismaAny.playbackProgress.findUnique({
-      where: {
-        userId_titleId: {
-          userId,
-          titleId: id,
+    if (episodeId) {
+      // Progresso específico de episódio
+      progress = await prisma.playbackProgress.findUnique({
+        where: {
+          userId_episodeId: {
+            userId,
+            episodeId,
+          },
         },
-      },
-    });
+      });
+    } else {
+      // Progresso por título (filmes)
+      progress = await prisma.playbackProgress.findUnique({
+        where: {
+          userId_titleId: {
+            userId,
+            titleId: id,
+          },
+        },
+      });
+    }
 
     if (!progress) {
       return NextResponse.json({ positionSeconds: 0, durationSeconds: 0 });
@@ -63,6 +75,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const body = await request.json().catch(() => null);
     const rawPosition = body?.positionSeconds;
     const rawDuration = body?.durationSeconds;
+    const bodyEpisodeId = body?.episodeId as string | undefined;
 
     const positionSeconds = Number.isFinite(rawPosition)
       ? Math.max(0, Math.floor(rawPosition))
@@ -75,29 +88,51 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ ok: true });
     }
 
-    const prismaAny = prisma as any;
-    if (!prismaAny.playbackProgress?.upsert) {
-      return NextResponse.json({ ok: true });
-    }
+    const episodeId = bodyEpisodeId && bodyEpisodeId.trim().length > 0 ? bodyEpisodeId : null;
 
-    await prismaAny.playbackProgress.upsert({
-      where: {
-        userId_titleId: {
+    if (episodeId) {
+      // Episódio específico: chave única por (userId, episodeId)
+      await prisma.playbackProgress.upsert({
+        where: {
+          userId_episodeId: {
+            userId,
+            episodeId,
+          },
+        },
+        update: {
+          titleId: id,
+          positionSeconds,
+          durationSeconds,
+        },
+        create: {
           userId,
           titleId: id,
+          episodeId,
+          positionSeconds,
+          durationSeconds,
         },
-      },
-      update: {
-        positionSeconds,
-        durationSeconds,
-      },
-      create: {
-        userId,
-        titleId: id,
-        positionSeconds,
-        durationSeconds,
-      },
-    });
+      });
+    } else {
+      // Filme (ou fallback): chave única por (userId, titleId)
+      await prisma.playbackProgress.upsert({
+        where: {
+          userId_titleId: {
+            userId,
+            titleId: id,
+          },
+        },
+        update: {
+          positionSeconds,
+          durationSeconds,
+        },
+        create: {
+          userId,
+          titleId: id,
+          positionSeconds,
+          durationSeconds,
+        },
+      });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (error) {

@@ -43,6 +43,14 @@ export default async function TitleDetailPage({ params }: PageProps) {
       },
       crew: true,
       videos: true,
+      seasons: {
+        orderBy: { seasonNumber: "asc" },
+        include: {
+          episodes: {
+            orderBy: { episodeNumber: "asc" },
+          },
+        },
+      },
     },
   });
 
@@ -109,6 +117,8 @@ export default async function TitleDetailPage({ params }: PageProps) {
       ? "Anime"
       : "Outro";
 
+  const isSeries = title.type === "SERIES" || title.type === "ANIME";
+
   const mainCast = title.cast.slice(0, 12);
   const importantJobs = ["Director", "Writer", "Screenplay", "Producer"];
   const mainCrew = title.crew
@@ -155,6 +165,35 @@ export default async function TitleDetailPage({ params }: PageProps) {
       }
 
       relatedTitles = genreTitles.filter((g: any) => g.id !== id).slice(0, 16);
+    }
+  }
+
+  const seasonsAny = (title as any).seasons as any[] | undefined;
+  const seasonsForUi = Array.isArray(seasonsAny)
+    ? [...seasonsAny].sort(
+        (a, b) => (a.seasonNumber ?? 0) - (b.seasonNumber ?? 0),
+      )
+    : [];
+
+  let firstEpisode: {
+    id: string;
+    seasonNumber: number;
+    episodeNumber: number;
+    name: string;
+  } | null = null;
+
+  if (isSeries && seasonsForUi.length > 0) {
+    for (const season of seasonsForUi) {
+      if (Array.isArray(season.episodes) && season.episodes.length > 0) {
+        const ep = season.episodes[0];
+        firstEpisode = {
+          id: ep.id as string,
+          seasonNumber: ep.seasonNumber ?? season.seasonNumber ?? 0,
+          episodeNumber: ep.episodeNumber ?? 0,
+          name: ep.name as string,
+        };
+        break;
+      }
     }
   }
 
@@ -262,7 +301,11 @@ export default async function TitleDetailPage({ params }: PageProps) {
 
               <div className="flex flex-wrap items-center gap-3 pt-3">
                 <Link
-                  href={`/watch/${title.id}`}
+                  href={
+                    isSeries && firstEpisode
+                      ? `/watch/${title.id}?episodeId=${firstEpisode.id}`
+                      : `/watch/${title.id}`
+                  }
                   className="rounded-md bg-zinc-50 px-5 py-2 text-sm font-semibold text-zinc-900 hover:bg-white"
                 >
                   Assistir agora
@@ -303,6 +346,68 @@ export default async function TitleDetailPage({ params }: PageProps) {
           </section>
         </div>
       </div>
+
+      {isSeries && seasonsForUi.length > 0 && (
+        <section className="px-4 pb-8 pt-4 md:px-10">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-300">
+            Temporadas e episódios
+          </h2>
+          <div className="space-y-4 text-xs">
+            {seasonsForUi.map((season: any) => (
+              <div
+                key={season.id ?? season.seasonNumber}
+                className="space-y-2 rounded-md border border-zinc-800 bg-zinc-950/40 p-3"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-zinc-100">
+                      T{String(season.seasonNumber ?? 0).padStart(2, "0")} – {season.name || "Sem título"}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-zinc-400">
+                      {(season.episodeCount ??
+                        (Array.isArray(season.episodes) ? season.episodes.length : 0)) || 0}{" "}
+                      episódio(s)
+                    </div>
+                  </div>
+                </div>
+
+                {Array.isArray(season.episodes) && season.episodes.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {season.episodes.map((ep: any) => (
+                      <div
+                        key={ep.id}
+                        className="flex items-start justify-between gap-3 rounded-md border border-zinc-800 bg-zinc-900/60 p-2"
+                      >
+                        <div className="flex-1 space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <div className="text-[11px] font-semibold text-zinc-50">
+                                S{String(ep.seasonNumber ?? season.seasonNumber ?? 0).padStart(2, "0")}E
+                                {String(ep.episodeNumber ?? 0).padStart(2, "0")} – {ep.name}
+                              </div>
+                            </div>
+                            <Link
+                              href={`/watch/${title.id}?episodeId=${ep.id}`}
+                              className="rounded-md bg-zinc-100 px-3 py-1 text-[11px] font-semibold text-zinc-900 hover:bg-white"
+                            >
+                              Assistir
+                            </Link>
+                          </div>
+                          {ep.overview && (
+                            <p className="line-clamp-2 text-[11px] text-zinc-300">
+                              {ep.overview}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Elenco principal */}
       {mainCast.length > 0 && (

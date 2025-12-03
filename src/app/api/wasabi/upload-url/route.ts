@@ -17,15 +17,68 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { titleId, filename, contentType } = body ?? {};
+    const { titleId, episodeId, filename, contentType } = body ?? {};
 
-    if (!titleId || !filename) {
+    if (!filename || (!titleId && !episodeId)) {
       return NextResponse.json(
-        { error: "Campos obrigatórios: titleId, filename" },
+        { error: "Campos obrigatórios: filename e (titleId ou episodeId)" },
         { status: 400 },
       );
     }
 
+    // Upload para episódio específico (séries/animes)
+    if (episodeId) {
+      const episode = await prisma.episode.findUnique({
+        where: { id: episodeId },
+        include: { title: true },
+      });
+
+      if (!episode || !episode.title) {
+        return NextResponse.json(
+          { error: "Episódio não encontrado" },
+          { status: 404 },
+        );
+      }
+
+      const title = episode.title as any;
+      const safeSlug = title.slug || `title-${title.id}`;
+
+      let prefix: string;
+      if (episode.hlsPath && episode.hlsPath.trim() !== "") {
+        prefix = episode.hlsPath.endsWith("/")
+          ? episode.hlsPath
+          : `${episode.hlsPath}/`;
+      } else if (episode.seasonNumber && episode.episodeNumber) {
+        const s = episode.seasonNumber.toString().padStart(2, "0");
+        const e = episode.episodeNumber.toString().padStart(2, "0");
+        prefix = `titles/${safeSlug}/s${s}/e${e}/`;
+      } else {
+        prefix = `titles/${safeSlug}/episodes/${episode.id}/`;
+      }
+
+      const key = `${prefix}${filename}`;
+
+      const command = new PutObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+        ContentType: contentType || "application/octet-stream",
+      });
+
+      const uploadUrl = await getSignedUrl(wasabiClient, command, {
+        expiresIn: 60 * 15,
+      });
+
+      await prisma.episode.update({
+        where: { id: episode.id },
+        data: {
+          hlsPath: prefix,
+        },
+      });
+
+      return NextResponse.json({ uploadUrl, key, prefix });
+    }
+
+    // Upload no nível do título (filmes ou fluxo antigo)
     const title = await prisma.title.findUnique({ where: { id: titleId } });
 
     if (!title) {
@@ -49,7 +102,6 @@ export async function POST(request: NextRequest) {
       expiresIn: 60 * 15,
     });
 
-    // Atualiza o hlsPath do título para o prefixo onde os arquivos HLS ficarão.
     await prisma.title.update({
       where: { id: title.id },
       data: {

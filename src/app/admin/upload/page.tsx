@@ -2,17 +2,37 @@
 
 import { FormEvent, useEffect, useState } from "react";
 
+type TitleType = "MOVIE" | "SERIES" | "ANIME" | "OTHER";
+
 interface TitleOption {
   id: string;
   name: string;
   slug: string;
   hlsPath: string | null;
+  type: TitleType;
+}
+
+interface EpisodeOption {
+  id: string;
+  seasonNumber: number;
+  episodeNumber: number;
+  name: string;
+}
+
+interface SeasonOption {
+  seasonNumber: number;
+  name: string | null;
+  episodes: EpisodeOption[];
 }
 
 export default function AdminUploadPage() {
   const [titles, setTitles] = useState<TitleOption[]>([]);
   const [loadingTitles, setLoadingTitles] = useState(false);
   const [selectedTitleId, setSelectedTitleId] = useState<string>("");
+  const [seasons, setSeasons] = useState<SeasonOption[]>([]);
+  const [loadingSeasons, setLoadingSeasons] = useState(false);
+  const [selectedSeasonNumber, setSelectedSeasonNumber] = useState<number | "">("");
+  const [selectedEpisodeId, setSelectedEpisodeId] = useState<string>("");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -36,9 +56,58 @@ export default function AdminUploadPage() {
     }
   }
 
+  async function loadSeasonsForTitle(titleId: string) {
+    setLoadingSeasons(true);
+    setSeasons([]);
+    setSelectedSeasonNumber("");
+    setSelectedEpisodeId("");
+    try {
+      const res = await fetch(`/api/admin/titles/${titleId}/seasons`);
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json?.error ?? "Erro ao carregar temporadas/episódios.");
+      }
+
+      const seasonsData = (json.seasons ?? []) as Array<{
+        seasonNumber: number;
+        name: string | null;
+        episodes: Array<{
+          id: string;
+          seasonNumber: number;
+          episodeNumber: number;
+          name: string;
+        }>;
+      }>;
+
+      const mapped: SeasonOption[] = seasonsData.map((season) => ({
+        seasonNumber: season.seasonNumber,
+        name: season.name,
+        episodes: season.episodes.map((ep) => ({
+          id: ep.id,
+          seasonNumber: ep.seasonNumber,
+          episodeNumber: ep.episodeNumber,
+          name: ep.name,
+        })),
+      }));
+
+      setSeasons(mapped);
+      if (mapped.length > 0) {
+        setSelectedSeasonNumber(mapped[0].seasonNumber);
+      }
+    } catch (err: any) {
+      setError(err.message ?? "Erro ao carregar temporadas/episódios.");
+    } finally {
+      setLoadingSeasons(false);
+    }
+  }
+
   useEffect(() => {
     loadTitles();
   }, []);
+
+  const selectedTitle = titles.find((t) => t.id === selectedTitleId) || null;
+  const isSeries =
+    selectedTitle && (selectedTitle.type === "SERIES" || selectedTitle.type === "ANIME");
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -48,6 +117,13 @@ export default function AdminUploadPage() {
     if (!selectedTitleId) {
       setError("Selecione um título do catálogo.");
       return;
+    }
+
+    if (isSeries) {
+      if (!selectedEpisodeId) {
+        setError("Selecione um episódio alvo para o upload.");
+        return;
+      }
     }
     if (!file) {
       setError("Escolha um arquivo para enviar.");
@@ -65,6 +141,7 @@ export default function AdminUploadPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             titleId: selectedTitleId,
+            episodeId: isSeries ? selectedEpisodeId : undefined,
             filename: file.name,
             contentType: file.type,
           }),
@@ -130,6 +207,7 @@ export default function AdminUploadPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             titleId: selectedTitleId,
+            episodeId: isSeries ? selectedEpisodeId : undefined,
             filename: file.name,
             contentType: file.type,
           }),
@@ -365,13 +443,30 @@ export default function AdminUploadPage() {
           <label className="block text-zinc-200">Título do catálogo</label>
           <select
             value={selectedTitleId}
-            onChange={(e) => setSelectedTitleId(e.target.value)}
+            onChange={(e) => {
+              const id = e.target.value;
+              setSelectedTitleId(id);
+              setSeasons([]);
+              setSelectedSeasonNumber("");
+              setSelectedEpisodeId("");
+              if (id) {
+                const found = titles.find((t) => t.id === id);
+                if (found && (found.type === "SERIES" || found.type === "ANIME")) {
+                  loadSeasonsForTitle(id);
+                }
+              }
+            }}
             className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-zinc-500"
           >
             <option value="">Selecione um título</option>
             {titles.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.name} ({t.slug}){t.hlsPath ? " – HLS configurado" : ""}
+                {t.name} ({t.slug})
+                {t.type === "SERIES" || t.type === "ANIME"
+                  ? " – Série/Anime"
+                  : t.hlsPath
+                    ? " – HLS configurado"
+                    : ""}
               </option>
             ))}
           </select>
@@ -379,6 +474,53 @@ export default function AdminUploadPage() {
             <p className="text-xs text-zinc-500">Carregando títulos...</p>
           )}
         </div>
+
+        {isSeries && (
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <label className="block text-zinc-200">Temporada</label>
+              <select
+                value={selectedSeasonNumber === "" ? "" : String(selectedSeasonNumber)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  const num = value ? Number(value) : "";
+                  setSelectedSeasonNumber(num);
+                  setSelectedEpisodeId("");
+                }}
+                className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-zinc-500"
+              >
+                <option value="">Selecione uma temporada</option>
+                {seasons.map((s) => (
+                  <option key={s.seasonNumber} value={s.seasonNumber}>
+                    T{s.seasonNumber.toString().padStart(2, "0")} – {s.name || "Sem título"}
+                  </option>
+                ))}
+              </select>
+              {loadingSeasons && (
+                <p className="text-xs text-zinc-500">Carregando temporadas/episódios...</p>
+              )}
+            </div>
+            <div className="space-y-1">
+              <label className="block text-zinc-200">Episódio</label>
+              <select
+                value={selectedEpisodeId}
+                onChange={(e) => setSelectedEpisodeId(e.target.value)}
+                className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-zinc-500"
+                disabled={selectedSeasonNumber === "" || seasons.length === 0}
+              >
+                <option value="">Selecione um episódio</option>
+                {seasons
+                  .find((s) => s.seasonNumber === selectedSeasonNumber)
+                  ?.episodes.map((ep) => (
+                    <option key={ep.id} value={ep.id}>
+                      S{ep.seasonNumber.toString().padStart(2, "0")}E
+                      {ep.episodeNumber.toString().padStart(2, "0")} – {ep.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-1">
           <label className="block text-zinc-200">Arquivo de vídeo / HLS</label>
@@ -389,7 +531,8 @@ export default function AdminUploadPage() {
           />
           <p className="text-xs text-zinc-500">
             Você pode enviar um MP4 original ou um pacote HLS (por exemplo, arquivo .zip com
-            segments e manifests). O prefixo usado no Wasabi será baseado no slug do título.
+            segments e manifests). Para filmes, o prefixo no Wasabi é baseado no slug do título;
+            para séries/animes, é baseado no episódio selecionado (temporada/episódio).
           </p>
         </div>
 

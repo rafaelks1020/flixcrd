@@ -25,6 +25,10 @@ interface ContinueWatchingItem extends Title {
   positionSeconds: number;
   durationSeconds: number;
   progressPercent: number;
+  episodeId: string | null;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
+  episodeName: string | null;
 }
 
 interface HomeClientProps {
@@ -303,7 +307,11 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
             {continueWatching.map((item) => (
               <Link
                 key={item.id}
-                href={`/title/${item.id}`}
+                href={
+                  item.episodeId
+                    ? `/watch/${item.id}?episodeId=${encodeURIComponent(item.episodeId)}`
+                    : `/watch/${item.id}`
+                }
                 className="group relative min-w-[160px] flex-shrink-0 overflow-hidden rounded-md bg-zinc-900 transition hover:scale-105 hover:z-10 md:min-w-[200px]"
               >
                 {item.posterUrl ? (
@@ -313,19 +321,17 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
                     className="aspect-[16/9] w-full object-cover transition group-hover:opacity-80"
                   />
                 ) : (
-                  <div className="flex aspect-[16/9] w-full items-center justify-center bg-zinc-800 text-center text-xs text-zinc-400">
+                  <div className="flex aspect-[2/3] w-full items-center justify-center bg-zinc-800 text-center text-xs text-zinc-400">
                     {item.name}
                   </div>
                 )}
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2 text-[11px] leading-tight">
                   <div className="line-clamp-2 font-semibold text-zinc-50">
-                    {item.name}
-                  </div>
-                  <div className="mt-1 h-1.5 w-full rounded-full bg-zinc-700">
-                    <div
-                      className="h-full rounded-full bg-red-600"
-                      style={{ width: `${item.progressPercent || 0}%` }}
-                    />
+                    {item.seasonNumber && item.episodeNumber
+                      ? `S${String(item.seasonNumber).padStart(2, "0")}E${String(
+                          item.episodeNumber,
+                        ).padStart(2, "0")} – ${item.episodeName || item.name}`
+                      : item.name}
                   </div>
                 </div>
               </Link>

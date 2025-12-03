@@ -16,6 +16,9 @@ interface TitleData {
   posterUrl: string | null;
   backdropUrl: string | null;
   type: TitleType;
+  seasonNumber?: number | null;
+  episodeNumber?: number | null;
+  episodeName?: string | null;
 }
 
 interface PlaybackResponse {
@@ -37,6 +40,7 @@ interface QualityLevelInfo {
 
 interface WatchClientProps {
   titleId: string;
+  episodeId?: string;
 }
 
 function formatTime(seconds: number): string {
@@ -53,7 +57,7 @@ function formatTime(seconds: number): string {
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
-export default function WatchClient({ titleId }: WatchClientProps) {
+export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PlaybackResponse | null>(null);
@@ -84,7 +88,11 @@ export default function WatchClient({ titleId }: WatchClientProps) {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/titles/${titleId}/playback`);
+        const url = episodeId
+          ? `/api/episodes/${episodeId}/playback`
+          : `/api/titles/${titleId}/playback`;
+
+        const res = await fetch(url);
         const json = await res.json();
 
         if (!res.ok) {
@@ -106,7 +114,7 @@ export default function WatchClient({ titleId }: WatchClientProps) {
     }
 
     loadPlayback();
-  }, [titleId]);
+  }, [titleId, episodeId]);
 
   useEffect(() => {
     function handleFullscreenChange() {
@@ -446,6 +454,13 @@ export default function WatchClient({ titleId }: WatchClientProps) {
 
   const { title } = data;
   const year = title.releaseDate ? title.releaseDate.slice(0, 4) : null;
+  const displayName = title.episodeName || title.name;
+  const episodeLabel =
+    typeof title.seasonNumber === "number" && typeof title.episodeNumber === "number"
+      ? `S${String(title.seasonNumber).padStart(2, "0")}E${String(
+          title.episodeNumber,
+        ).padStart(2, "0")}`
+      : null;
 
   return (
     <div className="fixed inset-0 bg-black text-zinc-50">
@@ -500,7 +515,11 @@ export default function WatchClient({ titleId }: WatchClientProps) {
             // eslint-disable-next-line @typescript-eslint/no-floating-promises
             (async () => {
               try {
-                const res = await fetch(`/api/titles/${titleId}/progress`);
+                const progressUrl = episodeId
+                  ? `/api/titles/${titleId}/progress?episodeId=${encodeURIComponent(episodeId)}`
+                  : `/api/titles/${titleId}/progress`;
+
+                const res = await fetch(progressUrl);
                 if (!res.ok) return;
                 const json = await res.json();
                 const resume = Number(json?.positionSeconds ?? 0);
@@ -536,6 +555,7 @@ export default function WatchClient({ titleId }: WatchClientProps) {
                 body: JSON.stringify({
                   positionSeconds: newTime,
                   durationSeconds: total,
+                  episodeId: episodeId ?? null,
                 }),
               }).catch(() => {
                 // ignora erro de rede
@@ -556,6 +576,7 @@ export default function WatchClient({ titleId }: WatchClientProps) {
               body: JSON.stringify({
                 positionSeconds: pos,
                 durationSeconds: total,
+                episodeId: episodeId ?? null,
               }),
             }).catch(() => {});
           }}
@@ -573,6 +594,7 @@ export default function WatchClient({ titleId }: WatchClientProps) {
               body: JSON.stringify({
                 positionSeconds: total,
                 durationSeconds: total,
+                episodeId: episodeId ?? null,
               }),
             }).catch(() => {});
           }}
@@ -608,7 +630,9 @@ export default function WatchClient({ titleId }: WatchClientProps) {
             <span className="opacity-80">
               {year && `${year} · `}
             </span>
-            <span>{title.name}</span>
+            <span>
+              {episodeLabel ? `${episodeLabel} · ${displayName}` : displayName}
+            </span>
           </div>
           <div className="w-16" />
         </div>

@@ -14,12 +14,7 @@ export async function GET() {
 
     const userId = (session.user as any).id as string;
 
-    const prismaAny = prisma as any;
-    if (!prismaAny.playbackProgress?.findMany) {
-      return NextResponse.json([]);
-    }
-
-    const items = await prismaAny.playbackProgress.findMany({
+    const items = await prisma.playbackProgress.findMany({
       where: {
         userId,
         positionSeconds: { gt: 0 },
@@ -36,6 +31,14 @@ export async function GET() {
             voteAverage: true,
             releaseDate: true,
             type: true,
+          },
+        },
+        episode: {
+          select: {
+            id: true,
+            seasonNumber: true,
+            episodeNumber: true,
+            name: true,
           },
         },
       },
@@ -56,20 +59,25 @@ export async function GET() {
             )
           : 0;
 
+        const t = item.title!;
+        const ep = item.episode;
+
         return {
-          id: item.title.id,
-          name: item.title.name,
-          slug: item.title.slug,
-          posterUrl: item.title.posterUrl,
-          backdropUrl: item.title.backdropUrl,
-          voteAverage: item.title.voteAverage,
-          releaseDate: item.title.releaseDate
-            ? item.title.releaseDate.toISOString()
-            : null,
-          type: item.title.type,
+          id: t.id,
+          name: t.name,
+          slug: t.slug,
+          posterUrl: t.posterUrl,
+          backdropUrl: t.backdropUrl,
+          voteAverage: t.voteAverage,
+          releaseDate: t.releaseDate ? t.releaseDate.toISOString() : null,
+          type: t.type,
           positionSeconds: item.positionSeconds,
           durationSeconds: item.durationSeconds,
           progressPercent: percent,
+          episodeId: ep?.id ?? null,
+          seasonNumber: ep?.seasonNumber ?? null,
+          episodeNumber: ep?.episodeNumber ?? null,
+          episodeName: ep?.name ?? null,
         };
       });
 
