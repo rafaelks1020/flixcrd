@@ -81,8 +81,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     let year: string | undefined;
     if (title.releaseDate instanceof Date) {
       year = String(title.releaseDate.getFullYear());
-    } else if (typeof title.releaseDate === "string") {
-      year = title.releaseDate.slice(0, 4);
     }
 
     const searchParams = new URLSearchParams();
