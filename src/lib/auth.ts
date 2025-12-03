@@ -9,17 +9,6 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
   },
-  cookies: {
-    sessionToken: {
-      name: "flixcrd.session-token",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: process.env.NODE_ENV === "production",
-      },
-    },
-  },
   logger: {
     error(code, ...metadata) {
       if (code === "JWT_SESSION_ERROR") {
