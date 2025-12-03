@@ -8,6 +8,7 @@ import { wasabiClient } from "@/lib/wasabi";
 import { authOptions } from "@/lib/auth";
 
 const bucketName = process.env.WASABI_BUCKET_NAME;
+const CLOUDFLARE_PROXY_BASE = "https://wasabi-proxy.crdozo-rafael1028.workers.dev";
 
 interface RouteContext {
   params: Promise<{
@@ -15,7 +16,7 @@ interface RouteContext {
   }>;
 }
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context: RouteContext) {
   try {
     const session = await getServerSession(authOptions);
 
@@ -109,17 +110,24 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
     let playbackUrl: string;
 
-    if (kind === "hls") {
-      playbackUrl = `/api/episodes/${episode.id}/hls`;
-    } else {
-      const command = new GetObjectCommand({
-        Bucket: bucketName,
-        Key: playbackKey,
-      });
+    const sourceParam = request.nextUrl.searchParams.get("source");
 
-      playbackUrl = await getSignedUrl(wasabiClient, command, {
-        expiresIn: 60 * 5,
-      });
+    if (kind === "hls") {
+      const base = `/api/episodes/${episode.id}/hls`;
+      playbackUrl = sourceParam ? `${base}?source=${sourceParam}` : base;
+    } else {
+      if (sourceParam === "cloudflare") {
+        playbackUrl = `${CLOUDFLARE_PROXY_BASE}/${playbackKey}`;
+      } else {
+        const command = new GetObjectCommand({
+          Bucket: bucketName,
+          Key: playbackKey,
+        });
+
+        playbackUrl = await getSignedUrl(wasabiClient, command, {
+          expiresIn: 60 * 5,
+        });
+      }
     }
 
     const subtitles = await Promise.all(

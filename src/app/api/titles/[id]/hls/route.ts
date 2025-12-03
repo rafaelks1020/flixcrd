@@ -7,6 +7,9 @@ import { wasabiClient } from "@/lib/wasabi";
 import { authOptions } from "@/lib/auth";
 
 const bucketName = process.env.WASABI_BUCKET_NAME;
+// Bases públicas para streaming direto ou via proxy Cloudflare
+const WASABI_PUBLIC_BASE = "https://s3.us-east-1.wasabisys.com";
+const CLOUDFLARE_PROXY_BASE = "https://wasabi-proxy.crdozo-rafael1028.workers.dev";
 
 interface RouteContext {
   params: Promise<{
@@ -38,7 +41,7 @@ async function streamToString(body: any): Promise<string> {
   });
 }
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context: RouteContext) {
   if (!bucketName) {
     return NextResponse.json(
       { error: "WASABI_BUCKET_NAME não configurado." },
@@ -78,33 +81,50 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       ? title.hlsPath
       : `${title.hlsPath}/`;
 
-    const listCmd = new ListObjectsV2Command({
-      Bucket: bucketName,
-      Prefix: prefix,
-    });
+    const variant = request.nextUrl.searchParams.get("variant");
+    const source =
+      (request.nextUrl.searchParams.get("source") as "wasabi" | "cloudflare" | null) ??
+      "wasabi";
 
-    const listed = await wasabiClient.send(listCmd);
+    let playlistKey: string;
 
-    if (!listed.Contents || listed.Contents.length === 0) {
-      return NextResponse.json(
-        { error: "Nenhum arquivo encontrado no prefixo HLS." },
-        { status: 404 },
-      );
+    if (variant && variant.trim().length > 0) {
+      // Quando ?variant= é passado, carregamos diretamente o playlist indicado
+      playlistKey = `${prefix}${variant.trim()}`;
+    } else {
+      // Master: precisamos descobrir o master.m3u8 no prefixo
+      const listCmd = new ListObjectsV2Command({
+        Bucket: bucketName,
+        Prefix: prefix,
+      });
+
+      const listed = await wasabiClient.send(listCmd);
+
+      if (!listed.Contents || listed.Contents.length === 0) {
+        return NextResponse.json(
+          { error: "Nenhum arquivo encontrado no prefixo HLS." },
+          { status: 404 },
+        );
+      }
+
+      const objects = listed.Contents.filter((obj) => obj.Key);
+      const masterObject =
+        objects.find((obj) =>
+          (obj.Key as string).toLowerCase().endsWith("master.m3u8"),
+        ) ??
+        objects.find((obj) =>
+          (obj.Key as string).toLowerCase().endsWith(".m3u8"),
+        );
+
+      if (!masterObject || !masterObject.Key) {
+        return NextResponse.json(
+          { error: "Arquivo master.m3u8 não encontrado." },
+          { status: 404 },
+        );
+      }
+
+      playlistKey = masterObject.Key as string;
     }
-
-    const objects = listed.Contents.filter((obj) => obj.Key);
-    const hlsObject = objects.find((obj) =>
-      (obj.Key as string).toLowerCase().endsWith(".m3u8"),
-    );
-
-    if (!hlsObject || !hlsObject.Key) {
-      return NextResponse.json(
-        { error: "Arquivo master.m3u8 não encontrado." },
-        { status: 404 },
-      );
-    }
-
-    const playlistKey = hlsObject.Key as string;
 
     const getCmd = new GetObjectCommand({
       Bucket: bucketName,
@@ -117,7 +137,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
     const lines = original.split(/\r?\n/);
 
-    const signedLines = await Promise.all(
+    const rewrittenLines = await Promise.all(
       lines.map(async (line) => {
         const trimmed = line.trim();
 
@@ -125,26 +145,50 @@ export async function GET(_request: NextRequest, context: RouteContext) {
           return line;
         }
 
-        if (!trimmed.endsWith(".ts")) {
+        // Já é uma URL absoluta? mantém como está
+        if (/^https?:\/\//i.test(trimmed)) {
           return line;
         }
 
-        const segmentKey = `${prefix}${trimmed}`;
+        // Playlists variantes (.m3u8): apontar para esta mesma rota com ?variant= e manter o mesmo source
+        if (trimmed.toLowerCase().endsWith(".m3u8")) {
+          const url = new URL(request.url);
+          url.searchParams.set("variant", trimmed);
+          if (source) {
+            url.searchParams.set("source", source);
+          }
+          return `${url.pathname}?${url.searchParams.toString()}`;
+        }
 
-        const cmd = new GetObjectCommand({
-          Bucket: bucketName,
-          Key: segmentKey,
-        });
+        // Segmentos de vídeo (.ts): gerar URL via proxy Cloudflare ou URL assinada do Wasabi
+        if (trimmed.toLowerCase().endsWith(".ts")) {
+          const objectKey = `${prefix}${trimmed}`;
 
-        const url = await import("@aws-sdk/s3-request-presigner").then(({ getSignedUrl }) =>
-          getSignedUrl(wasabiClient, cmd, { expiresIn: 60 * 60 }),
-        );
+          if (source === "cloudflare") {
+            return `${CLOUDFLARE_PROXY_BASE}/${objectKey}`;
+          }
 
-        return url;
+          // Default: Wasabi com URL assinada (bucket não é público)
+          const cmd = new GetObjectCommand({
+            Bucket: bucketName,
+            Key: objectKey,
+          });
+
+          const url = await import("@aws-sdk/s3-request-presigner").then(
+            ({ getSignedUrl }) =>
+              getSignedUrl(wasabiClient, cmd, {
+                expiresIn: 60 * 60,
+              }),
+          );
+
+          return url;
+        }
+
+        return line;
       }),
     );
 
-    const rewritten = signedLines.join("\n");
+    const rewritten = rewrittenLines.join("\n");
 
     return new NextResponse(rewritten, {
       status: 200,

@@ -53,8 +53,22 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
   const [searchLoading, setSearchLoading] = useState(false);
   const [favorites, setFavorites] = useState<Title[]>([]);
   const [continueWatching, setContinueWatching] = useState<ContinueWatchingItem[]>([]);
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Carregar perfil ativo do localStorage
+  useEffect(() => {
+    if (isLoggedIn && typeof window !== "undefined") {
+      const profileId = localStorage.getItem("activeProfileId");
+      if (profileId) {
+        setActiveProfileId(profileId);
+      } else {
+        // Se não tem perfil ativo, redirecionar para seleção de perfil
+        window.location.href = "/profiles";
+      }
+    }
+  }, [isLoggedIn]);
 
   useEffect(() => {
     async function loadGenresAndTitles() {
@@ -78,13 +92,13 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
         }
         setTitlesByGenre(titlesMap);
 
-        if (isLoggedIn) {
+        if (isLoggedIn && activeProfileId) {
           // Carrega favoritos e continuar assistindo em paralelo
           const [favResult, cwResult] = await Promise.allSettled([
-            fetch("/api/user/favorites").then((res) =>
+            fetch(`/api/user/favorites?profileId=${activeProfileId}`).then((res) =>
               res.ok ? res.json() : []
             ),
-            fetch("/api/user/continue-watching").then((res) =>
+            fetch(`/api/user/continue-watching?profileId=${activeProfileId}`).then((res) =>
               res.ok ? res.json() : []
             ),
           ]);
@@ -106,8 +120,13 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
       }
     }
 
+    if (isLoggedIn && !activeProfileId) {
+      // Aguardar perfil ser carregado
+      return;
+    }
+
     loadGenresAndTitles();
-  }, [isLoggedIn]);
+  }, [isLoggedIn, activeProfileId]);
 
   let heroYear: number | null = null;
   if (heroTitle?.releaseDate) {
@@ -212,12 +231,21 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
                 />
               </div>
               {isLoggedIn && (
-                <Link
-                  href="/browse"
-                  className="hidden rounded-md border border-zinc-600 px-3 py-1.5 text-xs font-semibold text-zinc-100 hover:bg-zinc-800 md:inline-block"
-                >
-                  Catálogo
-                </Link>
+                <>
+                  <Link
+                    href="/browse"
+                    className="hidden rounded-md border border-zinc-600 px-3 py-1.5 text-xs font-semibold text-zinc-100 hover:bg-zinc-800 md:inline-block"
+                  >
+                    Catálogo
+                  </Link>
+                  <Link
+                    href="/profiles"
+                    className="rounded-full border-2 border-zinc-600 p-1.5 text-lg hover:border-zinc-400"
+                    title="Trocar perfil"
+                  >
+                    👤
+                  </Link>
+                </>
               )}
               {isAdmin && (
                 <Link

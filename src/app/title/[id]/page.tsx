@@ -59,20 +59,6 @@ export default async function TitleDetailPage({ params }: PageProps) {
   }
 
   let isFavorite = false;
-  if (userId) {
-    const prismaAny = prisma as any;
-    if (prismaAny.userFavorite?.findUnique) {
-      const fav = await prismaAny.userFavorite.findUnique({
-        where: {
-          userId_titleId: {
-            userId,
-            titleId: id,
-          },
-        },
-      });
-      isFavorite = !!fav;
-    }
-  }
 
   const year = getYear(title.releaseDate as Date | null);
   const runtimeLabel = formatRuntime(title.runtime);

@@ -14,21 +14,31 @@ async function requireUser() {
   return { userId: session.user.id as string };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const { userId } = await requireUser();
     if (!userId) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const prismaAny = prisma as any;
-    if (!prismaAny.userFavorite?.findMany) {
-      // Client Prisma ainda não foi regenerado com o modelo UserFavorite
-      return NextResponse.json([]);
+    // Pegar profileId do header ou query
+    const profileId = request.headers.get("x-profile-id") || request.nextUrl.searchParams.get("profileId");
+    
+    if (!profileId) {
+      return NextResponse.json({ error: "profileId é obrigatório." }, { status: 400 });
     }
 
-    const favorites = await prismaAny.userFavorite.findMany({
-      where: { userId },
+    // Verificar se perfil pertence ao usuário
+    const profile = await prisma.profile.findFirst({
+      where: { id: profileId, userId },
+    });
+
+    if (!profile) {
+      return NextResponse.json({ error: "Perfil não encontrado." }, { status: 404 });
+    }
+
+    const favorites = await prisma.userFavorite.findMany({
+      where: { profileId },
       include: {
         title: {
           select: {
@@ -79,12 +89,29 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => null);
     const titleId = body?.titleId as string | undefined;
+    const profileId = body?.profileId as string | undefined;
 
     if (!titleId) {
       return NextResponse.json(
         { error: "titleId é obrigatório." },
         { status: 400 },
       );
+    }
+
+    if (!profileId) {
+      return NextResponse.json(
+        { error: "profileId é obrigatório." },
+        { status: 400 },
+      );
+    }
+
+    // Verificar se perfil pertence ao usuário
+    const profile = await prisma.profile.findFirst({
+      where: { id: profileId, userId },
+    });
+
+    if (!profile) {
+      return NextResponse.json({ error: "Perfil não encontrado." }, { status: 404 });
     }
 
     const exists = await prisma.title.findUnique({ where: { id: titleId } });
@@ -95,24 +122,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const prismaAny = prisma as any;
-    if (!prismaAny.userFavorite?.upsert) {
-      return NextResponse.json(
-        { error: "Favoritos ainda não estão disponíveis no servidor." },
-        { status: 500 },
-      );
-    }
-
-    await prismaAny.userFavorite.upsert({
+    await prisma.userFavorite.upsert({
       where: {
-        userId_titleId: {
-          userId,
+        profileId_titleId: {
+          profileId,
           titleId,
         },
       },
       update: {},
       create: {
-        userId,
+        profileId,
         titleId,
       },
     });
@@ -136,6 +155,7 @@ export async function DELETE(request: NextRequest) {
 
     const body = await request.json().catch(() => null);
     const titleId = body?.titleId as string | undefined;
+    const profileId = body?.profileId as string | undefined;
 
     if (!titleId) {
       return NextResponse.json(
@@ -144,17 +164,25 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const prismaAny = prisma as any;
-    if (!prismaAny.userFavorite?.deleteMany) {
+    if (!profileId) {
       return NextResponse.json(
-        { error: "Favoritos ainda não estão disponíveis no servidor." },
-        { status: 500 },
+        { error: "profileId é obrigatório." },
+        { status: 400 },
       );
     }
 
-    await prismaAny.userFavorite.deleteMany({
+    // Verificar se perfil pertence ao usuário
+    const profile = await prisma.profile.findFirst({
+      where: { id: profileId, userId },
+    });
+
+    if (!profile) {
+      return NextResponse.json({ error: "Perfil não encontrado." }, { status: 404 });
+    }
+
+    await prisma.userFavorite.deleteMany({
       where: {
-        userId,
+        profileId,
         titleId,
       },
     });

@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 enum TitleType {
@@ -26,11 +27,28 @@ model User {
   avatar       String?
   passwordHash String
   role         UserRole      @default(USER)
+  useCloudflareProxy Boolean @default(false)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
   subscription Subscription?
+  profiles     Profile[]
+}
+
+model Profile {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  avatar    String?  // URL do avatar ou código de ícone
+  isKids    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   playbackProgresses PlaybackProgress[]
+  favorites          UserFavorite[]
+
+  @@index([userId])
 }
 
 model Subscription {
@@ -79,13 +97,14 @@ model Title {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  genres        TitleGenre[]
-  cast          Cast[]
-  crew          Crew[]
-  videos        Video[]
-  seasons       Season[]
-  episodes      Episode[]
+  genres             TitleGenre[]
+  cast               Cast[]
+  crew               Crew[]
+  videos             Video[]
+  seasons            Season[]
+  episodes           Episode[]
   playbackProgresses PlaybackProgress[]
+  favorites          UserFavorite[]
 }
 
 model TitleGenre {
@@ -189,7 +208,7 @@ model Episode {
 
 model PlaybackProgress {
   id              String   @id @default(cuid())
-  userId          String
+  profileId       String
   titleId         String
   episodeId       String?
   positionSeconds Int
@@ -197,15 +216,29 @@ model PlaybackProgress {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
   title   Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
   episode Episode? @relation(fields: [episodeId], references: [id], onDelete: Cascade)
 
   // Um progresso por título (filmes ou fallback)
-  @@unique([userId, titleId])
+  @@unique([profileId, titleId])
   // Um progresso por episódio quando episodeId não for nulo
-  @@unique([userId, episodeId])
-  @@index([userId])
+  @@unique([profileId, episodeId])
+  @@index([profileId])
   @@index([titleId])
   @@index([episodeId])
+}
+
+model UserFavorite {
+  id        String   @id @default(cuid())
+  profileId String
+  titleId   String
+  createdAt DateTime @default(now())
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title   Title   @relation(fields: [titleId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, titleId])
+  @@index([profileId])
+  @@index([titleId])
 }

@@ -1,10 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
@@ -14,9 +14,25 @@ export async function GET() {
 
     const userId = (session.user as any).id as string;
 
+    // Pegar profileId do header ou query
+    const profileId = request.headers.get("x-profile-id") || request.nextUrl.searchParams.get("profileId");
+    
+    if (!profileId) {
+      return NextResponse.json({ error: "profileId é obrigatório." }, { status: 400 });
+    }
+
+    // Verificar se perfil pertence ao usuário
+    const profile = await prisma.profile.findFirst({
+      where: { id: profileId, userId },
+    });
+
+    if (!profile) {
+      return NextResponse.json({ error: "Perfil não encontrado." }, { status: 404 });
+    }
+
     const items = await prisma.playbackProgress.findMany({
       where: {
-        userId,
+        profileId,
         positionSeconds: { gt: 0 },
         durationSeconds: { gt: 0 },
       },

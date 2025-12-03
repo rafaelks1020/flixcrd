@@ -75,6 +75,8 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [subtitleTracks, setSubtitleTracks] = useState<TextTrack[]>([]);
   const [currentSubtitleIndex, setCurrentSubtitleIndex] = useState<number | null>(null);
+  const [useCloudflareProxy, setUseCloudflareProxy] = useState<boolean | null>(null);
+  const [profileId, setProfileId] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -83,14 +85,54 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const lastProgressSyncRef = useRef<number>(0);
   const router = useRouter();
 
+  // Carrega o profileId ativo salvo pelo fluxo de perfis
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem("activeProfileId");
+    setProfileId(stored ?? null);
+  }, []);
+
+  useEffect(() => {
+    async function testarVelocidadeWasabi(): Promise<number> {
+      // O bucket Wasabi é privado e não permite acesso público direto,
+      // então não podemos fazer ping com uma URL pública sem causar AccessDenied.
+      // Para evitar erros no console, tratamos sempre como conexão "lenta"
+      // quando o proxy estiver habilitado, o que força o uso do Cloudflare.
+      return Infinity;
+    }
+
     async function loadPlayback() {
       setLoading(true);
       setError(null);
       try {
-        const url = episodeId
+        // 1) Buscar configuração do usuário
+        let proxyFlag = false;
+        try {
+          const settingsRes = await fetch("/api/user/settings", { cache: "no-store" });
+          if (settingsRes.ok) {
+            const settingsJson = await settingsRes.json();
+            proxyFlag = Boolean(settingsJson?.useCloudflareProxy);
+          }
+        } catch {
+          proxyFlag = false;
+        }
+        setUseCloudflareProxy(proxyFlag);
+
+        // 2) Decidir origem (wasabi x cloudflare) se o proxy estiver habilitado
+        let source: "wasabi" | "cloudflare" = "wasabi";
+        if (proxyFlag) {
+          const tempo = await testarVelocidadeWasabi();
+          const limite = 200; // ms
+          if (tempo > limite) {
+            source = "cloudflare";
+          }
+        }
+
+        const baseUrl = episodeId
           ? `/api/episodes/${episodeId}/playback`
           : `/api/titles/${titleId}/playback`;
+        const sep = baseUrl.includes("?") ? "&" : "?";
+        const url = `${baseUrl}${sep}source=${source}`;
 
         const res = await fetch(url);
         const json = await res.json();
@@ -537,32 +579,37 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
             setCurrentSubtitleIndex(defaultIndex);
 
             // Buscar progresso salvo para Continuar assistindo
-            // eslint-disable-next-line @typescript-eslint/no-floating-promises
-            (async () => {
-              try {
-                const progressUrl = episodeId
-                  ? `/api/titles/${titleId}/progress?episodeId=${encodeURIComponent(episodeId)}`
-                  : `/api/titles/${titleId}/progress`;
+            if (profileId) {
+              // eslint-disable-next-line @typescript-eslint/no-floating-promises
+              (async () => {
+                try {
+                  const baseUrl = episodeId
+                    ? `/api/titles/${titleId}/progress?episodeId=${encodeURIComponent(episodeId)}`
+                    : `/api/titles/${titleId}/progress`;
 
-                const res = await fetch(progressUrl);
-                if (!res.ok) return;
-                const json = await res.json();
-                const resume = Number(json?.positionSeconds ?? 0);
-                const total = Number(json?.durationSeconds ?? loadedDuration ?? 0);
-                const effectiveDuration = total || loadedDuration;
-                if (
-                  Number.isFinite(resume) &&
-                  resume > 0 &&
-                  effectiveDuration &&
-                  resume < effectiveDuration - 5
-                ) {
-                  videoEl.currentTime = resume;
-                  setCurrentTime(resume);
+                  const sep = baseUrl.includes("?") ? "&" : "?";
+                  const progressUrl = `${baseUrl}${sep}profileId=${encodeURIComponent(profileId)}`;
+
+                  const res = await fetch(progressUrl);
+                  if (!res.ok) return;
+                  const json = await res.json();
+                  const resume = Number(json?.positionSeconds ?? 0);
+                  const total = Number(json?.durationSeconds ?? loadedDuration ?? 0);
+                  const effectiveDuration = total || loadedDuration;
+                  if (
+                    Number.isFinite(resume) &&
+                    resume > 0 &&
+                    effectiveDuration &&
+                    resume < effectiveDuration - 5
+                  ) {
+                    videoEl.currentTime = resume;
+                    setCurrentTime(resume);
+                  }
+                } catch {
+                  // ignora erros de progresso
                 }
-              } catch {
-                // ignora erros de progresso
-              }
-            })();
+              })();
+            }
           }}
           onTimeUpdate={(event) => {
             const videoEl = event.currentTarget;
@@ -571,7 +618,12 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
             setCurrentTime(newTime);
 
             const now = Date.now();
-            if (total && Number.isFinite(total) && now - lastProgressSyncRef.current > 5000) {
+            if (
+              profileId &&
+              total &&
+              Number.isFinite(total) &&
+              now - lastProgressSyncRef.current > 5000
+            ) {
               lastProgressSyncRef.current = now;
               // eslint-disable-next-line @typescript-eslint/no-floating-promises
               fetch(`/api/titles/${titleId}/progress`, {
@@ -581,6 +633,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
                   positionSeconds: newTime,
                   durationSeconds: total,
                   episodeId: episodeId ?? null,
+                  profileId,
                 }),
               }).catch(() => {
                 // ignora erro de rede
@@ -594,6 +647,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
             const total = videoEl.duration || duration;
             const pos = videoEl.currentTime;
             if (!total || !Number.isFinite(total)) return;
+            if (!profileId) return;
             // eslint-disable-next-line @typescript-eslint/no-floating-promises
             fetch(`/api/titles/${titleId}/progress`, {
               method: "POST",
@@ -602,6 +656,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
                 positionSeconds: pos,
                 durationSeconds: total,
                 episodeId: episodeId ?? null,
+                profileId,
               }),
             }).catch(() => {});
           }}
@@ -612,6 +667,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
             const videoEl = event.currentTarget;
             const total = videoEl.duration || duration;
             if (!total || !Number.isFinite(total)) return;
+            if (!profileId) return;
             // eslint-disable-next-line @typescript-eslint/no-floating-promises
             fetch(`/api/titles/${titleId}/progress`, {
               method: "POST",
@@ -620,6 +676,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
                 positionSeconds: total,
                 durationSeconds: total,
                 episodeId: episodeId ?? null,
+                profileId,
               }),
             }).catch(() => {});
           }}

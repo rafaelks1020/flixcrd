@@ -7,6 +7,8 @@ import { wasabiClient } from "@/lib/wasabi";
 import { authOptions } from "@/lib/auth";
 
 const bucketName = process.env.WASABI_BUCKET_NAME;
+const WASABI_PUBLIC_BASE = "https://s3.us-east-1.wasabisys.com";
+const CLOUDFLARE_PROXY_BASE = "https://wasabi-proxy.crdozo-rafael1028.workers.dev";
 
 interface RouteContext {
   params: Promise<{
@@ -38,7 +40,7 @@ async function streamToString(body: any): Promise<string> {
   });
 }
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context: RouteContext) {
   if (!bucketName) {
     return NextResponse.json(
       { error: "WASABI_BUCKET_NAME não configurado." },
@@ -77,6 +79,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     const prefix = episode.hlsPath.endsWith("/")
       ? episode.hlsPath
       : `${episode.hlsPath}/`;
+
+    const source =
+      (request.nextUrl.searchParams.get("source") as "wasabi" | "cloudflare" | null) ??
+      "wasabi";
 
     const listCmd = new ListObjectsV2Command({
       Bucket: bucketName,
@@ -117,7 +123,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
     const lines = original.split(/\r?\n/);
 
-    const signedLines = await Promise.all(
+    const rewrittenLines = await Promise.all(
       lines.map(async (line) => {
         const trimmed = line.trim();
 
@@ -125,26 +131,38 @@ export async function GET(_request: NextRequest, context: RouteContext) {
           return line;
         }
 
-        if (!trimmed.endsWith(".ts")) {
+        // Já é uma URL absoluta? mantém como está
+        if (/^https?:\/\//i.test(trimmed)) {
           return line;
         }
 
-        const segmentKey = `${prefix}${trimmed}`;
+        if (!trimmed.toLowerCase().endsWith(".ts")) {
+          return line;
+        }
+
+        const objectKey = `${prefix}${trimmed}`;
+
+        if (source === "cloudflare") {
+          return `${CLOUDFLARE_PROXY_BASE}/${objectKey}`;
+        }
 
         const cmd = new GetObjectCommand({
           Bucket: bucketName,
-          Key: segmentKey,
+          Key: objectKey,
         });
 
-        const url = await import("@aws-sdk/s3-request-presigner").then(({ getSignedUrl }) =>
-          getSignedUrl(wasabiClient, cmd, { expiresIn: 60 * 60 }),
+        const url = await import("@aws-sdk/s3-request-presigner").then(
+          ({ getSignedUrl }) =>
+            getSignedUrl(wasabiClient, cmd, {
+              expiresIn: 60 * 60,
+            }),
         );
 
         return url;
       }),
     );
 
-    const rewritten = signedLines.join("\n");
+    const rewritten = rewrittenLines.join("\n");
 
     return new NextResponse(rewritten, {
       status: 200,

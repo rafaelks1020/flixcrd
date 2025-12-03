@@ -21,7 +21,21 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const userId = (session.user as any).id as string;
     const episodeIdParam = request.nextUrl.searchParams.get("episodeId");
+    const profileId = request.headers.get("x-profile-id") || request.nextUrl.searchParams.get("profileId");
     const episodeId = episodeIdParam && episodeIdParam.trim().length > 0 ? episodeIdParam : null;
+
+    if (!profileId) {
+      return NextResponse.json({ positionSeconds: 0, durationSeconds: 0 });
+    }
+
+    // Verificar se perfil pertence ao usuário
+    const profile = await prisma.profile.findFirst({
+      where: { id: profileId, userId },
+    });
+
+    if (!profile) {
+      return NextResponse.json({ positionSeconds: 0, durationSeconds: 0 });
+    }
 
     let progress = null;
 
@@ -29,8 +43,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
       // Progresso específico de episódio
       progress = await prisma.playbackProgress.findUnique({
         where: {
-          userId_episodeId: {
-            userId,
+          profileId_episodeId: {
+            profileId,
             episodeId,
           },
         },
@@ -39,8 +53,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
       // Progresso por título (filmes)
       progress = await prisma.playbackProgress.findUnique({
         where: {
-          userId_titleId: {
-            userId,
+          profileId_titleId: {
+            profileId,
             titleId: id,
           },
         },
@@ -76,6 +90,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const rawPosition = body?.positionSeconds;
     const rawDuration = body?.durationSeconds;
     const bodyEpisodeId = body?.episodeId as string | undefined;
+    const profileId = body?.profileId as string | undefined;
+
+    // Sem profileId não conseguimos associar o progresso a um perfil.
+    // Em vez de retornar erro (que polui os logs do cliente), apenas ignoramos.
+    if (!profileId) {
+      return NextResponse.json({ ok: true });
+    }
+
+    // Verificar se perfil pertence ao usuário
+    const profile = await prisma.profile.findFirst({
+      where: { id: profileId, userId },
+    });
+
+    if (!profile) {
+      return NextResponse.json({ error: "Perfil não encontrado." }, { status: 404 });
+    }
 
     const positionSeconds = Number.isFinite(rawPosition)
       ? Math.max(0, Math.floor(rawPosition))
@@ -91,11 +121,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const episodeId = bodyEpisodeId && bodyEpisodeId.trim().length > 0 ? bodyEpisodeId : null;
 
     if (episodeId) {
-      // Episódio específico: chave única por (userId, episodeId)
+      // Episódio específico: chave única por (profileId, episodeId)
       await prisma.playbackProgress.upsert({
         where: {
-          userId_episodeId: {
-            userId,
+          profileId_episodeId: {
+            profileId,
             episodeId,
           },
         },
@@ -105,7 +135,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           durationSeconds,
         },
         create: {
-          userId,
+          profileId,
           titleId: id,
           episodeId,
           positionSeconds,
@@ -113,11 +143,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
         },
       });
     } else {
-      // Filme (ou fallback): chave única por (userId, titleId)
+      // Filme (ou fallback): chave única por (profileId, titleId)
       await prisma.playbackProgress.upsert({
         where: {
-          userId_titleId: {
-            userId,
+          profileId_titleId: {
+            profileId,
             titleId: id,
           },
         },
@@ -126,7 +156,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           durationSeconds,
         },
         create: {
-          userId,
+          profileId,
           titleId: id,
           positionSeconds,
           durationSeconds,

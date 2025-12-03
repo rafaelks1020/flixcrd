@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 interface FavoriteButtonProps {
@@ -15,7 +15,21 @@ export default function FavoriteButton({
   const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [profileId, setProfileId] = useState<string | null>(null);
   const router = useRouter();
+
+  // Carrega o profileId ativo do localStorage
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const stored = window.localStorage.getItem("activeProfileId");
+    if (!stored) {
+      setProfileId(null);
+      return;
+    }
+
+    setProfileId(stored);
+  }, []);
 
   async function handleToggle() {
     if (loading) return;
@@ -23,11 +37,17 @@ export default function FavoriteButton({
     setError(null);
 
     try {
+      if (!profileId) {
+        setError("Selecione um perfil para usar Minha lista.");
+        router.push("/profiles");
+        return;
+      }
+
       const method = isFavorite ? "DELETE" : "POST";
       const res = await fetch("/api/user/favorites", {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ titleId }),
+        body: JSON.stringify({ titleId, profileId }),
       });
 
       const data = await res.json();
