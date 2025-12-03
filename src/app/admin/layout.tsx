@@ -23,7 +23,7 @@ export default function AdminLayout({
     <div className="flex min-h-screen bg-zinc-950 text-zinc-50">
       <aside className="flex w-64 flex-col border-r border-zinc-800 px-4 py-6 space-y-6">
         <div>
-          <h1 className="text-lg font-semibold">FlixCRD Admin</h1>
+          <h1 className="text-lg font-semibold">PaelFlix Admin</h1>
           <p className="text-xs text-zinc-500">Painel de controle</p>
         </div>
         <nav className="space-y-1 text-sm">
@@ -53,7 +53,7 @@ export default function AdminLayout({
             href="/"
             className="rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
           >
-            Ir para FlixCRD
+            Ir para PaelFlix
           </Link>
           <button
             type="button"

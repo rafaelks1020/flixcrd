@@ -73,7 +73,7 @@ export default function LoginPage() {
       <div className="relative z-10 flex min-h-screen flex-col">
         <header className="flex items-center justify-between px-4 py-4 text-sm text-zinc-200 md:px-10">
           <Link href="/" className="text-lg font-semibold tracking-tight">
-            FlixCRD
+            PaelFlix
           </Link>
         </header>
 

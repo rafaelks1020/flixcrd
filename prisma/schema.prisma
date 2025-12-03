@@ -20,15 +20,18 @@ enum UserRole {
 }
 
 model User {
-  id           String        @id @default(cuid())
-  email        String        @unique
+  id           String             @id @default(cuid())
+  email        String             @unique
   name         String?
+  avatar       String?
   passwordHash String
-  role         UserRole      @default(USER)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  role         UserRole           @default(USER)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 
-  subscription Subscription?
+  subscription     Subscription?
+  favorites        UserFavorite[]
+  playbackProgress PlaybackProgress[]
 }
 
 model Subscription {
@@ -53,34 +56,36 @@ model Genre {
 }
 
 model Title {
-  id            String        @id @default(cuid())
-  tmdbId        Int?          @unique
-  type          TitleType
-  slug          String        @unique
-  name          String
-  originalName  String?
-  overview      String?
-  tagline       String?
-  releaseDate   DateTime?
-  posterUrl     String?
-  backdropUrl   String?
-  logoUrl       String?
-  hlsPath       String?       // path prefix in Wasabi, e.g. movie-id/
-  runtime       Int?          // em minutos
-  voteAverage   Float?        // rating do TMDB (0-10)
-  voteCount     Int?
-  popularity    Float?
-  status        String?       // Released, Post Production, etc.
-  originalLanguage String?
-  spokenLanguages  String?    // JSON array de idiomas
-  productionCountries String? // JSON array de países
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id                 String             @id @default(cuid())
+  tmdbId             Int?               @unique
+  type               TitleType
+  slug               String             @unique
+  name               String
+  originalName       String?
+  overview           String?
+  tagline            String?
+  releaseDate        DateTime?
+  posterUrl          String?
+  backdropUrl        String?
+  logoUrl            String?
+  hlsPath            String?            // path prefix in Wasabi, e.g. movie-id/
+  runtime            Int?               // em minutos
+  voteAverage        Float?             // rating do TMDB (0-10)
+  voteCount          Int?
+  popularity         Float?
+  status             String?            // Released, Post Production, etc.
+  originalLanguage   String?
+  spokenLanguages    String?            // JSON array de idiomas
+  productionCountries String?           // JSON array de países
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
-  genres        TitleGenre[]
-  cast          Cast[]
-  crew          Crew[]
-  videos        Video[]
+  genres             TitleGenre[]
+  cast               Cast[]
+  crew               Crew[]
+  videos             Video[]
+  favoritedBy        UserFavorite[]
+  playbackProgress   PlaybackProgress[]
 }
 
 model TitleGenre {
@@ -106,6 +111,32 @@ model Cast {
   createdAt   DateTime @default(now())
 
   @@index([titleId])
+}
+
+model UserFavorite {
+  id        String   @id @default(cuid())
+  userId    String
+  titleId   String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, titleId])
+}
+
+model PlaybackProgress {
+  id              String   @id @default(cuid())
+  userId          String
+  titleId         String
+  positionSeconds Int      @default(0)
+  durationSeconds Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title Title @relation(fields: [titleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, titleId])
 }
 
 model Crew {

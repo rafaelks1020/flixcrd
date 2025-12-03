@@ -76,6 +76,7 @@ export default function WatchClient({ titleId }: WatchClientProps) {
   const hlsRef = useRef<Hls | null>(null);
   const playerRef = useRef<HTMLDivElement | null>(null);
   const hideControlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastProgressSyncRef = useRef<number>(0);
   const router = useRouter();
 
   useEffect(() => {
@@ -471,8 +472,10 @@ export default function WatchClient({ titleId }: WatchClientProps) {
           muted={isMuted}
           crossOrigin="anonymous"
           onLoadedMetadata={(event) => {
-            setDuration(event.currentTarget.duration || 0);
-            setVolume(event.currentTarget.volume ?? 1);
+            const videoEl = event.currentTarget;
+            const loadedDuration = videoEl.duration || 0;
+            setDuration(loadedDuration);
+            setVolume(videoEl.volume ?? 1);
 
             const tracks = Array.from(event.currentTarget.textTracks || []);
             // Debug rápido para garantir que as tracks estão sendo detectadas
@@ -492,15 +495,87 @@ export default function WatchClient({ titleId }: WatchClientProps) {
             });
             setSubtitleTracks(tracks);
             setCurrentSubtitleIndex(tracks.length === 1 ? 0 : null);
+
+            // Buscar progresso salvo para Continuar assistindo
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+            (async () => {
+              try {
+                const res = await fetch(`/api/titles/${titleId}/progress`);
+                if (!res.ok) return;
+                const json = await res.json();
+                const resume = Number(json?.positionSeconds ?? 0);
+                const total = Number(json?.durationSeconds ?? loadedDuration ?? 0);
+                const effectiveDuration = total || loadedDuration;
+                if (
+                  Number.isFinite(resume) &&
+                  resume > 0 &&
+                  effectiveDuration &&
+                  resume < effectiveDuration - 5
+                ) {
+                  videoEl.currentTime = resume;
+                  setCurrentTime(resume);
+                }
+              } catch {
+                // ignora erros de progresso
+              }
+            })();
           }}
           onTimeUpdate={(event) => {
-            setCurrentTime(event.currentTarget.currentTime);
+            const videoEl = event.currentTarget;
+            const newTime = videoEl.currentTime;
+            const total = videoEl.duration || duration;
+            setCurrentTime(newTime);
+
+            const now = Date.now();
+            if (total && Number.isFinite(total) && now - lastProgressSyncRef.current > 5000) {
+              lastProgressSyncRef.current = now;
+              // eslint-disable-next-line @typescript-eslint/no-floating-promises
+              fetch(`/api/titles/${titleId}/progress`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  positionSeconds: newTime,
+                  durationSeconds: total,
+                }),
+              }).catch(() => {
+                // ignora erro de rede
+              });
+            }
           }}
           onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
+          onPause={(event) => {
+            setIsPlaying(false);
+            const videoEl = event.currentTarget;
+            const total = videoEl.duration || duration;
+            const pos = videoEl.currentTime;
+            if (!total || !Number.isFinite(total)) return;
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+            fetch(`/api/titles/${titleId}/progress`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                positionSeconds: pos,
+                durationSeconds: total,
+              }),
+            }).catch(() => {});
+          }}
           onWaiting={() => setIsBuffering(true)}
           onPlaying={() => setIsBuffering(false)}
-          onEnded={() => setIsPlaying(false)}
+          onEnded={(event) => {
+            setIsPlaying(false);
+            const videoEl = event.currentTarget;
+            const total = videoEl.duration || duration;
+            if (!total || !Number.isFinite(total)) return;
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+            fetch(`/api/titles/${titleId}/progress`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                positionSeconds: total,
+                durationSeconds: total,
+              }),
+            }).catch(() => {});
+          }}
         >
           {data.subtitles?.map((sub, index) => (
             <track

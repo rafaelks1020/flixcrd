@@ -1,5 +1,6 @@
 "use client";
 
+import type React from "react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -18,6 +19,12 @@ interface Title {
   voteAverage: number | null;
   releaseDate: string | null;
   type: string;
+}
+
+interface ContinueWatchingItem extends Title {
+  positionSeconds: number;
+  durationSeconds: number;
+  progressPercent: number;
 }
 
 interface HomeClientProps {
@@ -40,7 +47,10 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<Title[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [favorites, setFavorites] = useState<Title[]>([]);
+  const [continueWatching, setContinueWatching] = useState<ContinueWatchingItem[]>([]);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   useEffect(() => {
     async function loadGenresAndTitles() {
@@ -56,6 +66,35 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
           titlesMap[genre.id] = titlesData;
         }
         setTitlesByGenre(titlesMap);
+
+        if (isLoggedIn) {
+          try {
+            const favRes = await fetch("/api/user/favorites");
+            if (favRes.ok) {
+              const favData: Title[] = await favRes.json();
+              setFavorites(favData);
+            } else {
+              setFavorites([]);
+            }
+          } catch {
+            setFavorites([]);
+          }
+
+          try {
+            const cwRes = await fetch("/api/user/continue-watching");
+            if (cwRes.ok) {
+              const cwData: ContinueWatchingItem[] = await cwRes.json();
+              setContinueWatching(cwData);
+            } else {
+              setContinueWatching([]);
+            }
+          } catch {
+            setContinueWatching([]);
+          }
+        } else {
+          setFavorites([]);
+          setContinueWatching([]);
+        }
       } catch (err) {
         console.error("Erro ao carregar gêneros/títulos", err);
       } finally {
@@ -64,7 +103,7 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
     }
 
     loadGenresAndTitles();
-  }, []);
+  }, [isLoggedIn]);
 
   let heroYear: number | null = null;
   if (heroTitle?.releaseDate) {
@@ -123,6 +162,16 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
 
   const hasSearch = search.trim().length > 0;
 
+  function scrollGenreRow(genreId: string, direction: "left" | "right") {
+    const el = rowRefs.current[genreId];
+    if (!el) return;
+    const amount = el.clientWidth * 0.8 || 400;
+    el.scrollBy({
+      left: direction === "left" ? -amount : amount,
+      behavior: "smooth",
+    });
+  }
+
   return (
     <main className="min-h-screen bg-black text-zinc-50">
       {/* Hero Section */}
@@ -143,7 +192,7 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
           <header className="flex flex-col gap-3 px-4 py-4 text-sm text-zinc-200 md:flex-row md:items-center md:justify-between md:px-10">
             <div className="flex items-center gap-3">
               <span className="text-xl font-bold tracking-tight text-red-600">
-                FlixCRD
+                PaelFlix
               </span>
             </div>
             <div className="flex flex-1 items-center gap-3 md:justify-end">
@@ -244,6 +293,82 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
         </div>
       </section>
 
+      {/* Continuar assistindo */}
+      {isLoggedIn && !hasSearch && continueWatching.length > 0 && (
+        <section className="space-y-3 px-4 pb-4 pt-6 md:px-10">
+          <h2 className="text-lg font-semibold text-zinc-100 md:text-xl">
+            Continuar assistindo
+          </h2>
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {continueWatching.map((item) => (
+              <Link
+                key={item.id}
+                href={`/title/${item.id}`}
+                className="group relative min-w-[160px] flex-shrink-0 overflow-hidden rounded-md bg-zinc-900 transition hover:scale-105 hover:z-10 md:min-w-[200px]"
+              >
+                {item.posterUrl ? (
+                  <img
+                    src={item.posterUrl}
+                    alt={item.name}
+                    className="aspect-[16/9] w-full object-cover transition group-hover:opacity-80"
+                  />
+                ) : (
+                  <div className="flex aspect-[16/9] w-full items-center justify-center bg-zinc-800 text-center text-xs text-zinc-400">
+                    {item.name}
+                  </div>
+                )}
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2 text-[11px] leading-tight">
+                  <div className="line-clamp-2 font-semibold text-zinc-50">
+                    {item.name}
+                  </div>
+                  <div className="mt-1 h-1.5 w-full rounded-full bg-zinc-700">
+                    <div
+                      className="h-full rounded-full bg-red-600"
+                      style={{ width: `${item.progressPercent || 0}%` }}
+                    />
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Minha lista */}
+      {isLoggedIn && !hasSearch && favorites.length > 0 && (
+        <section className="space-y-3 px-4 pb-6 pt-2 md:px-10">
+          <h2 className="text-lg font-semibold text-zinc-100 md:text-xl">
+            Minha lista
+          </h2>
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {favorites.map((title) => (
+              <Link
+                key={title.id}
+                href={`/title/${title.id}`}
+                className="group relative min-w-[140px] flex-shrink-0 overflow-hidden rounded-md bg-zinc-900 transition hover:scale-105 hover:z-10 md:min-w-[180px]"
+              >
+                {title.posterUrl ? (
+                  <img
+                    src={title.posterUrl}
+                    alt={title.name}
+                    className="aspect-[2/3] w-full object-cover transition group-hover:opacity-80"
+                  />
+                ) : (
+                  <div className="flex aspect-[2/3] w-full items-center justify-center bg-zinc-800 text-center text-xs text-zinc-400">
+                    {title.name}
+                  </div>
+                )}
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2 text-[11px] leading-tight">
+                  <div className="line-clamp-2 font-semibold text-zinc-50">
+                    {title.name}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Resultados da busca */}
       {hasSearch && (
         <section className="px-4 py-8 md:px-10">
@@ -304,33 +429,67 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
               return (
                 <div key={genre.id} className="space-y-3">
                   <h2 className="text-lg font-semibold text-zinc-100 md:text-xl">
-                    {genre.name}
+                    <Link href={`/genres/${genre.id}`} className="hover:underline">
+                      {genre.name}
+                    </Link>
                   </h2>
-                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                    {titles.map((title) => (
-                      <Link
-                        key={title.id}
-                        href={`/title/${title.id}`}
-                        className="group relative min-w-[140px] flex-shrink-0 overflow-hidden rounded-md bg-zinc-900 transition hover:scale-105 hover:z-10 md:min-w-[180px]"
-                      >
-                        {title.posterUrl ? (
-                          <img
-                            src={title.posterUrl}
-                            alt={title.name}
-                            className="aspect-[2/3] w-full object-cover transition group-hover:opacity-80"
-                          />
-                        ) : (
-                          <div className="flex aspect-[2/3] w-full items-center justify-center bg-zinc-800 text-center text-xs text-zinc-400">
-                            {title.name}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => scrollGenreRow(genre.id, "left")}
+                      className="absolute left-0 top-1/2 z-10 hidden -translate-y-1/2 rounded-full bg-black/70 px-2 py-2 text-lg text-zinc-100 hover:bg-black/90 md:inline-flex"
+                      aria-label="Anterior"
+                    >
+                      ←
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollGenreRow(genre.id, "right")}
+                      className="absolute right-0 top-1/2 z-10 hidden -translate-y-1/2 rounded-full bg-black/70 px-2 py-2 text-lg text-zinc-100 hover:bg-black/90 md:inline-flex"
+                      aria-label="Próximo"
+                    >
+                      →
+                    </button>
+                    <div
+                      ref={(el) => {
+                        rowRefs.current[genre.id] = el;
+                      }}
+                      className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide"
+                      onWheel={(e: React.WheelEvent<HTMLDivElement>) => {
+                        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                          e.preventDefault();
+                          e.currentTarget.scrollBy({
+                            left: e.deltaY,
+                            behavior: "smooth",
+                          });
+                        }
+                      }}
+                    >
+                      {titles.map((title) => (
+                        <Link
+                          key={title.id}
+                          href={`/title/${title.id}`}
+                          className="group relative min-w-[140px] flex-shrink-0 overflow-hidden rounded-md bg-zinc-900 transition hover:scale-105 hover:z-10 md:min-w-[180px]"
+                        >
+                          {title.posterUrl ? (
+                            <img
+                              src={title.posterUrl}
+                              alt={title.name}
+                              className="aspect-[2/3] w-full object-cover transition group-hover:opacity-80"
+                            />
+                          ) : (
+                            <div className="flex aspect-[2/3] w-full items-center justify-center bg-zinc-800 text-center text-xs text-zinc-400">
+                              {title.name}
+                            </div>
+                          )}
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2 text-[11px] leading-tight">
+                            <div className="line-clamp-2 font-semibold text-zinc-50">
+                              {title.name}
+                            </div>
                           </div>
-                        )}
-                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2 text-[11px] leading-tight">
-                          <div className="line-clamp-2 font-semibold text-zinc-50">
-                            {title.name}
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
+                        </Link>
+                      ))}
+                    </div>
                   </div>
                 </div>
               );

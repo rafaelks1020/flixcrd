@@ -49,6 +49,10 @@ export default function AdminCatalogPage() {
   const [transcodingProgress, setTranscodingProgress] = useState<number | null>(null);
   const [transcodingStatus, setTranscodingStatus] = useState<string | null>(null);
 
+  const [showTitleModal, setShowTitleModal] = useState(false);
+  const [openActionsId, setOpenActionsId] = useState<string | null>(null);
+  const [showTranscodeOptions, setShowTranscodeOptions] = useState(false);
+
   const [transcodeCrf, setTranscodeCrf] = useState<number>(20);
   const [deleteSourceAfterTranscode, setDeleteSourceAfterTranscode] =
     useState<boolean>(true);
@@ -421,17 +425,30 @@ export default function AdminCatalogPage() {
         <div>
           <h2 className="text-2xl font-semibold">Catálogo</h2>
           <p className="text-sm text-zinc-400">
-            Gerencie os títulos do catálogo e use a busca TMDb para preencher metadados automaticamente.
+            Gerencie os títulos do catálogo. Use a busca TMDb para criar ou atualizar títulos quando
+            necessário.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleRefreshAllFromTmdb}
-          disabled={refreshingTmdb}
-          className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-semibold text-zinc-100 hover:bg-zinc-800 disabled:opacity-60"
-        >
-          {refreshingTmdb ? "Atualizando TMDb..." : "Atualizar TMDb de todos"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              resetForm();
+              setShowTitleModal(true);
+            }}
+            className="rounded-md bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-white"
+          >
+            + Novo título (TMDb)
+          </button>
+          <button
+            type="button"
+            onClick={handleRefreshAllFromTmdb}
+            disabled={refreshingTmdb}
+            className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-semibold text-zinc-100 hover:bg-zinc-800 disabled:opacity-60"
+          >
+            {refreshingTmdb ? "Atualizando TMDb..." : "Atualizar TMDb de todos"}
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -445,75 +462,262 @@ export default function AdminCatalogPage() {
         </div>
       )}
 
-      <div className="grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <div className="space-y-4 rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
-          <h3 className="text-sm font-semibold text-zinc-100">Buscar no TMDb</h3>
-          <form onSubmit={handleTmdbSearch} className="space-y-3">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Nome do filme ou série"
-                value={tmdbQuery}
-                onChange={(e) => setTmdbQuery(e.target.value)}
-                className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-zinc-500"
-              />
-              <button
-                type="submit"
-                disabled={tmdbLoading}
-                className="rounded-md bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-white disabled:opacity-70"
-              >
-                {tmdbLoading ? "Buscando..." : "Buscar"}
-              </button>
-            </div>
-          </form>
+      <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 text-xs">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-zinc-100">Títulos cadastrados</h3>
+          {loading && (
+            <span className="text-[10px] text-zinc-500">Carregando...</span>
+          )}
+        </div>
 
-          {tmdbResults.length > 0 && (
-            <div className="mt-3 max-h-64 space-y-1 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-900/60 p-2 text-xs">
-              {tmdbResults.map((r) => (
-                <button
-                  key={`${r.type}-${r.tmdbId}`}
-                  type="button"
-                  onClick={() => applyTmdbResult(r)}
-                  className="flex w-full items-start gap-2 rounded-md px-2 py-1 text-left hover:bg-zinc-800/80"
+        <div className="mb-2">
+          <button
+            type="button"
+            onClick={() => setShowTranscodeOptions((prev) => !prev)}
+            className="flex w-full items-center justify-between rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-[11px] text-zinc-200 hover:bg-zinc-800"
+          >
+            <div className="flex flex-col text-left">
+              <span className="font-semibold text-zinc-100">Opções avançadas de HLS</span>
+              <span className="text-[10px] text-zinc-400">
+                CRF atual: {transcodeCrf} · Apagar origem: {deleteSourceAfterTranscode ? "sim" : "não"}
+              </span>
+            </div>
+            <span className="text-[10px] text-zinc-400">
+              {showTranscodeOptions ? "▴" : "▾"}
+            </span>
+          </button>
+          {showTranscodeOptions && (
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-zinc-300">
+              <label className="flex items-center gap-1">
+                <span>Qualidade (CRF)</span>
+                <select
+                  value={transcodeCrf}
+                  onChange={(e) => setTranscodeCrf(Number(e.target.value) || 20)}
+                  className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-50 outline-none focus:border-zinc-500"
                 >
-                  {r.posterUrl && (
-                    <img
-                      src={r.posterUrl}
-                      alt={r.name}
-                      className="h-16 w-11 flex-shrink-0 rounded object-cover"
-                    />
-                  )}
-                  <div className="flex-1 flex items-start justify-between gap-2">
-                    <span>
-                      <span className="font-medium text-zinc-50">{r.name}</span>
-                      {r.releaseDate && (
-                        <span className="ml-1 text-zinc-400">
-                          ({r.releaseDate.slice(0, 4)})
-                        </span>
-                      )}
-                      <span className="block text-[10px] uppercase text-zinc-500">
-                        {r.type === "MOVIE" ? "Filme" : "Série"}
-                      </span>
-                    </span>
-                    <span className="text-[10px] text-zinc-500">TMDb #{r.tmdbId}</span>
-                  </div>
-                </button>
-              ))}
+                  <option value={18}>Alta (CRF 18)</option>
+                  <option value={20}>Padrão (CRF 20)</option>
+                  <option value={23}>Econômica (CRF 23)</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-1">
+                <input
+                  type="checkbox"
+                  checked={deleteSourceAfterTranscode}
+                  onChange={(e) => setDeleteSourceAfterTranscode(e.target.checked)}
+                  className="h-3 w-3 accent-emerald-500"
+                />
+                <span>Apagar arquivo bruto após HLS</span>
+              </label>
             </div>
           )}
+        </div>
 
-          <div className="mt-4 border-t border-zinc-800 pt-4">
-            <h3 className="mb-2 text-sm font-semibold text-zinc-100">
-              {editingId ? "Editar título" : "Novo título"}
-            </h3>
-            <form onSubmit={handleSubmit} className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-2">
+        {titles.length === 0 && !loading ? (
+          <p className="text-xs text-zinc-500">
+            Nenhum título cadastrado ainda. Use o botão "+ Novo título (TMDb)" para criar o primeiro.
+          </p>
+        ) : (
+          <div className="max-h-[520px] overflow-y-auto rounded-md border border-zinc-800">
+            <table className="w-full border-collapse text-left">
+              <thead className="bg-zinc-900 text-[11px] uppercase text-zinc-400">
+                <tr>
+                  <th className="px-3 py-2">Nome</th>
+                  <th className="px-3 py-2">Tipo</th>
+                  <th className="px-3 py-2">Slug</th>
+                  <th className="px-3 py-2">TMDb</th>
+                  <th className="px-3 py-2">HLS</th>
+                  <th className="px-3 py-2 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800 bg-zinc-950">
+                {titles.map((t) => (
+                  <tr key={t.id} className="align-top text-[11px]">
+                    <td className="px-3 py-2">
+                      <div className="font-medium text-zinc-100">{t.name}</div>
+                      {t.releaseDate && (
+                        <div className="text-[10px] text-zinc-500">
+                          {t.releaseDate.slice(0, 10)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-zinc-400">{t.type}</td>
+                    <td className="px-3 py-2 text-zinc-400">{t.slug}</td>
+                    <td className="px-3 py-2 text-zinc-400">
+                      {t.tmdbId ? `#${t.tmdbId}` : "-"}
+                    </td>
+                    <td className="px-3 py-2 text-zinc-400">
+                      {hlsReady[t.id] ? (
+                        <span className="inline-flex items-center rounded-md border border-emerald-700 px-2 py-0.5 text-[10px] text-emerald-300 bg-emerald-900/40">
+                          HLS pronto
+                        </span>
+                      ) : (
+                        t.hlsPath ?? "-"
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            startEdit(t);
+                            setShowTitleModal(true);
+                          }}
+                          className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-200 hover:bg-zinc-800"
+                        >
+                          Editar
+                        </button>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOpenActionsId((prev) => (prev === t.id ? null : t.id))
+                            }
+                            className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-200 hover:bg-zinc-800"
+                          >
+                            ⋯
+                          </button>
+                          {openActionsId === t.id && (
+                            <div className="absolute right-0 z-20 mt-1 w-44 rounded-md border border-zinc-800 bg-zinc-900 p-1 text-left shadow-lg">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenActionsId(null);
+                                  handleFetchSubtitle(t.id, "pt-BR");
+                                }}
+                                disabled={subtitleLoadingId === t.id}
+                                className="block w-full rounded-[4px] px-2 py-1 text-[11px] text-zinc-200 hover:bg-zinc-800 disabled:opacity-60"
+                              >
+                                {subtitleLoadingId === t.id
+                                  ? "Baixando legenda..."
+                                  : "Baixar legenda PT-BR"}
+                              </button>
+                              {hlsReady[t.id] ? (
+                                <div className="mt-0.5 block w-full rounded-[4px] px-2 py-1 text-[11px] text-emerald-300">
+                                  HLS pronto
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenActionsId(null);
+                                    handleTranscode(t.id);
+                                  }}
+                                  disabled={transcodingId === t.id}
+                                  className="mt-0.5 block w-full rounded-[4px] px-2 py-1 text-[11px] text-emerald-200 hover:bg-emerald-900/40 disabled:opacity-60"
+                                >
+                                  {transcodingId === t.id
+                                    ? transcodingStatus === "running" &&
+                                      transcodingProgress !== null
+                                      ? `Gerando HLS... ${Math.round(transcodingProgress)}%`
+                                      : "Gerando HLS..."
+                                    : "Gerar HLS"}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenActionsId(null);
+                                  handleDelete(t.id);
+                                }}
+                                className="mt-0.5 block w-full rounded-[4px] px-2 py-1 text-[11px] text-red-300 hover:bg-red-900/40"
+                              >
+                                Excluir
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {showTitleModal && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4 py-8">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-xs shadow-xl">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-100">
+                  {editingId ? "Editar título" : "Novo título a partir do TMDb"}
+                </h3>
+                <p className="mt-1 text-[11px] text-zinc-400">
+                  Busque no TMDb, selecione um resultado e ajuste apenas o necessário antes de salvar.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTitleModal(false);
+                  resetForm();
+                }}
+                className="rounded-md border border-zinc-700 px-2 py-1 text-[11px] text-zinc-300 hover:bg-zinc-800"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="mb-4 space-y-2 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
+              <form onSubmit={handleTmdbSearch} className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Buscar no TMDb por nome do filme ou série"
+                  value={tmdbQuery}
+                  onChange={(e) => setTmdbQuery(e.target.value)}
+                  className="flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-50 outline-none focus:border-zinc-500"
+                />
+                <button
+                  type="submit"
+                  disabled={tmdbLoading || !tmdbQuery.trim()}
+                  className="rounded-md bg-zinc-100 px-3 py-1.5 text-[11px] font-semibold text-zinc-900 hover:bg-white disabled:opacity-60"
+                >
+                  {tmdbLoading ? "Buscando..." : "Buscar"}
+                </button>
+              </form>
+              {tmdbResults.length > 0 && (
+                <div className="max-h-56 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-950">
+                  <ul className="divide-y divide-zinc-800 text-[11px]">
+                    {tmdbResults.map((r) => (
+                      <li key={`${r.type}-${r.tmdbId}`}>
+                        <button
+                          type="button"
+                          onClick={() => applyTmdbResult(r)}
+                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-zinc-900"
+                        >
+                          <div>
+                            <div className="font-semibold text-zinc-100">{r.name}</div>
+                            <div className="text-[10px] text-zinc-400">
+                              {r.releaseDate ? r.releaseDate.slice(0, 4) : "s/ano"} · {r.type}
+                            </div>
+                          </div>
+                          {r.posterUrl && (
+                            <img
+                              src={r.posterUrl}
+                              alt={r.name}
+                              className="h-14 w-10 rounded border border-zinc-800 object-cover"
+                            />
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="block text-zinc-300">TMDb ID</label>
                   <input
-                    type="text"
+                    type="number"
                     value={form.tmdbId}
                     onChange={(e) => setForm({ ...form, tmdbId: e.target.value })}
+                    placeholder="Selecione um resultado ou informe o ID manualmente"
                     className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
                   />
                 </div>
@@ -597,48 +801,51 @@ export default function AdminCatalogPage() {
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-zinc-300">Poster URL</label>
-                <input
-                  type="text"
-                  value={form.posterUrl}
-                  onChange={(e) => setForm({ ...form, posterUrl: e.target.value })}
-                  className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
-                />
-                {form.posterUrl && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <img
-                      src={form.posterUrl}
-                      alt={form.name || "Poster"}
-                      className="h-24 w-16 rounded border border-zinc-800 object-cover"
-                    />
-                    <span className="text-[10px] text-zinc-500">
-                      Pré-visualização do poster
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-zinc-300">Backdrop URL</label>
-                <input
-                  type="text"
-                  value={form.backdropUrl}
-                  onChange={(e) => setForm({ ...form, backdropUrl: e.target.value })}
-                  className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
-                />
-                {form.backdropUrl && (
-                  <div className="mt-2 flex flex-col gap-1">
-                    <img
-                      src={form.backdropUrl}
-                      alt={form.name || "Backdrop"}
-                      className="h-20 w-full rounded border border-zinc-800 object-cover"
-                    />
-                    <span className="text-[10px] text-zinc-500">
-                      Pré-visualização do backdrop
-                    </span>
-                  </div>
-                )}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-zinc-300">Poster URL</label>
+                  <input
+                    type="text"
+                    value={form.posterUrl}
+                    onChange={(e) => setForm({ ...form, posterUrl: e.target.value })}
+                    className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
+                  />
+                  {form.posterUrl && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <img
+                        src={form.posterUrl}
+                        alt={form.name || "Poster"}
+                        className="h-20 w-14 rounded border border-zinc-800 object-cover"
+                      />
+                      <span className="text-[10px] text-zinc-500">
+                        Pré-visualização do poster
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-zinc-300">Backdrop URL</label>
+                  <input
+                    type="text"
+                    value={form.backdropUrl}
+                    onChange={(e) =>
+                      setForm({ ...form, backdropUrl: e.target.value })
+                    }
+                    className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
+                  />
+                  {form.backdropUrl && (
+                    <div className="mt-2 flex flex-col gap-1">
+                      <img
+                        src={form.backdropUrl}
+                        alt={form.name || "Backdrop"}
+                        className="h-16 w-full rounded border border-zinc-800 object-cover"
+                      />
+                      <span className="text-[10px] text-zinc-500">
+                        Pré-visualização do backdrop
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -652,7 +859,17 @@ export default function AdminCatalogPage() {
                 />
               </div>
 
-              <div className="flex items-center gap-2 pt-2">
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTitleModal(false);
+                    resetForm();
+                  }}
+                  className="rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
+                >
+                  Cancelar
+                </button>
                 <button
                   type="submit"
                   disabled={saving}
@@ -666,142 +883,11 @@ export default function AdminCatalogPage() {
                     ? "Salvar alterações"
                     : "Criar título"}
                 </button>
-                {editingId && (
-                  <button
-                    type="button"
-                    onClick={resetForm}
-                    className="rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
-                  >
-                    Cancelar edição
-                  </button>
-                )}
               </div>
             </form>
           </div>
         </div>
-
-        <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 text-xs">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-zinc-100">Títulos cadastrados</h3>
-            {loading && (
-              <span className="text-[10px] text-zinc-500">Carregando...</span>
-            )}
-          </div>
-          <div className="mb-2 flex flex-wrap items-center gap-3 text-[11px] text-zinc-300">
-            <span className="font-semibold text-zinc-100">Opções de transcodificação:</span>
-            <label className="flex items-center gap-1">
-              <span>Qualidade (CRF)</span>
-              <select
-                value={transcodeCrf}
-                onChange={(e) => setTranscodeCrf(Number(e.target.value) || 20)}
-                className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-50 outline-none focus:border-zinc-500"
-              >
-                <option value={18}>Alta (CRF 18)</option>
-                <option value={20}>Padrão (CRF 20)</option>
-                <option value={23}>Econômica (CRF 23)</option>
-              </select>
-            </label>
-            <label className="flex items-center gap-1">
-              <input
-                type="checkbox"
-                checked={deleteSourceAfterTranscode}
-                onChange={(e) => setDeleteSourceAfterTranscode(e.target.checked)}
-                className="h-3 w-3 accent-emerald-500"
-              />
-              <span>Apagar arquivo bruto após HLS</span>
-            </label>
-          </div>
-          {titles.length === 0 && !loading ? (
-            <p className="text-zinc-500 text-xs">
-              Nenhum título cadastrado ainda. Use o formulário ao lado para criar o primeiro.
-            </p>
-          ) : (
-            <div className="max-h-[520px] overflow-y-auto rounded-md border border-zinc-800">
-              <table className="w-full border-collapse text-left">
-                <thead className="bg-zinc-900 text-[11px] uppercase text-zinc-400">
-                  <tr>
-                    <th className="px-3 py-2">Nome</th>
-                    <th className="px-3 py-2">Tipo</th>
-                    <th className="px-3 py-2">Slug</th>
-                    <th className="px-3 py-2">TMDb</th>
-                    <th className="px-3 py-2">HLS</th>
-                    <th className="px-3 py-2 text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-800 bg-zinc-950">
-                  {titles.map((t) => (
-                    <tr key={t.id} className="align-top text-[11px]">
-                      <td className="px-3 py-2">
-                        <div className="font-medium text-zinc-100">{t.name}</div>
-                        {t.releaseDate && (
-                          <div className="text-[10px] text-zinc-500">
-                            {t.releaseDate.slice(0, 10)}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-zinc-400">{t.type}</td>
-                      <td className="px-3 py-2 text-zinc-400">{t.slug}</td>
-                      <td className="px-3 py-2 text-zinc-400">
-                        {t.tmdbId ? `#${t.tmdbId}` : "-"}
-                      </td>
-                      <td className="px-3 py-2 text-zinc-400">
-                        {t.hlsPath ?? "-"}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="flex justify-end gap-1">
-                          <button
-                            type="button"
-                            onClick={() => startEdit(t)}
-                            className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-200 hover:bg-zinc-800"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleFetchSubtitle(t.id, "pt-BR")}
-                            disabled={subtitleLoadingId === t.id}
-                            className="rounded-md border border-blue-700 px-2 py-1 text-[10px] text-blue-200 hover:bg-blue-900/60 disabled:opacity-60"
-                          >
-                            {subtitleLoadingId === t.id
-                              ? "Baixando legenda..."
-                              : "Baixar legenda PT-BR"}
-                          </button>
-                          {hlsReady[t.id] ? (
-                            <span className="rounded-md border border-emerald-700 px-2 py-1 text-[10px] text-emerald-300 bg-emerald-900/40">
-                              HLS pronto
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleTranscode(t.id)}
-                              disabled={transcodingId === t.id}
-                              className="rounded-md border border-emerald-700 px-2 py-1 text-[10px] text-emerald-200 hover:bg-emerald-900/60 disabled:opacity-60"
-                            >
-                              {transcodingId === t.id
-                                ? transcodingStatus === "running" &&
-                                  transcodingProgress !== null
-                                  ? `Gerando HLS... ${Math.round(transcodingProgress)}%`
-                                  : "Gerando HLS..."
-                                : "Gerar HLS"}
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(t.id)}
-                            className="rounded-md border border-red-700 px-2 py-1 text-[10px] text-red-300 hover:bg-red-900/60"
-                          >
-                            Excluir
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
