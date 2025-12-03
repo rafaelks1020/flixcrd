@@ -76,7 +76,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     );
 
     const mp4Object = objects.find((obj) =>
-      /\.(mp4|m4v|mov|mkv|webm)$/i.test(obj.Key as string),
+      /\.(mp4|m4v|mov|mkv|webm|avi)$/i.test(obj.Key as string),
     );
 
     const subtitleObjects = objects.filter((obj) =>
@@ -96,7 +96,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json(
         {
           error:
-            "Nenhum arquivo HLS (.m3u8) ou MP4 encontrado no prefixo HLS deste título.",
+            "Nenhum arquivo HLS (.m3u8) ou vídeo compatível (mp4/m4v/mov/mkv/webm/avi) encontrado no prefixo HLS deste título.",
         },
         { status: 400 },
       );
