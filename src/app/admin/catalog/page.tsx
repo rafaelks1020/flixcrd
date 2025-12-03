@@ -49,6 +49,12 @@ export default function AdminCatalogPage() {
   const [transcodingProgress, setTranscodingProgress] = useState<number | null>(null);
   const [transcodingStatus, setTranscodingStatus] = useState<string | null>(null);
 
+  const [transcodeCrf, setTranscodeCrf] = useState<number>(20);
+  const [deleteSourceAfterTranscode, setDeleteSourceAfterTranscode] =
+    useState<boolean>(true);
+
+  const [subtitleLoadingId, setSubtitleLoadingId] = useState<string | null>(null);
+
   const [tmdbQuery, setTmdbQuery] = useState("");
   const [tmdbResults, setTmdbResults] = useState<TmdbResult[]>([]);
   const [tmdbLoading, setTmdbLoading] = useState(false);
@@ -86,6 +92,31 @@ export default function AdminCatalogPage() {
     }
   }
 
+  async function handleFetchSubtitle(id: string, language: string) {
+    setError(null);
+    setInfo(null);
+    setSubtitleLoadingId(id);
+    try {
+      const res = await fetch(`/api/subtitles/fetch/${id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ language }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error ?? "Erro ao baixar legenda automática");
+      }
+
+      setInfo("Legenda baixada e salva no Wasabi com sucesso.");
+      await loadTitles();
+    } catch (err: any) {
+      setError(err.message ?? "Erro ao baixar legenda automática");
+    } finally {
+      setSubtitleLoadingId(null);
+    }
+  }
+
   async function handleTranscode(id: string) {
     setError(null);
     setInfo(null);
@@ -95,6 +126,11 @@ export default function AdminCatalogPage() {
     try {
       const res = await fetch(`/api/transcode/hls/${id}`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          crf: transcodeCrf,
+          deleteSource: deleteSourceAfterTranscode,
+        }),
       });
 
       const data = await res.json();
@@ -572,6 +608,30 @@ export default function AdminCatalogPage() {
               <span className="text-[10px] text-zinc-500">Carregando...</span>
             )}
           </div>
+          <div className="mb-2 flex flex-wrap items-center gap-3 text-[11px] text-zinc-300">
+            <span className="font-semibold text-zinc-100">Opções de transcodificação:</span>
+            <label className="flex items-center gap-1">
+              <span>Qualidade (CRF)</span>
+              <select
+                value={transcodeCrf}
+                onChange={(e) => setTranscodeCrf(Number(e.target.value) || 20)}
+                className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-50 outline-none focus:border-zinc-500"
+              >
+                <option value={18}>Alta (CRF 18)</option>
+                <option value={20}>Padrão (CRF 20)</option>
+                <option value={23}>Econômica (CRF 23)</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                checked={deleteSourceAfterTranscode}
+                onChange={(e) => setDeleteSourceAfterTranscode(e.target.checked)}
+                className="h-3 w-3 accent-emerald-500"
+              />
+              <span>Apagar arquivo bruto após HLS</span>
+            </label>
+          </div>
           {titles.length === 0 && !loading ? (
             <p className="text-zinc-500 text-xs">
               Nenhum título cadastrado ainda. Use o formulário ao lado para criar o primeiro.
@@ -616,6 +676,16 @@ export default function AdminCatalogPage() {
                             className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-200 hover:bg-zinc-800"
                           >
                             Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleFetchSubtitle(t.id, "pt-BR")}
+                            disabled={subtitleLoadingId === t.id}
+                            className="rounded-md border border-blue-700 px-2 py-1 text-[10px] text-blue-200 hover:bg-blue-900/60 disabled:opacity-60"
+                          >
+                            {subtitleLoadingId === t.id
+                              ? "Baixando legenda..."
+                              : "Baixar legenda PT-BR"}
                           </button>
                           <button
                             type="button"

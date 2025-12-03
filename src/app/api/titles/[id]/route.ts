@@ -85,31 +85,51 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       );
     }
 
-    if (bucketName && title.hlsPath) {
-      try {
-        const listCommand = new ListObjectsV2Command({
-          Bucket: bucketName,
-          Prefix: title.hlsPath,
-        });
+    if (bucketName) {
+      const prefixes = new Set<string>();
 
-        const listed = await wasabiClient.send(listCommand);
+      if (title.hlsPath) {
+        const normalized = title.hlsPath.endsWith("/")
+          ? title.hlsPath
+          : `${title.hlsPath}/`;
+        prefixes.add(normalized);
+      }
 
-        if (listed.Contents && listed.Contents.length > 0) {
-          const objects = listed.Contents.filter((obj) => obj.Key).map((obj) => ({
-            Key: obj.Key as string,
-          }));
+      if (title.slug) {
+        prefixes.add(`titles/${title.slug}/`);
+      }
 
-          if (objects.length > 0) {
-            const deleteCommand = new DeleteObjectsCommand({
-              Bucket: bucketName,
-              Delete: { Objects: objects },
-            });
+      for (const prefix of prefixes) {
+        try {
+          const listCommand = new ListObjectsV2Command({
+            Bucket: bucketName,
+            Prefix: prefix,
+          });
 
-            await wasabiClient.send(deleteCommand);
+          const listed = await wasabiClient.send(listCommand);
+
+          if (listed.Contents && listed.Contents.length > 0) {
+            const objects = listed.Contents.filter((obj) => obj.Key).map((obj) => ({
+              Key: obj.Key as string,
+            }));
+
+            if (objects.length > 0) {
+              const deleteCommand = new DeleteObjectsCommand({
+                Bucket: bucketName,
+                Delete: { Objects: objects },
+              });
+
+              await wasabiClient.send(deleteCommand);
+            }
           }
+        } catch (err) {
+          console.error(
+            "Erro ao excluir objetos do Wasabi para prefixo do título",
+            prefix,
+            id,
+            err,
+          );
         }
-      } catch (err) {
-        console.error("Erro ao excluir objetos do Wasabi para o título", id, err);
       }
     }
 

@@ -66,6 +66,22 @@ export async function POST(_request: NextRequest, context: RouteContext) {
   }
 
   try {
+    const body = await _request.json().catch(() => null);
+
+    let crf: number | undefined;
+    let deleteSource = false;
+
+    if (body && typeof body.crf !== "undefined") {
+      const parsed = Number(body.crf);
+      if (!Number.isNaN(parsed)) {
+        crf = parsed;
+      }
+    }
+
+    if (body && typeof body.deleteSource !== "undefined") {
+      deleteSource = Boolean(body.deleteSource);
+    }
+
     const { id } = await context.params;
 
     const title = await prisma.title.findUnique({ where: { id } });
@@ -130,6 +146,8 @@ export async function POST(_request: NextRequest, context: RouteContext) {
         bucket: bucketName,
         source_key: sourceKey,
         dest_prefix: prefix,
+        ...(typeof crf === "number" ? { crf } : {}),
+        delete_source: deleteSource,
       }),
     });
 

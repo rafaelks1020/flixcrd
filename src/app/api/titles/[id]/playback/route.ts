@@ -79,6 +79,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       /\.(mp4|m4v|mov|mkv|webm)$/i.test(obj.Key as string),
     );
 
+    const subtitleObjects = objects.filter((obj) =>
+      (obj.Key as string).toLowerCase().endsWith(".vtt"),
+    );
+
     let playbackKey: string | null = null;
     let kind: "hls" | "mp4";
 
@@ -98,18 +102,61 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       );
     }
 
-    const command = new GetObjectCommand({
-      Bucket: bucketName,
-      Key: playbackKey,
-    });
+    let playbackUrl: string;
 
-    const playbackUrl = await getSignedUrl(wasabiClient, command, {
-      expiresIn: 60 * 5,
-    });
+    if (kind === "hls") {
+      // Para HLS, usamos uma rota interna que lê o master.m3u8 do Wasabi,
+      // reescreve os segmentos com URLs assinadas e devolve o playlist.
+      // Assim, apenas o .m3u8 passa pela Vercel; os .ts vão direto para o Wasabi.
+      playbackUrl = `/api/titles/${title.id}/hls`;
+    } else {
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: playbackKey,
+      });
+
+      playbackUrl = await getSignedUrl(wasabiClient, command, {
+        expiresIn: 60 * 5,
+      });
+    }
+
+    const subtitles = await Promise.all(
+      subtitleObjects.map(async (obj) => {
+        const key = obj.Key as string;
+        const command = new GetObjectCommand({
+          Bucket: bucketName,
+          Key: key,
+        });
+
+        const url = await getSignedUrl(wasabiClient, command, {
+          expiresIn: 60 * 60,
+        });
+
+        const filename = key.split("/").pop() ?? "Legenda";
+        const base = filename.replace(/\.vtt$/i, "");
+
+        let language: string | null = null;
+        let label = base;
+
+        const lower = base.toLowerCase();
+        if (lower.includes("pt")) {
+          language = "pt-BR";
+        } else if (lower.includes("en")) {
+          language = "en";
+        }
+
+        return {
+          label,
+          language,
+          url,
+        };
+      }),
+    );
 
     return NextResponse.json({
       playbackUrl,
       kind,
+      subtitles,
       title: {
         id: title.id,
         name: title.name,

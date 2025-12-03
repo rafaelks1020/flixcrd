@@ -3,7 +3,7 @@
 import Hls from "hls.js";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type MouseEvent, useEffect, useRef, useState } from "react";
+import { type MouseEvent, type SyntheticEvent, useEffect, useRef, useState } from "react";
 
 type TitleType = "MOVIE" | "SERIES" | "ANIME" | "OTHER";
 
@@ -22,6 +22,17 @@ interface PlaybackResponse {
   playbackUrl: string;
   kind: "hls" | "mp4";
   title: TitleData;
+  subtitles?: Array<{
+    label: string;
+    language?: string | null;
+    url: string;
+  }>;
+}
+
+interface QualityLevelInfo {
+  index: number;
+  height?: number;
+  bitrate?: number;
 }
 
 interface WatchClientProps {
@@ -54,10 +65,17 @@ export default function WatchClient({ titleId }: WatchClientProps) {
   const [isHovering, setIsHovering] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
+  const [qualityLevels, setQualityLevels] = useState<QualityLevelInfo[]>([]);
+  const [currentLevelIndex, setCurrentLevelIndex] = useState<number | null>(null);
+  const [autoQuality, setAutoQuality] = useState(true);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [subtitleTracks, setSubtitleTracks] = useState<TextTrack[]>([]);
+  const [currentSubtitleIndex, setCurrentSubtitleIndex] = useState<number | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const playerRef = useRef<HTMLDivElement | null>(null);
+  const hideControlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -100,6 +118,59 @@ export default function WatchClient({ titleId }: WatchClientProps) {
     };
   }, []);
 
+  const showControlsTemporarily = () => {
+    setIsHovering(true);
+    if (hideControlsTimeoutRef.current) {
+      clearTimeout(hideControlsTimeoutRef.current);
+    }
+    if (isPlaying) {
+      hideControlsTimeoutRef.current = setTimeout(() => {
+        setIsHovering(false);
+      }, 3000);
+    }
+  };
+
+  const handleTrackLoad = (event: SyntheticEvent<HTMLTrackElement>) => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const tracks = Array.from(video.textTracks || []);
+    // eslint-disable-next-line no-console
+    console.log("[WatchClient] track load", {
+      loadedLabel: event.currentTarget.label,
+      loadedSrc: event.currentTarget.src,
+      tracks: tracks.map((t) => ({
+        label: t.label,
+        language: t.language,
+        kind: t.kind,
+        mode: t.mode,
+        cues: t.cues?.length ?? 0,
+      })),
+    });
+
+    tracks.forEach((track, index) => {
+      // Se houver apenas uma faixa, já a deixa visível.
+      // eslint-disable-next-line no-param-reassign
+      if (tracks.length === 1 && index === 0) track.mode = "showing";
+    });
+
+    setSubtitleTracks(tracks);
+    if (tracks.length === 1) {
+      setCurrentSubtitleIndex(0);
+    }
+  };
+
+  const handleMouseMove = () => {
+    showControlsTemporarily();
+  };
+
+  const handleMouseLeave = () => {
+    if (hideControlsTimeoutRef.current) {
+      clearTimeout(hideControlsTimeoutRef.current);
+    }
+    setIsHovering(false);
+  };
+
   useEffect(() => {
     if (!data?.playbackUrl || !videoRef.current) return;
 
@@ -124,6 +195,27 @@ export default function WatchClient({ titleId }: WatchClientProps) {
     } else if (Hls.isSupported()) {
       const hls = new Hls();
       hlsRef.current = hls;
+      hls.on(Hls.Events.MANIFEST_PARSED, (_event, data: any) => {
+        const levelsArray = Array.isArray(data?.levels) ? data.levels : [];
+        const mapped: QualityLevelInfo[] = levelsArray.map((level: any, index: number) => ({
+          index,
+          height: typeof level?.height === "number" ? level.height : undefined,
+          bitrate: typeof level?.bitrate === "number" ? level.bitrate : undefined,
+        }));
+        setQualityLevels(mapped);
+        if (hls.currentLevel >= 0) {
+          setCurrentLevelIndex(hls.currentLevel);
+        } else {
+          setCurrentLevelIndex(null);
+        }
+        setAutoQuality(Boolean(hls.autoLevelEnabled));
+      });
+
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data: any) => {
+        if (typeof data?.level === "number") {
+          setCurrentLevelIndex(data.level);
+        }
+      });
       hls.loadSource(src);
       hls.attachMedia(video);
     } else {
@@ -137,6 +229,134 @@ export default function WatchClient({ titleId }: WatchClientProps) {
       }
     };
   }, [data?.playbackUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (hideControlsTimeoutRef.current) {
+        clearTimeout(hideControlsTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const video = videoRef.current;
+      if (!video) return;
+
+      const target = event.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        const editable = target.getAttribute("contenteditable");
+        if (
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          editable === "" ||
+          editable === "true"
+        ) {
+          return;
+        }
+      }
+
+      const key = event.key;
+
+      if (key === " " || key === "k" || key === "K") {
+        event.preventDefault();
+        if (video.paused || video.ended) {
+          // eslint-disable-next-line @typescript-eslint/no-floating-promises
+          video.play().catch(() => {});
+        } else {
+          video.pause();
+        }
+        return;
+      }
+
+      if (key === "ArrowLeft" || key === "j" || key === "J") {
+        event.preventDefault();
+        if (duration) {
+          const t = Math.max(0, (video.currentTime || 0) - 10);
+          video.currentTime = t;
+          setCurrentTime(t);
+        }
+        return;
+      }
+
+      if (key === "ArrowRight" || key === "l" || key === "L") {
+        event.preventDefault();
+        if (duration) {
+          const t = Math.min(duration, (video.currentTime || 0) + 10);
+          video.currentTime = t;
+          setCurrentTime(t);
+        }
+        return;
+      }
+
+      if (key === "ArrowUp") {
+        event.preventDefault();
+        const next = Math.min(1, volume + 0.05);
+        video.volume = next;
+        video.muted = next === 0;
+        setVolume(next);
+        setIsMuted(next === 0);
+        return;
+      }
+
+      if (key === "ArrowDown") {
+        event.preventDefault();
+        const next = Math.max(0, volume - 0.05);
+        video.volume = next;
+        video.muted = next === 0;
+        setVolume(next);
+        setIsMuted(next === 0);
+        return;
+      }
+
+      if (key === "m" || key === "M") {
+        event.preventDefault();
+        const newMuted = !isMuted;
+        video.muted = newMuted;
+        if (!newMuted && video.volume === 0) {
+          const restored = volume || 0.5;
+          video.volume = restored;
+          setVolume(restored);
+        }
+        setIsMuted(newMuted);
+        return;
+      }
+
+      if (key === "f" || key === "F") {
+        event.preventDefault();
+        const container = playerRef.current;
+        if (!container) return;
+        if (!document.fullscreenElement) {
+          container.requestFullscreen?.();
+        } else {
+          document.exitFullscreen?.();
+        }
+        return;
+      }
+
+      if (key >= "0" && key <= "9") {
+        if (!duration) return;
+        event.preventDefault();
+        const digit = Number(key);
+        const targetPercent = digit * 10;
+        const newTime = (targetPercent / 100) * duration;
+        video.currentTime = newTime;
+        setCurrentTime(newTime);
+        return;
+      }
+
+      if (key === "?" || key === "h" || key === "H") {
+        event.preventDefault();
+        setShowShortcuts((prev) => !prev);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [duration, volume, isMuted]);
 
   const handleTogglePlay = () => {
     const video = videoRef.current;
@@ -231,8 +451,8 @@ export default function WatchClient({ titleId }: WatchClientProps) {
       <div
         ref={playerRef}
         className="group relative flex h-full w-full items-center justify-center bg-black"
-        onMouseEnter={() => setIsHovering(true)}
-        onMouseLeave={() => setIsHovering(false)}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
       >
         {title.backdropUrl && (
           <div className="pointer-events-none absolute inset-0">
@@ -249,9 +469,29 @@ export default function WatchClient({ titleId }: WatchClientProps) {
           className="relative z-0 h-full w-full bg-black object-contain"
           poster={title.posterUrl ?? undefined}
           muted={isMuted}
+          crossOrigin="anonymous"
           onLoadedMetadata={(event) => {
             setDuration(event.currentTarget.duration || 0);
             setVolume(event.currentTarget.volume ?? 1);
+
+            const tracks = Array.from(event.currentTarget.textTracks || []);
+            // Debug rápido para garantir que as tracks estão sendo detectadas
+            // eslint-disable-next-line no-console
+            console.log("[WatchClient] textTracks", tracks.map((t) => ({
+              label: t.label,
+              language: t.language,
+              kind: t.kind,
+              mode: t.mode,
+              cues: t.cues?.length ?? 0,
+            })));
+
+            tracks.forEach((track, index) => {
+              // Mantém legendas ocultas por padrão, mas se houver apenas uma faixa, já a exibe.
+              // eslint-disable-next-line no-param-reassign
+              track.mode = tracks.length === 1 && index === 0 ? "showing" : "hidden";
+            });
+            setSubtitleTracks(tracks);
+            setCurrentSubtitleIndex(tracks.length === 1 ? 0 : null);
           }}
           onTimeUpdate={(event) => {
             setCurrentTime(event.currentTarget.currentTime);
@@ -261,10 +501,27 @@ export default function WatchClient({ titleId }: WatchClientProps) {
           onWaiting={() => setIsBuffering(true)}
           onPlaying={() => setIsBuffering(false)}
           onEnded={() => setIsPlaying(false)}
-        />
+        >
+          {data.subtitles?.map((sub, index) => (
+            <track
+              // eslint-disable-next-line react/no-array-index-key
+              key={`${sub.url}-${index}`}
+              kind="subtitles"
+              src={sub.url}
+              srcLang={sub.language ?? undefined}
+              label={sub.label}
+              default={index === 0}
+              onLoad={handleTrackLoad}
+            />
+          ))}
+        </video>
 
         {/* Top bar: voltar + título */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between px-4 py-3 text-xs md:px-6 md:text-sm">
+        <div
+          className={`pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between px-4 py-3 text-xs md:px-6 md:text-sm transition-opacity ${
+            isHovering || !isPlaying ? "opacity-100" : "opacity-0"
+          }`}
+        >
           <button
             type="button"
             onClick={() => router.back()}
@@ -289,7 +546,7 @@ export default function WatchClient({ titleId }: WatchClientProps) {
         )}
 
         {/* Play/Pause central */}
-        {!loading && !error && (
+        {!loading && !error && (!isPlaying || isHovering) && (
           <button
             type="button"
             onClick={handleTogglePlay}
@@ -301,9 +558,9 @@ export default function WatchClient({ titleId }: WatchClientProps) {
 
         {/* Controles inferiores */}
         <div
-          className={`pointer-events-auto absolute inset-x-0 bottom-0 z-20 px-4 pb-4 pt-6 text-xs md:px-6 md:text-sm ${
-            isHovering || !isPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-          } transition-opacity`}
+          className={`pointer-events-auto absolute inset-x-0 bottom-0 z-20 px-4 pb-4 pt-6 text-xs md:px-6 md:text-sm transition-opacity ${
+            isHovering || !isPlaying ? "opacity-100" : "opacity-0"
+          }`}
         >
           <div
             className="mb-2 h-1.5 w-full cursor-pointer rounded-full bg-zinc-700/80"
@@ -374,6 +631,77 @@ export default function WatchClient({ titleId }: WatchClientProps) {
               />
             </div>
 
+            {qualityLevels.length > 0 && hlsRef.current && (
+              <select
+                value={autoQuality ? "auto" : String(currentLevelIndex ?? -1)}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  const hls = hlsRef.current;
+                  if (!hls) return;
+                  if (value === "auto") {
+                    hls.currentLevel = -1;
+                    // eslint-disable-next-line no-param-reassign
+                    hls.autoLevelEnabled = true;
+                    setAutoQuality(true);
+                    return;
+                  }
+                  const levelIndex = Number(value);
+                  if (Number.isNaN(levelIndex)) return;
+                  hls.currentLevel = levelIndex;
+                  // eslint-disable-next-line no-param-reassign
+                  hls.autoLevelEnabled = false;
+                  setCurrentLevelIndex(levelIndex);
+                  setAutoQuality(false);
+                }}
+                className="ml-3 rounded-md border border-zinc-700 bg-black/60 px-2 py-1 text-[11px] text-zinc-100 outline-none focus:border-zinc-500"
+              >
+                {qualityLevels.length > 1 && <option value="auto">Auto</option>}
+                {qualityLevels.map((level) => {
+                  const labelParts: string[] = [];
+                  if (typeof level.height === "number" && level.height > 0) {
+                    labelParts.push(`${level.height}p`);
+                  }
+                  if (typeof level.bitrate === "number" && level.bitrate > 0) {
+                    const mbps = level.bitrate / 1000000;
+                    labelParts.push(`${mbps.toFixed(1)} Mbps`);
+                  }
+                  const label = labelParts.length > 0 ? labelParts.join(" · ") : "Qualidade";
+                  return (
+                    <option key={level.index} value={level.index}>
+                      {label}
+                    </option>
+                  );
+                })}
+              </select>
+            )}
+
+            {subtitleTracks.length > 0 && (
+              <select
+                value={currentSubtitleIndex ?? -1}
+                onChange={(event) => {
+                  const index = Number(event.target.value);
+                  const tracks = subtitleTracks;
+                  tracks.forEach((track, i) => {
+                    // eslint-disable-next-line no-param-reassign
+                    track.mode = i === index ? "showing" : "hidden";
+                  });
+                  setCurrentSubtitleIndex(Number.isNaN(index) || index < 0 ? null : index);
+                }}
+                className="ml-3 rounded-md border border-zinc-700 bg-black/60 px-2 py-1 text-[11px] text-zinc-100 outline-none focus:border-zinc-500"
+              >
+                <option value={-1}>Sem legendas</option>
+                {subtitleTracks.map((track, index) => {
+                  const label = track.label || track.language || `Legenda ${index + 1}`;
+                  return (
+                    // eslint-disable-next-line react/no-array-index-key
+                    <option key={index} value={index}>
+                      {label}
+                    </option>
+                  );
+                })}
+              </select>
+            )}
+
             <button
               type="button"
               onClick={handleFullscreenToggle}
@@ -383,6 +711,49 @@ export default function WatchClient({ titleId }: WatchClientProps) {
             </button>
           </div>
         </div>
+
+        {showShortcuts && (
+          <div className="pointer-events-none absolute inset-0 z-30 flex items-start justify-end p-4">
+            <div className="pointer-events-auto max-w-xs rounded-md bg-black/80 p-3 text-[11px] text-zinc-200 shadow-lg">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="font-semibold">Atalhos do player</span>
+                <button
+                  type="button"
+                  onClick={() => setShowShortcuts(false)}
+                  className="ml-2 rounded px-1 text-[11px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                >
+                  fechar
+                </button>
+              </div>
+              <ul className="space-y-0.5">
+                <li>
+                  <span className="font-mono">Barra de espaço / K</span> – play / pause
+                </li>
+                <li>
+                  <span className="font-mono">← / J</span> – voltar 10s
+                </li>
+                <li>
+                  <span className="font-mono">→ / L</span> – avançar 10s
+                </li>
+                <li>
+                  <span className="font-mono">↑ / ↓</span> – volume ±
+                </li>
+                <li>
+                  <span className="font-mono">M</span> – mutar / desmutar
+                </li>
+                <li>
+                  <span className="font-mono">F</span> – fullscreen
+                </li>
+                <li>
+                  <span className="font-mono">0–9</span> – ir para 0–90% do vídeo
+                </li>
+                <li>
+                  <span className="font-mono">?/H</span> – mostrar/ocultar esta ajuda
+                </li>
+              </ul>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
