@@ -157,16 +157,27 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
       })),
     });
 
+    let defaultIndex: number | null = null;
+    if (tracks.length === 1) {
+      defaultIndex = 0;
+    } else {
+      const ptIndex = tracks.findIndex((t) => {
+        const lang = (t.language || "").toLowerCase();
+        const label = (t.label || "").toLowerCase();
+        return lang.startsWith("pt") || label.includes("pt");
+      });
+      if (ptIndex >= 0) {
+        defaultIndex = ptIndex;
+      }
+    }
+
     tracks.forEach((track, index) => {
-      // Se houver apenas uma faixa, já a deixa visível.
       // eslint-disable-next-line no-param-reassign
-      if (tracks.length === 1 && index === 0) track.mode = "showing";
+      track.mode = defaultIndex !== null && index === defaultIndex ? "showing" : "hidden";
     });
 
     setSubtitleTracks(tracks);
-    if (tracks.length === 1) {
-      setCurrentSubtitleIndex(0);
-    }
+    setCurrentSubtitleIndex(defaultIndex);
   };
 
   const handleMouseMove = () => {
@@ -503,13 +514,27 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
               cues: t.cues?.length ?? 0,
             })));
 
+            let defaultIndex: number | null = null;
+            if (tracks.length === 1) {
+              defaultIndex = 0;
+            } else if (tracks.length > 1) {
+              const ptIndex = tracks.findIndex((t) => {
+                const lang = (t.language || "").toLowerCase();
+                const label = (t.label || "").toLowerCase();
+                return lang.startsWith("pt") || label.includes("pt");
+              });
+              if (ptIndex >= 0) {
+                defaultIndex = ptIndex;
+              }
+            }
+
             tracks.forEach((track, index) => {
               // Mantém legendas ocultas por padrão, mas se houver apenas uma faixa, já a exibe.
               // eslint-disable-next-line no-param-reassign
-              track.mode = tracks.length === 1 && index === 0 ? "showing" : "hidden";
+              track.mode = defaultIndex !== null && index === defaultIndex ? "showing" : "hidden";
             });
             setSubtitleTracks(tracks);
-            setCurrentSubtitleIndex(tracks.length === 1 ? 0 : null);
+            setCurrentSubtitleIndex(defaultIndex);
 
             // Buscar progresso salvo para Continuar assistindo
             // eslint-disable-next-line @typescript-eslint/no-floating-promises

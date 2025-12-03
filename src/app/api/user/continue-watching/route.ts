@@ -43,7 +43,7 @@ export async function GET() {
         },
       },
       orderBy: { updatedAt: "desc" },
-      take: 30,
+      take: 12, // Reduzido de 30 para 12 (suficiente para a home)
     });
 
     const titles = items

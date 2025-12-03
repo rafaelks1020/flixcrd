@@ -5,18 +5,46 @@ import { prisma } from "@/lib/prisma";
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q") ?? undefined;
+  const type = searchParams.get("type") ?? undefined;
+  const page = parseInt(searchParams.get("page") || "1", 10);
+  const pageSize = 24;
+  const skip = (page - 1) * pageSize;
+
+  const where: any = {};
+  
+  if (q) {
+    where.name = {
+      contains: q,
+      mode: "insensitive",
+    };
+  }
+
+  if (type && type !== "all") {
+    where.type = type;
+  }
+
+  // Se não tiver paginação (page=1 e sem filtros), assume que é admin e retorna tudo
+  const isAdminRequest = page === 1 && !type && !q;
 
   const titles = await prisma.title.findMany({
-    where: q
-      ? {
-          name: {
-            contains: q,
-            mode: "insensitive",
-          },
-        }
-      : undefined,
-    orderBy: { createdAt: "desc" },
-    take: 50,
+    where: Object.keys(where).length > 0 ? where : undefined,
+    orderBy: { popularity: "desc" },
+    skip: isAdminRequest ? undefined : skip,
+    take: isAdminRequest ? undefined : pageSize,
+    select: {
+      id: true,
+      tmdbId: true,
+      name: true,
+      slug: true,
+      posterUrl: true,
+      backdropUrl: true,
+      voteAverage: true,
+      releaseDate: true,
+      type: true,
+      originalName: true,
+      overview: true,
+      hlsPath: true,
+    },
   });
 
   return NextResponse.json(titles);
@@ -83,6 +111,18 @@ export async function POST(request: NextRequest) {
         });
         genreIds.push(genre.id);
       }
+    }
+
+    // Verificar se título já existe
+    const existingTitle = await prisma.title.findUnique({
+      where: { tmdbId },
+    });
+
+    if (existingTitle) {
+      return NextResponse.json(
+        { error: "Título já existe no catálogo.", title: existingTitle },
+        { status: 409 },
+      );
     }
 
     // Criar título

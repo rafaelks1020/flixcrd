@@ -41,6 +41,8 @@ interface SeasonsClientProps {
   titleId: string;
 }
 
+type EpisodeHlsStatus = "none" | "uploaded" | "hls_ready" | "error";
+
 export default function SeasonsClient({ titleId }: SeasonsClientProps) {
   const [data, setData] = useState<TitleSeasonsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,6 +51,8 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
   const [importingAll, setImportingAll] = useState(false);
   const [importingSeason, setImportingSeason] = useState<number | null>(null);
   const [seasonInput, setSeasonInput] = useState(1);
+  const [episodeHlsStatus, setEpisodeHlsStatus] = useState<Record<string, EpisodeHlsStatus>>({});
+  const [bulkTranscoding, setBulkTranscoding] = useState(false);
 
   async function loadData() {
     setLoading(true);
@@ -67,10 +71,86 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
     }
   }
 
+  async function handleTranscodeAllEpisodes() {
+    if (!data) return;
+    setError(null);
+    setInfo(null);
+    setBulkTranscoding(true);
+    try {
+      const res = await fetch(`/api/admin/titles/${titleId}/transcode-episodes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          crf: 20,
+          deleteSource: false,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json?.error ?? "Erro ao enfileirar HLS para episódios.");
+      }
+
+      const queued = Array.isArray(json?.queued) ? json.queued.length : 0;
+      const skipped = Array.isArray(json?.skipped) ? json.skipped.length : 0;
+      const errors = Array.isArray(json?.errors) ? json.errors.length : 0;
+
+      const parts: string[] = [];
+      parts.push(`Enfileirados ${queued} episódio(s) para HLS.`);
+      if (skipped > 0) parts.push(`${skipped} ignorado(s) sem arquivo de origem.`);
+      if (errors > 0) parts.push(`${errors} com erro ao criar job (veja logs do transcoder).`);
+
+      setInfo(parts.join(" "));
+      await loadData();
+    } catch (err: any) {
+      setError(err.message ?? "Erro ao enfileirar HLS para episódios.");
+    } finally {
+      setBulkTranscoding(false);
+    }
+  }
+
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [titleId]);
+
+  useEffect(() => {
+    async function loadEpisodeHlsStatus() {
+      if (!data) return;
+
+      const allEpisodes = data.seasons.flatMap((season) => season.episodes);
+      const uniqueIds = Array.from(new Set(allEpisodes.map((ep) => ep.id)));
+      if (uniqueIds.length === 0) return;
+
+      try {
+        const entries = await Promise.all(
+          uniqueIds.map(async (id) => {
+            try {
+              const res = await fetch(`/api/admin/episodes/${id}/hls-status`);
+              if (!res.ok) {
+                return [id, "error" as EpisodeHlsStatus] as const;
+              }
+              const json = await res.json();
+              const status = (json?.status as EpisodeHlsStatus) ?? "none";
+              return [id, status] as const;
+            } catch {
+              return [id, "error" as EpisodeHlsStatus] as const;
+            }
+          }),
+        );
+
+        const map: Record<string, EpisodeHlsStatus> = {};
+        for (const [id, status] of entries) {
+          map[id] = status;
+        }
+        setEpisodeHlsStatus(map);
+      } catch {
+        // ignora erros globais, status ficará vazio
+      }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    loadEpisodeHlsStatus();
+  }, [data]);
 
   async function handleImportAll() {
     if (!data?.tmdbId) {
@@ -182,6 +262,16 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
                   : "Importar temporada"}
               </button>
             </div>
+            <button
+              type="button"
+              onClick={handleTranscodeAllEpisodes}
+              disabled={bulkTranscoding}
+              className="mt-1 rounded-md border border-emerald-700 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-900/40 disabled:opacity-60"
+            >
+              {bulkTranscoding
+                ? "Enfileirando HLS de episódios..."
+                : "Gerar HLS de todos episódios com upload"}
+            </button>
           </div>
         )}
       </div>
@@ -288,15 +378,39 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
                               </div>
                             )}
                           </div>
-                          {ep.hlsPath ? (
-                            <span className="rounded-md border border-emerald-700 px-2 py-0.5 text-[10px] text-emerald-300 bg-emerald-900/40">
-                              HLS pronto
-                            </span>
-                          ) : (
-                            <span className="rounded-md border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-300">
-                              Sem HLS
-                            </span>
-                          )}
+                          {(() => {
+                            const status = episodeHlsStatus[ep.id] ?? "none";
+
+                            if (status === "hls_ready") {
+                              return (
+                                <span className="rounded-md border border-emerald-700 px-2 py-0.5 text-[10px] text-emerald-300 bg-emerald-900/40">
+                                  HLS pronto
+                                </span>
+                              );
+                            }
+
+                            if (status === "uploaded") {
+                              return (
+                                <span className="rounded-md border border-blue-700 px-2 py-0.5 text-[10px] text-blue-300 bg-blue-900/40">
+                                  Upload feito (HLS pendente)
+                                </span>
+                              );
+                            }
+
+                            if (status === "error") {
+                              return (
+                                <span className="rounded-md border border-red-700 px-2 py-0.5 text-[10px] text-red-300 bg-red-900/40">
+                                  Erro ao verificar HLS
+                                </span>
+                              );
+                            }
+
+                            return (
+                              <span className="rounded-md border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-300">
+                                Sem upload
+                              </span>
+                            );
+                          })()}
                         </div>
                         {ep.overview && (
                           <p className="line-clamp-2 text-[11px] text-zinc-300">

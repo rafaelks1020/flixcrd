@@ -66,7 +66,7 @@ export default function AdminCatalogPage() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [refreshingTmdb, setRefreshingTmdb] = useState(false);
-  const [hlsReady, setHlsReady] = useState<Record<string, boolean>>({});
+  const [hlsStatus, setHlsStatus] = useState<Record<string, string>>({});
 
   const [form, setForm] = useState({
     tmdbId: "",
@@ -94,24 +94,30 @@ export default function AdminCatalogPage() {
       setTitles(data);
 
       // Atualiza status de HLS consultando o Wasabi
-      const statusMap: Record<string, boolean> = {};
+      const statusMap: Record<string, string> = {};
       await Promise.all(
         (data as Title[]).map(async (t) => {
           if (!t.hlsPath) {
-            statusMap[t.id] = false;
+            statusMap[t.id] = "no_upload";
             return;
           }
 
           try {
             const resStatus = await fetch(`/api/admin/titles/${t.id}/hls-status`);
             const json = await resStatus.json();
-            statusMap[t.id] = Boolean(json?.hasHls);
+            if (json?.hasHls) {
+              statusMap[t.id] = "hls_ready";
+            } else if (json?.hasUpload) {
+              statusMap[t.id] = "upload_pending";
+            } else {
+              statusMap[t.id] = "no_upload";
+            }
           } catch {
-            statusMap[t.id] = false;
+            statusMap[t.id] = "no_upload";
           }
         }),
       );
-      setHlsReady(statusMap);
+      setHlsStatus(statusMap);
     } catch (err: any) {
       setError(err.message ?? "Erro ao carregar títulos");
     } finally {
@@ -176,89 +182,125 @@ export default function AdminCatalogPage() {
     }
   }
 
-  async function handleTranscode(id: string) {
+  async function handleTranscode(id: string, type: TitleType) {
     setError(null);
     setInfo(null);
     setTranscodingId(id);
     setTranscodingProgress(null);
     setTranscodingStatus(null);
     try {
-      const res = await fetch(`/api/transcode/hls/${id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          crf: transcodeCrf,
-          deleteSource: deleteSourceAfterTranscode,
-        }),
-      });
+      if (type === "SERIES" || type === "ANIME") {
+        // Séries/animes: enfileira HLS para todos os episódios que já têm upload
+        const res = await fetch(`/api/admin/titles/${id}/transcode-episodes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            crf: transcodeCrf,
+            deleteSource: deleteSourceAfterTranscode,
+          }),
+        });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error ?? "Erro ao gerar HLS para este título");
-      }
-      const jobId: string | undefined = data?.jobId;
-      if (!jobId) {
-        throw new Error("Serviço de transcodificação não retornou jobId.");
-      }
-
-      // Polling de status
-      const poll = async () => {
-        try {
-          const statusRes = await fetch(
-            `/api/transcode/hls/${id}?job_id=${encodeURIComponent(jobId)}`,
-          );
-          const statusData = await statusRes.json();
-
-          if (!statusRes.ok) {
-            throw new Error(statusData?.error ?? "Erro ao consultar status do job");
-          }
-
-          const status: string = statusData.status ?? "";
-          const progress: number =
-            typeof statusData.progress === "number" ? statusData.progress : 0;
-          const message: string | null = statusData.message ?? null;
-
-          setTranscodingStatus(status);
-          setTranscodingProgress(progress);
-
-          if (status === "completed") {
-            await loadTitles();
-            setInfo("Transcodificação HLS concluída. Arquivos gerados no prefixo do título.");
-            setTranscodingId(null);
-            setTranscodingProgress(null);
-            setTranscodingStatus(null);
-            return false;
-          }
-
-          if (status === "error") {
-            setError(
-              message || "Job de transcodificação falhou. Verifique os logs do transcoder.",
-            );
-            setTranscodingId(null);
-            setTranscodingProgress(null);
-            setTranscodingStatus(null);
-            return false;
-          }
-
-          return true;
-        } catch (err: any) {
-          setError(err.message ?? "Erro ao consultar status do job");
-          setTranscodingId(null);
-          setTranscodingProgress(null);
-          setTranscodingStatus(null);
-          return false;
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.error ?? "Erro ao enfileirar HLS para episódios.");
         }
-      };
 
-      // Primeiro poll imediato
-      let keepPolling = await poll();
-      if (keepPolling) {
-        const interval = setInterval(async () => {
-          const cont = await poll();
-          if (!cont) {
-            clearInterval(interval);
+        const queued = Array.isArray(data?.queued) ? data.queued.length : 0;
+        const skipped = Array.isArray(data?.skipped) ? data.skipped.length : 0;
+        const errors = Array.isArray(data?.errors) ? data.errors.length : 0;
+
+        const parts: string[] = [];
+        parts.push(`Enfileirados ${queued} episódio(s) para HLS.`);
+        if (skipped > 0) parts.push(`${skipped} ignorado(s) sem arquivo de origem.`);
+        if (errors > 0)
+          parts.push(`${errors} com erro ao criar job (veja logs do transcoder).`);
+
+        setInfo(parts.join(" "));
+        setTranscodingId(null);
+        setTranscodingProgress(null);
+        setTranscodingStatus(null);
+        await loadTitles();
+      } else {
+        // Filmes/outros: transcodificação HLS no nível do título
+        const res = await fetch(`/api/transcode/hls/${id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            crf: transcodeCrf,
+            deleteSource: deleteSourceAfterTranscode,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.error ?? "Erro ao gerar HLS para este título");
+        }
+        const jobId: string | undefined = data?.jobId;
+        if (!jobId) {
+          throw new Error("Serviço de transcodificação não retornou jobId.");
+        }
+
+        // Polling de status
+        const poll = async () => {
+          try {
+            const statusRes = await fetch(
+              `/api/transcode/hls/${id}?job_id=${encodeURIComponent(jobId)}`,
+            );
+            const statusData = await statusRes.json();
+
+            if (!statusRes.ok) {
+              throw new Error(statusData?.error ?? "Erro ao consultar status do job");
+            }
+
+            const status: string = statusData.status ?? "";
+            const progress: number =
+              typeof statusData.progress === "number" ? statusData.progress : 0;
+            const message: string | null = statusData.message ?? null;
+
+            setTranscodingStatus(status);
+            setTranscodingProgress(progress);
+
+            if (status === "completed") {
+              await loadTitles();
+              setInfo(
+                "Transcodificação HLS concluída. Arquivos gerados no prefixo do título.",
+              );
+              setTranscodingId(null);
+              setTranscodingProgress(null);
+              setTranscodingStatus(null);
+              return false;
+            }
+
+            if (status === "error") {
+              setError(
+                message || "Job de transcodificação falhou. Verifique os logs do transcoder.",
+              );
+              setTranscodingId(null);
+              setTranscodingProgress(null);
+              setTranscodingStatus(null);
+              return false;
+            }
+
+            return true;
+          } catch (err: any) {
+            setError(err.message ?? "Erro ao consultar status do job");
+            setTranscodingId(null);
+            setTranscodingProgress(null);
+            setTranscodingStatus(null);
+            return false;
           }
-        }, 5000);
+        };
+
+        // Primeiro poll imediato
+        let keepPolling = await poll();
+        if (keepPolling) {
+          const interval = setInterval(async () => {
+            const cont = await poll();
+            if (!cont) {
+              clearInterval(interval);
+            }
+          }, 5000);
+        }
       }
     } catch (err: any) {
       setError(err.message ?? "Erro ao iniciar transcodificação HLS");
@@ -548,12 +590,16 @@ export default function AdminCatalogPage() {
                       {t.tmdbId ? `#${t.tmdbId}` : "-"}
                     </td>
                     <td className="px-3 py-2 text-zinc-400">
-                      {hlsReady[t.id] ? (
+                      {hlsStatus[t.id] === "hls_ready" ? (
                         <span className="inline-flex items-center rounded-md border border-emerald-700 px-2 py-0.5 text-[10px] text-emerald-300 bg-emerald-900/40">
                           HLS pronto
                         </span>
+                      ) : hlsStatus[t.id] === "upload_pending" ? (
+                        <span className="inline-flex items-center rounded-md border border-yellow-700 px-2 py-0.5 text-[10px] text-yellow-300 bg-yellow-900/40">
+                          Upload feito (HLS pendente)
+                        </span>
                       ) : (
-                        t.hlsPath ?? "-"
+                        <span className="text-[10px] text-zinc-500">Sem upload</span>
                       )}
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -601,7 +647,7 @@ export default function AdminCatalogPage() {
                                   ? "Baixando legenda..."
                                   : "Baixar legenda PT-BR"}
                               </button>
-                              {hlsReady[t.id] ? (
+                              {hlsStatus[t.id] === "hls_ready" ? (
                                 <div className="mt-0.5 block w-full rounded-[4px] px-2 py-1 text-[11px] text-emerald-300">
                                   HLS pronto
                                 </div>
@@ -610,7 +656,7 @@ export default function AdminCatalogPage() {
                                   type="button"
                                   onClick={() => {
                                     setOpenActionsId(null);
-                                    handleTranscode(t.id);
+                                    handleTranscode(t.id, t.type);
                                   }}
                                   disabled={transcodingId === t.id}
                                   className="mt-0.5 block w-full rounded-[4px] px-2 py-1 text-[11px] text-emerald-200 hover:bg-emerald-900/40 disabled:opacity-60"

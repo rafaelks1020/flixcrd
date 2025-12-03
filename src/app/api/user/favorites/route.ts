@@ -44,7 +44,7 @@ export async function GET() {
         },
       },
       orderBy: { createdAt: "desc" },
-      take: 100,
+      take: 20, // Reduzido de 100 para 20 (suficiente para a home)
     });
 
     const titles = favorites.map((fav: any) => ({

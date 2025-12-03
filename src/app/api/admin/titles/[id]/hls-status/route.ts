@@ -37,7 +37,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     }
 
     if (!title.hlsPath) {
-      return NextResponse.json({ hasHls: false });
+      return NextResponse.json({ hasHls: false, hasUpload: false });
     }
 
     const prefix = title.hlsPath.endsWith("/") ? title.hlsPath : `${title.hlsPath}/`;
@@ -55,7 +55,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       ),
     );
 
-    return NextResponse.json({ hasHls });
+    const hasUpload = Boolean(
+      listed.Contents && listed.Contents.length > 0,
+    );
+
+    return NextResponse.json({ hasHls, hasUpload });
   } catch (error) {
     console.error("GET /api/admin/titles/[id]/hls-status error", error);
     return NextResponse.json(

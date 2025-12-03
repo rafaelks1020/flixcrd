@@ -63,38 +63,38 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
         const genresData: Genre[] = await genresRes.json();
         setGenres(genresData);
 
-        const titlesMap: Record<string, Title[]> = {};
-        for (const genre of genresData.slice(0, 6)) {
+        // Carrega títulos de todos os gêneros em paralelo
+        const genresToLoad = genresData.slice(0, 6);
+        const titlesPromises = genresToLoad.map(async (genre) => {
           const titlesRes = await fetch(`/api/genres/${genre.id}/titles`);
           const titlesData: Title[] = await titlesRes.json();
-          titlesMap[genre.id] = titlesData;
+          return { genreId: genre.id, titles: titlesData };
+        });
+
+        const titlesResults = await Promise.all(titlesPromises);
+        const titlesMap: Record<string, Title[]> = {};
+        for (const result of titlesResults) {
+          titlesMap[result.genreId] = result.titles;
         }
         setTitlesByGenre(titlesMap);
 
         if (isLoggedIn) {
-          try {
-            const favRes = await fetch("/api/user/favorites");
-            if (favRes.ok) {
-              const favData: Title[] = await favRes.json();
-              setFavorites(favData);
-            } else {
-              setFavorites([]);
-            }
-          } catch {
-            setFavorites([]);
-          }
+          // Carrega favoritos e continuar assistindo em paralelo
+          const [favResult, cwResult] = await Promise.allSettled([
+            fetch("/api/user/favorites").then((res) =>
+              res.ok ? res.json() : []
+            ),
+            fetch("/api/user/continue-watching").then((res) =>
+              res.ok ? res.json() : []
+            ),
+          ]);
 
-          try {
-            const cwRes = await fetch("/api/user/continue-watching");
-            if (cwRes.ok) {
-              const cwData: ContinueWatchingItem[] = await cwRes.json();
-              setContinueWatching(cwData);
-            } else {
-              setContinueWatching([]);
-            }
-          } catch {
-            setContinueWatching([]);
-          }
+          setFavorites(
+            favResult.status === "fulfilled" ? favResult.value : []
+          );
+          setContinueWatching(
+            cwResult.status === "fulfilled" ? cwResult.value : []
+          );
         } else {
           setFavorites([]);
           setContinueWatching([]);
@@ -186,6 +186,7 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
               src={heroTitle.backdropUrl}
               alt={heroTitle.name}
               className="h-full w-full object-cover opacity-50"
+              loading="eager"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent" />
           </div>
@@ -210,12 +211,20 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
                   className="w-full rounded-md border border-zinc-700 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-50 outline-none focus:border-zinc-400 md:text-sm"
                 />
               </div>
+              {isLoggedIn && (
+                <Link
+                  href="/browse"
+                  className="hidden rounded-md border border-zinc-600 px-3 py-1.5 text-xs font-semibold text-zinc-100 hover:bg-zinc-800 md:inline-block"
+                >
+                  Catálogo
+                </Link>
+              )}
               {isAdmin && (
                 <Link
                   href="/admin"
                   className="hidden rounded-md border border-zinc-600 px-3 py-1.5 text-xs font-semibold text-zinc-100 hover:bg-zinc-800 md:inline-block"
                 >
-                  Painel Admin
+                  Admin
                 </Link>
               )}
               {!isLoggedIn ? (
@@ -303,7 +312,7 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
           <h2 className="text-lg font-semibold text-zinc-100 md:text-xl">
             Continuar assistindo
           </h2>
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hide md:gap-2">
             {continueWatching.map((item) => (
               <Link
                 key={item.id}
@@ -312,13 +321,14 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
                     ? `/watch/${item.id}?episodeId=${encodeURIComponent(item.episodeId)}`
                     : `/watch/${item.id}`
                 }
-                className="group relative min-w-[160px] flex-shrink-0 overflow-hidden rounded-md bg-zinc-900 transition hover:scale-105 hover:z-10 md:min-w-[200px]"
+                className="group relative min-w-[120px] flex-shrink-0 overflow-hidden rounded-md bg-zinc-900 transition hover:scale-105 hover:z-10 md:min-w-[140px]"
               >
                 {item.posterUrl ? (
                   <img
                     src={item.posterUrl}
                     alt={item.name}
                     className="aspect-[16/9] w-full object-cover transition group-hover:opacity-80"
+                    loading="lazy"
                   />
                 ) : (
                   <div className="flex aspect-[2/3] w-full items-center justify-center bg-zinc-800 text-center text-xs text-zinc-400">
@@ -346,18 +356,19 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
           <h2 className="text-lg font-semibold text-zinc-100 md:text-xl">
             Minha lista
           </h2>
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hide md:gap-2">
             {favorites.map((title) => (
               <Link
                 key={title.id}
                 href={`/title/${title.id}`}
-                className="group relative min-w-[140px] flex-shrink-0 overflow-hidden rounded-md bg-zinc-900 transition hover:scale-105 hover:z-10 md:min-w-[180px]"
+                className="group relative min-w-[110px] flex-shrink-0 overflow-hidden rounded-md bg-zinc-900 transition hover:scale-105 hover:z-10 md:min-w-[130px]"
               >
                 {title.posterUrl ? (
                   <img
                     src={title.posterUrl}
                     alt={title.name}
                     className="aspect-[2/3] w-full object-cover transition group-hover:opacity-80"
+                    loading="lazy"
                   />
                 ) : (
                   <div className="flex aspect-[2/3] w-full items-center justify-center bg-zinc-800 text-center text-xs text-zinc-400">
@@ -402,6 +413,7 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
                       src={title.posterUrl}
                       alt={title.name}
                       className="aspect-[2/3] w-full object-cover transition group-hover:opacity-80"
+                      loading="lazy"
                     />
                   ) : (
                     <div className="flex aspect-[2/3] w-full items-center justify-center bg-zinc-800 text-center text-xs text-zinc-400">
@@ -434,11 +446,17 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
 
               return (
                 <div key={genre.id} className="space-y-3">
-                  <h2 className="text-lg font-semibold text-zinc-100 md:text-xl">
-                    <Link href={`/genres/${genre.id}`} className="hover:underline">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-zinc-100 md:text-xl">
                       {genre.name}
+                    </h2>
+                    <Link
+                      href={`/genres/${genre.id}`}
+                      className="text-xs font-semibold text-zinc-400 hover:text-zinc-200 md:text-sm"
+                    >
+                      Ver todos →
                     </Link>
-                  </h2>
+                  </div>
                   <div className="relative">
                     <button
                       type="button"
@@ -460,7 +478,7 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
                       ref={(el) => {
                         rowRefs.current[genre.id] = el;
                       }}
-                      className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide"
+                      className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hide md:gap-2"
                       onWheel={(e: React.WheelEvent<HTMLDivElement>) => {
                         if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
                           e.preventDefault();
@@ -475,13 +493,14 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
                         <Link
                           key={title.id}
                           href={`/title/${title.id}`}
-                          className="group relative min-w-[140px] flex-shrink-0 overflow-hidden rounded-md bg-zinc-900 transition hover:scale-105 hover:z-10 md:min-w-[180px]"
+                          className="group relative min-w-[110px] flex-shrink-0 overflow-hidden rounded-md bg-zinc-900 transition hover:scale-105 hover:z-10 md:min-w-[130px]"
                         >
                           {title.posterUrl ? (
                             <img
                               src={title.posterUrl}
                               alt={title.name}
                               className="aspect-[2/3] w-full object-cover transition group-hover:opacity-80"
+                              loading="lazy"
                             />
                           ) : (
                             <div className="flex aspect-[2/3] w-full items-center justify-center bg-zinc-800 text-center text-xs text-zinc-400">

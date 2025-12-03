@@ -4,15 +4,19 @@ import { prisma } from "@/lib/prisma";
 import GenreCarouselClient from "./GenreCarouselClient";
 
 interface PageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export const dynamic = "force-dynamic";
 
 export default async function GenreBrowsePage({ params }: PageProps) {
-  const { id } = params;
+  const { id } = await params;
+
+  if (!id || typeof id !== "string") {
+    notFound();
+  }
 
   const genre = await prisma.genre.findUnique({
     where: { id },
