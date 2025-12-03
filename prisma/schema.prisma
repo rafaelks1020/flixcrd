@@ -43,18 +43,96 @@ model Subscription {
   updatedAt          DateTime @updatedAt
 }
 
+model Genre {
+  id        String        @id @default(cuid())
+  tmdbId    Int           @unique
+  name      String
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  titles    TitleGenre[]
+}
+
 model Title {
-  id           String    @id @default(cuid())
-  tmdbId       Int?      @unique
-  type         TitleType
-  slug         String    @unique
-  name         String
-  originalName String?
-  overview     String?
-  releaseDate  DateTime?
-  posterUrl    String?
-  backdropUrl  String?
-  hlsPath      String?   // path prefix in Wasabi, e.g. movie-id/
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id            String        @id @default(cuid())
+  tmdbId        Int?          @unique
+  type          TitleType
+  slug          String        @unique
+  name          String
+  originalName  String?
+  overview      String?
+  tagline       String?
+  releaseDate   DateTime?
+  posterUrl     String?
+  backdropUrl   String?
+  logoUrl       String?
+  hlsPath       String?       // path prefix in Wasabi, e.g. movie-id/
+  runtime       Int?          // em minutos
+  voteAverage   Float?        // rating do TMDB (0-10)
+  voteCount     Int?
+  popularity    Float?
+  status        String?       // Released, Post Production, etc.
+  originalLanguage String?
+  spokenLanguages  String?    // JSON array de idiomas
+  productionCountries String? // JSON array de países
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  genres        TitleGenre[]
+  cast          Cast[]
+  crew          Crew[]
+  videos        Video[]
+}
+
+model TitleGenre {
+  id        String   @id @default(cuid())
+  titleId   String
+  genreId   String
+  title     Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
+  genre     Genre    @relation(fields: [genreId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([titleId, genreId])
+}
+
+model Cast {
+  id          String   @id @default(cuid())
+  titleId     String
+  tmdbId      Int      // ID do ator no TMDB
+  name        String
+  character   String?
+  order       Int      // ordem de aparição nos créditos
+  profilePath String?  // URL da foto do ator
+  title       Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([titleId])
+}
+
+model Crew {
+  id          String   @id @default(cuid())
+  titleId     String
+  tmdbId      Int
+  name        String
+  job         String   // Director, Writer, Producer, etc.
+  department  String?  // Directing, Writing, Production, etc.
+  profilePath String?
+  title       Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([titleId])
+}
+
+model Video {
+  id          String   @id @default(cuid())
+  titleId     String
+  key         String   // YouTube video ID
+  name        String
+  site        String   // YouTube, Vimeo, etc.
+  type        String   // Trailer, Teaser, Clip, etc.
+  official    Boolean  @default(false)
+  publishedAt DateTime?
+  title       Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([titleId])
 }

@@ -60,6 +60,8 @@ export default function AdminCatalogPage() {
   const [tmdbLoading, setTmdbLoading] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [refreshingTmdb, setRefreshingTmdb] = useState(false);
+  const [hlsReady, setHlsReady] = useState<Record<string, boolean>>({});
 
   const [form, setForm] = useState({
     tmdbId: "",
@@ -85,10 +87,62 @@ export default function AdminCatalogPage() {
       }
       const data = await res.json();
       setTitles(data);
+
+      // Atualiza status de HLS consultando o Wasabi
+      const statusMap: Record<string, boolean> = {};
+      await Promise.all(
+        (data as Title[]).map(async (t) => {
+          if (!t.hlsPath) {
+            statusMap[t.id] = false;
+            return;
+          }
+
+          try {
+            const resStatus = await fetch(`/api/admin/titles/${t.id}/hls-status`);
+            const json = await resStatus.json();
+            statusMap[t.id] = Boolean(json?.hasHls);
+          } catch {
+            statusMap[t.id] = false;
+          }
+        }),
+      );
+      setHlsReady(statusMap);
     } catch (err: any) {
       setError(err.message ?? "Erro ao carregar títulos");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleRefreshAllFromTmdb() {
+    if (
+      !confirm(
+        "Atualizar metadados TMDb de todos os filmes e séries? Isso pode levar alguns minutos.",
+      )
+    ) {
+      return;
+    }
+
+    setRefreshingTmdb(true);
+    setError(null);
+    setInfo(null);
+
+    try {
+      const res = await fetch("/api/admin/titles/refresh-tmdb", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error ?? "Erro ao atualizar títulos a partir do TMDB");
+      }
+      setInfo(
+        `Atualização TMDb concluída: ${data.updated} de ${data.total} títulos atualizados.`,
+      );
+      await loadTitles();
+    } catch (err: any) {
+      setError(err.message ?? "Erro ao atualizar títulos a partir do TMDB");
+    } finally {
+      setRefreshingTmdb(false);
     }
   }
 
@@ -274,18 +328,32 @@ export default function AdminCatalogPage() {
     setInfo(null);
 
     try {
-      const payload: any = {
-        tmdbId: form.tmdbId ? Number(form.tmdbId) : null,
-        type: form.type,
-        slug: form.slug || slugify(form.name),
-        name: form.name,
-        originalName: form.originalName || null,
-        overview: form.overview || null,
-        releaseDate: form.releaseDate || null,
-        posterUrl: form.posterUrl || null,
-        backdropUrl: form.backdropUrl || null,
-        hlsPath: form.hlsPath || null,
-      };
+      let payload: any;
+
+      if (editingId) {
+        // Editando: manda todos os campos manualmente
+        payload = {
+          tmdbId: form.tmdbId ? Number(form.tmdbId) : null,
+          type: form.type,
+          slug: form.slug || slugify(form.name),
+          name: form.name,
+          originalName: form.originalName || null,
+          overview: form.overview || null,
+          releaseDate: form.releaseDate || null,
+          posterUrl: form.posterUrl || null,
+          backdropUrl: form.backdropUrl || null,
+          hlsPath: form.hlsPath || null,
+        };
+      } else {
+        // Criando: só manda tmdbId + type, API busca tudo do TMDB
+        if (!form.tmdbId || !form.type) {
+          throw new Error("Selecione um título do TMDB antes de adicionar.");
+        }
+        payload = {
+          tmdbId: Number(form.tmdbId),
+          type: form.type,
+        };
+      }
 
       const url = editingId ? `/api/titles/${editingId}` : "/api/titles";
       const method = editingId ? "PATCH" : "POST";
@@ -301,6 +369,7 @@ export default function AdminCatalogPage() {
         throw new Error(data?.error ?? "Erro ao salvar título");
       }
 
+      setInfo(editingId ? "Título atualizado com sucesso!" : "Título adicionado com todos os metadados do TMDB!");
       await loadTitles();
       resetForm();
     } catch (err: any) {
@@ -348,11 +417,21 @@ export default function AdminCatalogPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold">Catálogo</h2>
-        <p className="text-sm text-zinc-400">
-          Gerencie os títulos do catálogo e use a busca TMDb para preencher metadados automaticamente.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-semibold">Catálogo</h2>
+          <p className="text-sm text-zinc-400">
+            Gerencie os títulos do catálogo e use a busca TMDb para preencher metadados automaticamente.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleRefreshAllFromTmdb}
+          disabled={refreshingTmdb}
+          className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-semibold text-zinc-100 hover:bg-zinc-800 disabled:opacity-60"
+        >
+          {refreshingTmdb ? "Atualizando TMDb..." : "Atualizar TMDb de todos"}
+        </button>
       </div>
 
       {error && (
@@ -687,18 +766,25 @@ export default function AdminCatalogPage() {
                               ? "Baixando legenda..."
                               : "Baixar legenda PT-BR"}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleTranscode(t.id)}
-                            disabled={transcodingId === t.id}
-                            className="rounded-md border border-emerald-700 px-2 py-1 text-[10px] text-emerald-200 hover:bg-emerald-900/60 disabled:opacity-60"
-                          >
-                            {transcodingId === t.id
-                              ? transcodingStatus === "running" && transcodingProgress !== null
-                                ? `Gerando HLS... ${Math.round(transcodingProgress)}%`
-                                : "Gerando HLS..."
-                              : "Gerar HLS"}
-                          </button>
+                          {hlsReady[t.id] ? (
+                            <span className="rounded-md border border-emerald-700 px-2 py-1 text-[10px] text-emerald-300 bg-emerald-900/40">
+                              HLS pronto
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleTranscode(t.id)}
+                              disabled={transcodingId === t.id}
+                              className="rounded-md border border-emerald-700 px-2 py-1 text-[10px] text-emerald-200 hover:bg-emerald-900/60 disabled:opacity-60"
+                            >
+                              {transcodingId === t.id
+                                ? transcodingStatus === "running" &&
+                                  transcodingProgress !== null
+                                  ? `Gerando HLS... ${Math.round(transcodingProgress)}%`
+                                  : "Gerando HLS..."
+                                : "Gerar HLS"}
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleDelete(t.id)}

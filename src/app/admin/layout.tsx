@@ -48,13 +48,21 @@ export default function AdminLayout({
             );
           })}
         </nav>
-        <button
-          type="button"
-          onClick={() => signOut({ callbackUrl: "/login" })}
-          className="mt-auto rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
-        >
-          Sair
-        </button>
+        <div className="mt-auto flex flex-col gap-2">
+          <Link
+            href="/"
+            className="rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
+          >
+            Ir para FlixCRD
+          </Link>
+          <button
+            type="button"
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            className="rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
+          >
+            Sair
+          </button>
+        </div>
       </aside>
       <main className="flex-1 px-6 py-6">
         {children}
