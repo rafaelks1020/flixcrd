@@ -93,19 +93,32 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   }, []);
 
   useEffect(() => {
-    async function testarVelocidadeWasabi(): Promise<number> {
-      // O bucket Wasabi é privado e não permite acesso público direto,
-      // então não podemos fazer ping com uma URL pública sem causar AccessDenied.
-      // Para evitar erros no console, tratamos sempre como conexão "lenta"
-      // quando o proxy estiver habilitado, o que força o uso do Cloudflare.
-      return Infinity;
+    async function testarVelocidadeCloudflare(): Promise<number> {
+      // Testa a velocidade do Cloudflare (B2_LINK)
+      // Se der erro ou demorar muito, cai pro B2 direto
+      if (typeof performance === "undefined" || typeof fetch === "undefined") {
+        return Infinity;
+      }
+
+      const inicio = performance.now();
+      try {
+        // Tenta acessar um arquivo pequeno via Cloudflare
+        const testUrl = "https://hlspaelflix.top/b2/ping.txt";
+        await fetch(testUrl, {
+          method: "HEAD",
+          cache: "no-store",
+        });
+      } catch {
+        return Infinity; // Erro = Cloudflare offline/inacessível
+      }
+      return performance.now() - inicio;
     }
 
     async function loadPlayback() {
       setLoading(true);
       setError(null);
       try {
-        // 1) Buscar configuração do usuário
+        // 1) Buscar configuração do perfil
         let proxyFlag = false;
         if (profileId) {
           try {
@@ -123,13 +136,16 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         }
         setUseCloudflareProxy(proxyFlag);
 
-        // 2) Decidir origem (wasabi x cloudflare) se o proxy estiver habilitado
-        let source: "wasabi" | "cloudflare" = "wasabi";
+        // 2) Decidir origem: SEMPRE Cloudflare primeiro se o toggle estiver ativo
+        let source: "b2" | "cloudflare" = "b2";
         if (proxyFlag) {
-          const tempo = await testarVelocidadeWasabi();
-          const limite = 200; // ms
-          if (tempo > limite) {
-            source = "cloudflare";
+          // Testa se Cloudflare está respondendo bem
+          const tempo = await testarVelocidadeCloudflare();
+          const limite = 300; // ms - se demorar mais ou falhar, cai pro B2 direto
+          if (tempo <= limite) {
+            source = "cloudflare"; // Cloudflare OK, usa ele
+          } else {
+            source = "b2"; // Cloudflare lento/off, cai pro B2 direto
           }
         }
 

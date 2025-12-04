@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { getServerSession } from "next-auth";
 
 import { prisma } from "@/lib/prisma";
-import { wasabiClient } from "@/lib/wasabi";
 import { authOptions } from "@/lib/auth";
 
-const bucketName = process.env.WASABI_BUCKET_NAME;
-// Bases públicas para streaming direto ou via proxy Cloudflare
-const WASABI_PUBLIC_BASE = "https://s3.us-east-1.wasabisys.com";
-const CLOUDFLARE_PROXY_BASE = "https://wasabi-proxy.crdozo-rafael1028.workers.dev";
+const B2_CLOUDFLARE_BASE = process.env.B2_LINK; // https://hlspaelflix.top/b2/
 
 interface RouteContext {
   params: Promise<{
@@ -42,9 +37,9 @@ async function streamToString(body: any): Promise<string> {
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
-  if (!bucketName) {
+  if (!B2_CLOUDFLARE_BASE) {
     return NextResponse.json(
-      { error: "WASABI_BUCKET_NAME não configurado." },
+      { error: "B2_LINK não configurado." },
       { status: 500 },
     );
   }
@@ -81,59 +76,25 @@ export async function GET(request: NextRequest, context: RouteContext) {
       ? title.hlsPath
       : `${title.hlsPath}/`;
 
-    const variant = request.nextUrl.searchParams.get("variant");
     const source =
-      (request.nextUrl.searchParams.get("source") as "wasabi" | "cloudflare" | null) ??
-      "wasabi";
+      (request.nextUrl.searchParams.get("source") as "b2" | "cloudflare" | null) ??
+      "cloudflare"; // Padrão Cloudflare
 
-    let playlistKey: string;
+    const variant = request.nextUrl.searchParams.get("variant");
 
-    if (variant && variant.trim().length > 0) {
-      // Quando ?variant= é passado, carregamos diretamente o playlist indicado
-      playlistKey = `${prefix}${variant.trim()}`;
-    } else {
-      // Master: precisamos descobrir o master.m3u8 no prefixo
-      const listCmd = new ListObjectsV2Command({
-        Bucket: bucketName,
-        Prefix: prefix,
-      });
+    // Busca o playlist diretamente via URL pública
+    const playlistPath = variant ? `${prefix}${variant.trim()}` : `${prefix}master.m3u8`;
+    const playlistUrl = `${B2_CLOUDFLARE_BASE}${playlistPath}`;
 
-      const listed = await wasabiClient.send(listCmd);
-
-      if (!listed.Contents || listed.Contents.length === 0) {
-        return NextResponse.json(
-          { error: "Nenhum arquivo encontrado no prefixo HLS." },
-          { status: 404 },
-        );
-      }
-
-      const objects = listed.Contents.filter((obj) => obj.Key);
-      const masterObject =
-        objects.find((obj) =>
-          (obj.Key as string).toLowerCase().endsWith("master.m3u8"),
-        ) ??
-        objects.find((obj) =>
-          (obj.Key as string).toLowerCase().endsWith(".m3u8"),
-        );
-
-      if (!masterObject || !masterObject.Key) {
-        return NextResponse.json(
-          { error: "Arquivo master.m3u8 não encontrado." },
-          { status: 404 },
-        );
-      }
-
-      playlistKey = masterObject.Key as string;
+    const response = await fetch(playlistUrl);
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: "Playlist HLS não encontrado." },
+        { status: 404 },
+      );
     }
 
-    const getCmd = new GetObjectCommand({
-      Bucket: bucketName,
-      Key: playlistKey,
-    });
-
-    const playlistObj = await wasabiClient.send(getCmd);
-
-    const original = await streamToString(playlistObj.Body);
+    const original = await response.text();
 
     const lines = original.split(/\r?\n/);
 
@@ -160,28 +121,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
           return `${url.pathname}?${url.searchParams.toString()}`;
         }
 
-        // Segmentos de vídeo (.ts): gerar URL via proxy Cloudflare ou URL assinada do Wasabi
+        // Segmentos de vídeo (.ts): sempre URL pública via B2_LINK
         if (trimmed.toLowerCase().endsWith(".ts")) {
           const objectKey = `${prefix}${trimmed}`;
-
-          if (source === "cloudflare") {
-            return `${CLOUDFLARE_PROXY_BASE}/${objectKey}`;
-          }
-
-          // Default: Wasabi com URL assinada (bucket não é público)
-          const cmd = new GetObjectCommand({
-            Bucket: bucketName,
-            Key: objectKey,
-          });
-
-          const url = await import("@aws-sdk/s3-request-presigner").then(
-            ({ getSignedUrl }) =>
-              getSignedUrl(wasabiClient, cmd, {
-                expiresIn: 60 * 60,
-              }),
-          );
-
-          return url;
+          return `${B2_CLOUDFLARE_BASE}${objectKey}`;
         }
 
         return line;

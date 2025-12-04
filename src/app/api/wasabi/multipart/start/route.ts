@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { CreateMultipartUploadCommand } from "@aws-sdk/client-s3";
 
 import { prisma } from "@/lib/prisma";
-import { wasabiClient } from "@/lib/wasabi";
+import { b2Client } from "@/lib/b2";
 
-const bucketName = process.env.WASABI_BUCKET_NAME;
+const bucketName = process.env.B2_BUCKET;
 
 export async function POST(request: NextRequest) {
   if (!bucketName) {
     return NextResponse.json(
-      { error: "WASABI_BUCKET_NAME não configurado" },
+      { error: "B2_BUCKET não configurado" },
       { status: 500 },
     );
   }
@@ -63,11 +63,11 @@ export async function POST(request: NextRequest) {
         ContentType: contentType || "application/octet-stream",
       });
 
-      const response = await wasabiClient.send(command);
+      const response = await b2Client.send(command);
 
       if (!response.UploadId) {
         return NextResponse.json(
-          { error: "Não foi possível iniciar upload multipart no Wasabi" },
+          { error: "Não foi possível iniciar upload multipart no B2" },
           { status: 500 },
         );
       }
@@ -106,11 +106,11 @@ export async function POST(request: NextRequest) {
       ContentType: contentType || "application/octet-stream",
     });
 
-    const response = await wasabiClient.send(command);
+    const response = await b2Client.send(command);
 
     if (!response.UploadId) {
       return NextResponse.json(
-        { error: "Não foi possível iniciar upload multipart no Wasabi" },
+        { error: "Não foi possível iniciar upload multipart no B2" },
         { status: 500 },
       );
     }
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("POST /api/wasabi/multipart/start error", error);
     return NextResponse.json(
-      { error: "Erro ao iniciar upload multipart no Wasabi" },
+      { error: "Erro ao iniciar upload multipart no B2" },
       { status: 500 },
     );
   }

@@ -3,16 +3,16 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import { prisma } from "@/lib/prisma";
-import { wasabiClient } from "@/lib/wasabi";
+import { b2Client } from "@/lib/b2";
 
-const bucketName = process.env.WASABI_BUCKET_NAME;
+const bucketName = process.env.B2_BUCKET;
 
 export async function POST(request: NextRequest) {
   if (!bucketName) {
-    return NextResponse.json(
-      { error: "WASABI_BUCKET_NAME não configurado" },
-      { status: 500 },
-    );
+      return NextResponse.json(
+        { error: "B2_BUCKET não configurado" },
+        { status: 500 },
+      );
   }
 
   try {
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
         ContentType: contentType || "application/octet-stream",
       });
 
-      const uploadUrl = await getSignedUrl(wasabiClient, command, {
+      const uploadUrl = await getSignedUrl(b2Client, command, {
         expiresIn: 60 * 15,
       });
 
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       ContentType: contentType || "application/octet-stream",
     });
 
-    const uploadUrl = await getSignedUrl(wasabiClient, command, {
+    const uploadUrl = await getSignedUrl(b2Client, command, {
       expiresIn: 60 * 15,
     });
 
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("POST /api/wasabi/upload-url error", error);
     return NextResponse.json(
-      { error: "Erro ao gerar URL de upload para Wasabi" },
+      { error: "Erro ao gerar URL de upload para B2" },
       { status: 500 },
     );
   }

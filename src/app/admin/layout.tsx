@@ -10,6 +10,7 @@ const navItems = [
   { href: "/admin/upload", label: "Upload HLS" },
   { href: "/admin/jobs", label: "Jobs HLS" },
   { href: "/admin/users", label: "Usuários/Assinaturas" },
+  { href: "/admin/status", label: "📊 Status" },
 ];
 
 export default function AdminLayout({
