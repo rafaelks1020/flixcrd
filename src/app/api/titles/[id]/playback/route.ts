@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
+import { b2Client } from "@/lib/b2";
 
 const B2_CLOUDFLARE_BASE = process.env.B2_LINK; // https://hlspaelflix.top/b2/
+const B2_BUCKET = process.env.B2_BUCKET;
 
 interface RouteContext {
   params: Promise<{
@@ -48,33 +51,100 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
     }
 
-    // Como o B2 é público via Cloudflare, usamos URLs diretas
     const hlsPath = title.hlsPath?.endsWith("/") ? title.hlsPath : `${title.hlsPath}/`;
-    const kind = "hls"; // Assumimos HLS por padrão
-
-    // Sempre usa a rota HLS que vai reescrever os segmentos
     const sourceParam = request.nextUrl.searchParams.get("source");
-    const base = `/api/titles/${title.id}/hls`;
-    const playbackUrl = sourceParam ? `${base}?source=${sourceParam}` : base;
 
-    // Legendas também são públicas via Cloudflare
-    const subtitles: any[] = []; // TODO: implementar busca de .vtt se necessário
+    // Tenta verificar se existe HLS no B2
+    try {
+      const listCmd = new ListObjectsV2Command({
+        Bucket: B2_BUCKET,
+        Prefix: hlsPath,
+        MaxKeys: 10,
+      });
 
-    return NextResponse.json({
-      playbackUrl,
-      kind: "hls",
-      subtitles,
-      title: {
-        id: title.id,
-        name: title.name,
-        originalName: title.originalName,
-        overview: title.overview,
-        releaseDate: title.releaseDate,
-        posterUrl: title.posterUrl,
-        backdropUrl: title.backdropUrl,
-        type: title.type,
-      },
-    });
+      const listed = await b2Client.send(listCmd);
+      const objects = listed.Contents?.filter((obj) => obj.Key) || [];
+
+      // Procura por arquivo HLS (.m3u8)
+      const hlsObject = objects.find((obj) =>
+        (obj.Key as string).toLowerCase().endsWith(".m3u8"),
+      );
+
+      // Procura por arquivo de vídeo direto (.mp4, .mkv, etc)
+      const videoObject = objects.find((obj) =>
+        /\.(mp4|mkv|m4v|mov|webm|avi)$/i.test(obj.Key as string),
+      );
+
+      if (hlsObject) {
+        // Tem HLS, usa ele
+        const base = `/api/titles/${title.id}/hls`;
+        const playbackUrl = sourceParam ? `${base}?source=${sourceParam}` : base;
+
+        return NextResponse.json({
+          playbackUrl,
+          kind: "hls",
+          subtitles: [],
+          title: {
+            id: title.id,
+            name: title.name,
+            originalName: title.originalName,
+            overview: title.overview,
+            releaseDate: title.releaseDate,
+            posterUrl: title.posterUrl,
+            backdropUrl: title.backdropUrl,
+            type: title.type,
+          },
+        });
+      } else if (videoObject) {
+        // Não tem HLS, mas tem vídeo direto
+        const videoKey = videoObject.Key as string;
+        const playbackUrl = `${B2_CLOUDFLARE_BASE}${videoKey}`;
+
+        return NextResponse.json({
+          playbackUrl,
+          kind: "mp4",
+          subtitles: [],
+          title: {
+            id: title.id,
+            name: title.name,
+            originalName: title.originalName,
+            overview: title.overview,
+            releaseDate: title.releaseDate,
+            posterUrl: title.posterUrl,
+            backdropUrl: title.backdropUrl,
+            type: title.type,
+          },
+        });
+      } else {
+        // Não tem nem HLS nem vídeo
+        return NextResponse.json(
+          { error: "Nenhum arquivo de vídeo encontrado para este título." },
+          { status: 404 },
+        );
+      }
+    } catch (listError) {
+      console.error("Erro ao listar arquivos no B2:", listError);
+      // Se der erro ao listar, tenta usar HLS mesmo assim
+      const base = `/api/titles/${title.id}/hls`;
+      const playbackUrl = sourceParam ? `${base}?source=${sourceParam}` : base;
+
+      return NextResponse.json({
+        playbackUrl,
+        kind: "hls",
+        subtitles: [],
+        title: {
+          id: title.id,
+          name: title.name,
+          originalName: title.originalName,
+          overview: title.overview,
+          releaseDate: title.releaseDate,
+          posterUrl: title.posterUrl,
+          backdropUrl: title.backdropUrl,
+          type: title.type,
+        },
+      });
+    }
+
   } catch (error) {
     console.error("GET /api/titles/[id]/playback error", error);
     return NextResponse.json(
