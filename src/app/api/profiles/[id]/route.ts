@@ -31,6 +31,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         name: true,
         avatar: true,
         isKids: true,
+        useCloudflareProxy: true,
         createdAt: true,
       },
     });
@@ -60,7 +61,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     const { id } = await context.params;
     const body = await request.json();
-    const { name, avatar, isKids } = body;
+    const { name, avatar, isKids, useCloudflareProxy } = body;
 
     // Verificar se perfil pertence ao usuário
     const existing = await prisma.profile.findFirst({
@@ -80,6 +81,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         ...(name !== undefined && { name: String(name).trim() }),
         ...(avatar !== undefined && { avatar: avatar || null }),
         ...(isKids !== undefined && { isKids: Boolean(isKids) }),
+        ...(useCloudflareProxy !== undefined && {
+          useCloudflareProxy: Boolean(useCloudflareProxy),
+        }),
       },
     });
 

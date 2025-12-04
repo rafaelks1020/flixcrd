@@ -9,6 +9,7 @@ interface Profile {
   name: string;
   avatar: string | null;
   isKids: boolean;
+  useCloudflareProxy?: boolean;
 }
 
 const DEFAULT_AVATARS = [
@@ -28,6 +29,7 @@ export default function ManageProfilesPage() {
     name: "",
     avatar: "👤",
     isKids: false,
+    useCloudflareProxy: false,
   });
 
   useEffect(() => {
@@ -50,7 +52,7 @@ export default function ManageProfilesPage() {
 
   function openCreateModal() {
     setEditingId(null);
-    setForm({ name: "", avatar: "👤", isKids: false });
+    setForm({ name: "", avatar: "👤", isKids: false, useCloudflareProxy: false });
     setError(null);
     setShowModal(true);
   }
@@ -61,6 +63,7 @@ export default function ManageProfilesPage() {
       name: profile.name,
       avatar: profile.avatar || "👤",
       isKids: profile.isKids,
+      useCloudflareProxy: Boolean(profile.useCloudflareProxy),
     });
     setError(null);
     setShowModal(true);
@@ -258,6 +261,21 @@ export default function ManageProfilesPage() {
                 />
                 <label htmlFor="isKids" className="text-sm text-zinc-300">
                   Perfil infantil (Kids)
+                </label>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="useCloudflareProxy"
+                  checked={form.useCloudflareProxy}
+                  onChange={(e) =>
+                    setForm({ ...form, useCloudflareProxy: e.target.checked })
+                  }
+                  className="h-4 w-4 rounded border-zinc-700 bg-zinc-800 text-red-600 focus:ring-red-600"
+                />
+                <label htmlFor="useCloudflareProxy" className="text-sm text-zinc-300">
+                  Usar proxy Cloudflare para este perfil
                 </label>
               </div>
 

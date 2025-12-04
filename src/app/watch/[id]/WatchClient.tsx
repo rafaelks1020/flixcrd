@@ -107,14 +107,19 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
       try {
         // 1) Buscar configuração do usuário
         let proxyFlag = false;
-        try {
-          const settingsRes = await fetch("/api/user/settings", { cache: "no-store" });
-          if (settingsRes.ok) {
-            const settingsJson = await settingsRes.json();
-            proxyFlag = Boolean(settingsJson?.useCloudflareProxy);
+        if (profileId) {
+          try {
+            const profileRes = await fetch(
+              `/api/profiles/${encodeURIComponent(profileId)}`,
+              { cache: "no-store" },
+            );
+            if (profileRes.ok) {
+              const profileJson = await profileRes.json();
+              proxyFlag = Boolean(profileJson?.useCloudflareProxy);
+            }
+          } catch {
+            proxyFlag = false;
           }
-        } catch {
-          proxyFlag = false;
         }
         setUseCloudflareProxy(proxyFlag);
 
@@ -156,7 +161,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     }
 
     loadPlayback();
-  }, [titleId, episodeId]);
+  }, [titleId, episodeId, profileId]);
 
   useEffect(() => {
     function handleFullscreenChange() {

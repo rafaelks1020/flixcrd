@@ -21,6 +21,7 @@ export async function GET() {
         name: true,
         avatar: true,
         isKids: true,
+        useCloudflareProxy: true,
         createdAt: true,
       },
     });
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, avatar, isKids } = body;
+    const { name, avatar, isKids, useCloudflareProxy } = body;
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
       return NextResponse.json(
@@ -72,14 +73,25 @@ export async function POST(request: NextRequest) {
         name: name.trim(),
         avatar: avatar || null,
         isKids: Boolean(isKids),
+        useCloudflareProxy: Boolean(useCloudflareProxy),
       },
     });
 
     return NextResponse.json(profile, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
+    // Log completo no servidor
     console.error("POST /api/profiles error", error);
+
+    // Expor detalhes básicos para facilitar debug (especialmente em produção)
+    const message = error?.message ?? "Erro desconhecido";
+    const code = error?.code ?? undefined;
+
     return NextResponse.json(
-      { error: "Erro ao criar perfil." },
+      {
+        error: "Erro ao criar perfil.",
+        detail: message,
+        code,
+      },
       { status: 500 },
     );
   }

@@ -9,6 +9,7 @@ interface Profile {
   name: string;
   avatar: string | null;
   isKids: boolean;
+  useCloudflareProxy?: boolean;
 }
 
 const DEFAULT_AVATARS = [
