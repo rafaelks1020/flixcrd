@@ -4,9 +4,9 @@ import { getServerSession } from "next-auth";
 
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
-import { wasabiClient } from "@/lib/wasabi";
+import { b2Client } from "@/lib/b2";
 
-const bucketName = process.env.WASABI_BUCKET_NAME;
+const bucketName = process.env.B2_BUCKET;
 const transcoderBaseUrl = process.env.TRANSCODER_BASE_URL;
 
 interface RouteContext {
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (!bucketName) {
       return NextResponse.json(
-        { error: "WASABI_BUCKET_NAME não configurado." },
+        { error: "B2_BUCKET não configurado." },
         { status: 500 },
       );
     }
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           Prefix: prefix,
         });
 
-        const listed = await wasabiClient.send(listCmd);
+        const listed = await b2Client.send(listCmd);
         const objects = (listed.Contents ?? []).filter((obj) => obj.Key);
 
         if (objects.length === 0) {

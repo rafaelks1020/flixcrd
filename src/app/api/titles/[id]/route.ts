@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 
 import { prisma } from "@/lib/prisma";
-import { wasabiClient } from "@/lib/wasabi";
+import { b2Client } from "@/lib/b2";
 
-const bucketName = process.env.WASABI_BUCKET_NAME;
+const bucketName = process.env.B2_BUCKET;
 
 interface RouteContext {
   params: Promise<{
@@ -106,7 +106,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
             Prefix: prefix,
           });
 
-          const listed = await wasabiClient.send(listCommand);
+          const listed = await b2Client.send(listCommand);
 
           if (listed.Contents && listed.Contents.length > 0) {
             const objects = listed.Contents.filter((obj) => obj.Key).map((obj) => ({
@@ -119,12 +119,12 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
                 Delete: { Objects: objects },
               });
 
-              await wasabiClient.send(deleteCommand);
+              await b2Client.send(deleteCommand);
             }
           }
         } catch (err) {
           console.error(
-            "Erro ao excluir objetos do Wasabi para prefixo do título",
+            "Erro ao excluir objetos do B2 para prefixo do título",
             prefix,
             id,
             err,

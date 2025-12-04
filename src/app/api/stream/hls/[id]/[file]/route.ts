@@ -4,10 +4,10 @@ import { getServerSession } from "next-auth";
 import { Readable } from "stream";
 
 import { prisma } from "@/lib/prisma";
-import { wasabiClient } from "@/lib/wasabi";
+import { b2Client } from "@/lib/b2";
 import { authOptions } from "@/lib/auth";
 
-const bucketName = process.env.WASABI_BUCKET_NAME;
+const bucketName = process.env.B2_BUCKET;
 
 interface RouteContext {
   params: Promise<{
@@ -35,7 +35,7 @@ async function streamToBuffer(stream: Readable): Promise<Buffer> {
 export async function GET(_request: NextRequest, context: RouteContext) {
   if (!bucketName) {
     return NextResponse.json(
-      { error: "WASABI_BUCKET_NAME não configurado." },
+      { error: "B2_BUCKET não configurado." },
       { status: 500 },
     );
   }
@@ -79,11 +79,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       Key: key,
     });
 
-    const result = await wasabiClient.send(command);
+    const result = await b2Client.send(command);
 
     if (!result.Body) {
       return NextResponse.json(
-        { error: "Objeto não encontrado no Wasabi." },
+        { error: "Objeto não encontrado no B2." },
         { status: 404 },
       );
     }
