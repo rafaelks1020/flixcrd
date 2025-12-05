@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import { TitleType } from "@prisma/client";
+import BulkActions from "@/components/admin/BulkActions";
 
 type TitleType = "MOVIE" | "SERIES" | "ANIME" | "OTHER";
 
@@ -76,6 +78,9 @@ export default function AdminCatalogPage() {
   // PAGINAÇÃO
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
+  
+  // SELEÇÃO MÚLTIPLA
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const [form, setForm] = useState({
     tmdbId: "",
@@ -656,6 +661,20 @@ export default function AdminCatalogPage() {
                     <table className="w-full border-collapse text-left">
                       <thead className="bg-zinc-900 text-[11px] uppercase text-zinc-400">
                         <tr>
+                          <th className="px-3 py-2 w-8">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.length === paginatedTitles.length && paginatedTitles.length > 0}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedIds(paginatedTitles.map(t => t.id));
+                                } else {
+                                  setSelectedIds([]);
+                                }
+                              }}
+                              className="h-4 w-4 accent-emerald-500"
+                            />
+                          </th>
                           <th className="px-3 py-2">Pôster</th>
                           <th className="px-3 py-2">Nome</th>
                           <th className="px-3 py-2">Tipo</th>
@@ -667,13 +686,27 @@ export default function AdminCatalogPage() {
                       <tbody className="divide-y divide-zinc-800 bg-zinc-950">
                         {paginatedTitles.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="px-3 py-8 text-center text-xs text-zinc-500">
+                            <td colSpan={8} className="px-3 py-8 text-center text-xs text-zinc-500">
                               Nenhum título encontrado com os filtros aplicados.
                             </td>
                           </tr>
                         ) : (
                           paginatedTitles.map((t) => (
                   <tr key={t.id} className="align-top text-[11px]">
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(t.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedIds([...selectedIds, t.id]);
+                          } else {
+                            setSelectedIds(selectedIds.filter(id => id !== t.id));
+                          }
+                        }}
+                        className="h-4 w-4 accent-emerald-500"
+                      />
+                    </td>
                     <td className="px-3 py-2">
                       {t.posterUrl ? (
                         <img
@@ -858,6 +891,12 @@ export default function AdminCatalogPage() {
             })()}
           </>
         )}
+        
+        <BulkActions
+          selectedIds={selectedIds}
+          onClearSelection={() => setSelectedIds([])}
+          onRefresh={fetchTitles}
+        />
       </div>
 
       {showTitleModal && (

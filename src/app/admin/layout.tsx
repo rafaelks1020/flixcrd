@@ -4,6 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Toaster } from "react-hot-toast";
+import GlobalSearch from "@/components/admin/GlobalSearch";
+import ShortcutsModal from "@/components/admin/ShortcutsModal";
+import { useAdminShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 const navItems = [
   { href: "/admin", label: "Dashboard" },
@@ -24,6 +27,7 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  useAdminShortcuts();
 
   return (
     <div className="flex min-h-screen bg-zinc-950 text-zinc-50">
@@ -33,17 +37,9 @@ export default function AdminLayout({
           duration: 4000,
           style: {
             background: "#18181b",
-            color: "#fafafa",
+            color: "#fff",
             border: "1px solid #27272a",
           },
-          success: {
-            iconTheme: {
-              primary: "#10b981",
-              secondary: "#fafafa",
-            },
-          },
-          error: {
-            iconTheme: {
               primary: "#ef4444",
               secondary: "#fafafa",
             },
