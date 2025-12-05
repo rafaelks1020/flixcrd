@@ -7,7 +7,8 @@ import { signOut } from "next-auth/react";
 const navItems = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/catalog", label: "Catálogo" },
-  { href: "/admin/upload", label: "Upload HLS" },
+  { href: "/admin/upload-v2", label: "🚀 Upload Unificado" },
+  { href: "/admin/upload", label: "Upload HLS (Antigo)" },
   { href: "/admin/jobs", label: "Jobs HLS" },
   { href: "/admin/users", label: "Usuários/Assinaturas" },
   { href: "/admin/status", label: "📊 Status" },
