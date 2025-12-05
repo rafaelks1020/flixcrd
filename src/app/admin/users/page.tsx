@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import UserStatsModal from "@/components/admin/UserStatsModal";
+import SubscriptionModal from "@/components/admin/SubscriptionModal";
 
 type UserRole = "USER" | "ADMIN";
 
@@ -29,6 +31,8 @@ export default function AdminUsersPage() {
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState<UserRole>("USER");
   const [editAvatar, setEditAvatar] = useState<string | null>(null);
+  const [statsUserId, setStatsUserId] = useState<string | null>(null);
+  const [subscriptionUserId, setSubscriptionUserId] = useState<string | null>(null);
 
   const avatarOptions = [
     "red",
@@ -400,6 +404,24 @@ export default function AdminUsersPage() {
                         <div className="flex items-center justify-end gap-2">
                           <button
                             type="button"
+                            onClick={() => setStatsUserId(u.id)}
+                            disabled={isSaving || isDeleting}
+                            className="rounded-md border border-emerald-700 px-2 py-1 text-[10px] text-emerald-300 hover:bg-emerald-900/40 disabled:opacity-50"
+                            title="Ver estatísticas"
+                          >
+                            📊
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSubscriptionUserId(u.id)}
+                            disabled={isSaving || isDeleting}
+                            className="rounded-md border border-blue-700 px-2 py-1 text-[10px] text-blue-300 hover:bg-blue-900/40 disabled:opacity-50"
+                            title="Gerenciar assinatura"
+                          >
+                            💳
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => openEditModal(u)}
                             disabled={isSaving || isDeleting}
                             className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
@@ -533,6 +555,28 @@ export default function AdminUsersPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Modal de Estatísticas */}
+      {statsUserId && (
+        <UserStatsModal
+          userId={statsUserId}
+          userName={users.find((u) => u.id === statsUserId)?.name || users.find((u) => u.id === statsUserId)?.email || "Usuário"}
+          onClose={() => setStatsUserId(null)}
+        />
+      )}
+
+      {/* Modal de Assinatura */}
+      {subscriptionUserId && (
+        <SubscriptionModal
+          userId={subscriptionUserId}
+          userName={users.find((u) => u.id === subscriptionUserId)?.name || users.find((u) => u.id === subscriptionUserId)?.email || "Usuário"}
+          onClose={() => setSubscriptionUserId(null)}
+          onSuccess={() => {
+            setInfo("Assinatura atualizada com sucesso!");
+            setTimeout(() => setInfo(null), 3000);
+          }}
+        />
       )}
     </div>
   );
