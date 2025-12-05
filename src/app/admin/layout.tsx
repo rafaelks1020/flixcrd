@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { Toaster } from "react-hot-toast";
 
 const navItems = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/catalog", label: "Catálogo" },
   { href: "/admin/upload-v2", label: "🚀 Upload Unificado" },
-  { href: "/admin/upload", label: "Upload HLS (Antigo)" },
   { href: "/admin/jobs", label: "Jobs HLS" },
-  { href: "/admin/users", label: "Usuários/Assinaturas" },
+  { href: "/admin/users", label: "Usuários" },
+  { href: "/admin/quick-actions", label: "⚡ Ações Rápidas" },
   { href: "/admin/status", label: "📊 Status" },
 ];
 
@@ -23,6 +24,29 @@ export default function AdminLayout({
 
   return (
     <div className="flex min-h-screen bg-zinc-950 text-zinc-50">
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: "#18181b",
+            color: "#fafafa",
+            border: "1px solid #27272a",
+          },
+          success: {
+            iconTheme: {
+              primary: "#10b981",
+              secondary: "#fafafa",
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: "#ef4444",
+              secondary: "#fafafa",
+            },
+          },
+        }}
+      />
       <aside className="flex w-64 flex-col border-r border-zinc-800 px-4 py-6 space-y-6">
         <div>
           <h1 className="text-lg font-semibold">PaelFlix Admin</h1>
