@@ -306,8 +306,9 @@ export default function AdminUsersPage() {
                 className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-600 focus:outline-none"
               />
             </div>
-          </p>
-        ) : (
+          </div>
+        )}
+        {!loading && users.length > 0 && (
           <div className="max-h-[480px] overflow-y-auto rounded-md border border-zinc-800">
             <table className="w-full border-collapse text-left">
               <thead className="bg-zinc-900 text-[11px] uppercase text-zinc-400">
@@ -411,6 +412,7 @@ export default function AdminUsersPage() {
           </div>
         )}
       </div>
+    </div>
 
       {editingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
