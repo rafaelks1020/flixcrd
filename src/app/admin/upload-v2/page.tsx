@@ -171,6 +171,30 @@ export default function UploadV2Page() {
     setCreatingTitle(true);
     setError(null);
     try {
+      // Primeiro, verifica se já existe
+      const checkRes = await fetch("/api/titles");
+      const allTitles = await checkRes.json();
+      
+      const existing = allTitles.find(
+        (t: any) => t.tmdbId === selectedTmdb.tmdbId
+      );
+
+      if (existing) {
+        // Título já existe!
+        setCreatedTitle({
+          id: existing.id,
+          name: existing.name,
+          slug: existing.slug,
+          type: existing.type,
+        });
+        setInfo(
+          `ℹ️ Título "${existing.name}" já existe no catálogo! Você pode fazer upload de mais arquivos para ele.`
+        );
+        setCreatingTitle(false);
+        return;
+      }
+
+      // Se não existe, cria novo
       const res = await fetch("/api/titles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -527,6 +551,18 @@ export default function UploadV2Page() {
             <p className="text-zinc-400 text-sm">
               Arraste arquivos ou clique para selecionar
             </p>
+            <div className="mt-2 flex items-center gap-2 text-sm">
+              <span className="text-zinc-400">Título:</span>
+              <span className="font-semibold text-emerald-400">{createdTitle.name}</span>
+              <a
+                href={`/admin/catalog/${createdTitle.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-blue-400 hover:text-blue-300 underline"
+              >
+                Ver no catálogo →
+              </a>
+            </div>
           </div>
 
           {/* Dropzone */}
