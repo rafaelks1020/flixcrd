@@ -52,8 +52,8 @@ export default function GlobalSearch() {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 pt-32">
-      <div className="w-full max-w-2xl rounded-lg border border-zinc-700 bg-zinc-900 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm pt-32">
+      <div className="w-full max-w-2xl rounded-xl border border-zinc-700 bg-zinc-900/95 shadow-2xl backdrop-blur-xl">
         <div className="border-b border-zinc-800 p-4">
           <input
             type="text"
@@ -75,7 +75,7 @@ export default function GlobalSearch() {
               <button
                 key={result.path}
                 onClick={() => handleSelect(result.path)}
-                className="w-full rounded-md px-4 py-3 text-left text-sm text-zinc-100 hover:bg-zinc-800"
+                className="group w-full rounded-lg px-4 py-3 text-left text-sm text-zinc-100 hover:bg-gradient-to-r hover:from-emerald-600/20 hover:to-blue-600/20 hover:border-emerald-500/30 border border-transparent transition-all"
               >
                 <div className="flex items-center gap-3">
                   <span className="text-xs uppercase text-zinc-500">

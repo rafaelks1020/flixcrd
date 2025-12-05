@@ -42,10 +42,15 @@ export default function AdminLayout({
           },
         }}
       />
-      <aside className="flex w-64 flex-col border-r border-zinc-800 px-4 py-6 space-y-6">
-        <div>
-          <h1 className="text-lg font-semibold">PaelFlix Admin</h1>
-          <p className="text-xs text-zinc-500">Painel de controle</p>
+      <aside className="flex w-64 flex-col border-r border-zinc-800 bg-gradient-to-b from-zinc-950 to-zinc-900 px-4 py-6 space-y-6">
+        <div className="relative">
+          <div className="absolute -inset-1 bg-gradient-to-r from-emerald-600 to-blue-600 rounded-lg blur opacity-20"></div>
+          <div className="relative">
+            <h1 className="text-lg font-bold bg-gradient-to-r from-emerald-400 to-blue-400 bg-clip-text text-transparent">
+              PaelFlix Admin
+            </h1>
+            <p className="text-xs text-zinc-500">Painel de controle</p>
+          </div>
         </div>
         <nav className="space-y-1 text-sm">
           {navItems.map((item) => {
@@ -58,13 +63,16 @@ export default function AdminLayout({
                 key={item.href}
                 href={item.href}
                 className={
-                  "block rounded-md px-3 py-2 transition-colors " +
+                  "group relative block rounded-lg px-3 py-2.5 transition-all duration-200 " +
                   (active
-                    ? "bg-zinc-100 text-zinc-900"
-                    : "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50")
+                    ? "bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-lg shadow-emerald-900/50"
+                    : "text-zinc-300 hover:bg-zinc-800/50 hover:text-zinc-50 hover:translate-x-1")
                 }
               >
-                {item.label}
+                {active && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-blue-600 rounded-lg blur opacity-50 -z-10"></div>
+                )}
+                <span className="relative z-10">{item.label}</span>
               </Link>
             );
           })}
@@ -72,20 +80,20 @@ export default function AdminLayout({
         <div className="mt-auto flex flex-col gap-2">
           <Link
             href="/"
-            className="rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
+            className="group relative rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:border-emerald-500/50 hover:bg-zinc-800 hover:text-zinc-50 transition-all"
           >
-            Ir para PaelFlix
+            <span className="relative z-10">🏠 Ir para PaelFlix</span>
           </Link>
           <button
             type="button"
             onClick={() => signOut({ callbackUrl: "/login" })}
-            className="rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
+            className="group relative rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:border-red-500/50 hover:bg-zinc-800 hover:text-red-400 transition-all"
           >
-            Sair
+            <span className="relative z-10">🚫 Sair</span>
           </button>
         </div>
       </aside>
-      <main className="flex-1 px-6 py-6">
+      <main className="flex-1 px-6 py-6 bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950">
         {children}
       </main>
     </div>

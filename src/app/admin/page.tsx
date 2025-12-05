@@ -1,6 +1,9 @@
-import Link from "next/link";
+import Link from "use client";
 
-import { prisma } from "@/lib/prisma";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import StatsCard from "@/components/admin/StatsCard";
+import AnimatedCounter from "@/components/admin/AnimatedCounter";
 
 export const dynamic = "force-dynamic";
 
