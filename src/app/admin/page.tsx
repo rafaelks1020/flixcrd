@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import StatsCard from "@/components/admin/StatsCard";
 import AnimatedCounter from "@/components/admin/AnimatedCounter";
+import UptimeChart from "@/components/admin/UptimeChart";
 
 interface Title {
   id: string;
@@ -93,6 +94,9 @@ export default function AdminHomePage() {
           <p className="mt-1 text-[11px] text-zinc-500">Podem gerenciar catálogo e HLS.</p>
         </div>
       </div>
+
+      {/* Uptime Chart */}
+      <UptimeChart />
 
       {/* Últimos Títulos Adicionados */}
       <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">

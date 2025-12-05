@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import { signOut } from "next-auth/react";
 import { Toaster } from "react-hot-toast";
-import { useState } from "react";
 import GlobalSearch from "@/components/admin/GlobalSearch";
 import ShortcutsModal from "@/components/admin/ShortcutsModal";
 import ThemeToggle from "@/components/admin/ThemeToggle";
+import { useServiceMonitor } from "@/hooks/useServiceMonitor";
 import { useAdminShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 const navItems = [
@@ -31,6 +32,9 @@ export default function AdminLayout({
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   useAdminShortcuts();
+  
+  // Monitoramento de serviço com notificações automáticas
+  useServiceMonitor();
 
   return (
     <div className="flex min-h-screen bg-zinc-950 text-zinc-50">

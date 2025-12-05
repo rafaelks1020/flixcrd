@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect, FormEvent } from "react";
 import BulkActions from "@/components/admin/BulkActions";
+import CatalogGridView from "@/components/admin/CatalogGridView";
 
 type TitleType = "MOVIE" | "SERIES" | "ANIME" | "OTHER";
 
@@ -686,8 +687,30 @@ export default function AdminCatalogPage() {
                       </span>
                     )}
                   </div>
-                  <div className="max-h-[520px] overflow-y-auto rounded-md border border-zinc-800">
-                    <table className="w-full border-collapse text-left">
+
+                  {/* GRID VIEW */}
+                  {viewMode === "grid" ? (
+                    <CatalogGridView
+                      titles={paginatedTitles}
+                      hlsStatus={hlsStatus}
+                      selectedIds={selectedIds}
+                      onToggleSelect={(id) => {
+                        if (selectedIds.includes(id)) {
+                          setSelectedIds(selectedIds.filter(sid => sid !== id));
+                        } else {
+                          setSelectedIds([...selectedIds, id]);
+                        }
+                      }}
+                      onEdit={(title) => {
+                        setEditingId(title.id);
+                      }}
+                      onDelete={(id) => handleDelete(id)}
+                      onTranscode={(id, type) => handleTranscode(id, type as TitleType)}
+                    />
+                  ) : (
+                    /* LIST VIEW */
+                    <div className="max-h-[520px] overflow-y-auto rounded-md border border-zinc-800">
+                      <table className="w-full border-collapse text-left">
                       <thead className="bg-zinc-900 text-[11px] uppercase text-zinc-400">
                         <tr>
                           <th className="px-3 py-2 w-8">
@@ -875,7 +898,8 @@ export default function AdminCatalogPage() {
                         )}
                       </tbody>
                     </table>
-                  </div>
+                    </div>
+                  )}
                   
                   {/* PAGINAÇÃO */}
                   {totalPages > 1 && (

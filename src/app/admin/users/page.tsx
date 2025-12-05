@@ -299,12 +299,33 @@ export default function AdminUsersPage() {
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-zinc-100">Usuários cadastrados</h3>
             <div className="flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch("/api/admin/users/export");
+                    if (res.ok) {
+                      const blob = await res.blob();
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `usuarios-${new Date().toISOString().split("T")[0]}.csv`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      window.URL.revokeObjectURL(url);
+                      setInfo("CSV exportado com sucesso!");
+                    } else {
+                      setError("Erro ao exportar CSV");
+                    }
+                  } catch (error) {
+                    setError("Erro ao exportar CSV");
+                  }
+                }}
+                className="rounded-md border border-emerald-700 bg-emerald-900/50 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-900 transition-colors"
+              >
+                📥 Exportar CSV
+              </button>
               {loading && <span className="text-[10px] text-zinc-500">Carregando...</span>}
-              <input
-                type="text"
-                placeholder="🔍 Buscar usuário..."
-                className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-600 focus:outline-none"
-              />
             </div>
           </div>
           {!loading && users.length === 0 && (
