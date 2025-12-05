@@ -1,42 +1,52 @@
-import Link from "use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import StatsCard from "@/components/admin/StatsCard";
 import AnimatedCounter from "@/components/admin/AnimatedCounter";
 
-export const dynamic = "force-dynamic";
+interface Title {
+  id: string;
+  name: string;
+  type: string;
+  posterUrl: string | null;
+  createdAt: Date;
+}
 
-export default async function AdminHomePage() {
-  const [
-    titlesCount,
-    titlesWithHlsCount,
-    usersCount,
-    adminsCount,
-    moviesCount,
-    seriesCount,
-    animesCount,
-    recentTitles,
-  ] = await Promise.all([
-    prisma.title.count(),
-    prisma.title.count({ where: { hlsPath: { not: null } } }),
-    prisma.user.count(),
-    prisma.user.count({ where: { role: "ADMIN" as any } }),
-    prisma.title.count({ where: { type: "MOVIE" } }),
-    prisma.title.count({ where: { type: "SERIES" } }),
-    prisma.title.count({ where: { type: "ANIME" } }),
-    prisma.title.findMany({
-      take: 5,
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        posterUrl: true,
-        createdAt: true,
-      },
-    }),
-  ]);
+export default function AdminHomePage() {
+  const [loading, setLoading] = useState(true);
+  const [titlesCount, setTitlesCount] = useState(0);
+  const [titlesWithHlsCount, setTitlesWithHlsCount] = useState(0);
+  const [usersCount, setUsersCount] = useState(0);
+  const [adminsCount, setAdminsCount] = useState(0);
+  const [moviesCount, setMoviesCount] = useState(0);
+  const [seriesCount, setSeriesCount] = useState(0);
+  const [animesCount, setAnimesCount] = useState(0);
+  const [recentTitles, setRecentTitles] = useState<Title[]>([]);
+
+  useEffect(() => {
+    async function loadStats() {
+      try {
+        const res = await fetch("/api/admin/stats");
+        if (res.ok) {
+          const data = await res.json();
+          setTitlesCount(data.titlesCount || 0);
+          setTitlesWithHlsCount(data.titlesWithHlsCount || 0);
+          setUsersCount(data.usersCount || 0);
+          setAdminsCount(data.adminsCount || 0);
+          setMoviesCount(data.moviesCount || 0);
+          setSeriesCount(data.seriesCount || 0);
+          setAnimesCount(data.animesCount || 0);
+          setRecentTitles(data.recentTitles || []);
+        }
+      } catch (error) {
+        console.error("Erro ao carregar stats:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadStats();
+  }, []);
 
   const hlsPercentage = titlesCount > 0 ? Math.round((titlesWithHlsCount / titlesCount) * 100) : 0;
 
