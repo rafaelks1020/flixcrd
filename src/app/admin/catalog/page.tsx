@@ -72,6 +72,10 @@ export default function AdminCatalogPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<TitleType | "ALL">("ALL");
   const [filterHlsStatus, setFilterHlsStatus] = useState<"ALL" | "WITH_HLS" | "WITHOUT_HLS">("ALL");
+  
+  // PAGINAÇÃO
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
 
   const [form, setForm] = useState({
     tmdbId: "",
@@ -529,6 +533,7 @@ export default function AdminCatalogPage() {
                   setSearchQuery("");
                   setFilterType("ALL");
                   setFilterHlsStatus("ALL");
+                  setCurrentPage(1);
                 }}
                 className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
               >
@@ -631,10 +636,21 @@ export default function AdminCatalogPage() {
                 return true;
               });
 
+              // PAGINAÇÃO
+              const totalPages = Math.ceil(filtered.length / itemsPerPage);
+              const startIndex = (currentPage - 1) * itemsPerPage;
+              const endIndex = startIndex + itemsPerPage;
+              const paginatedTitles = filtered.slice(startIndex, endIndex);
+
               return (
                 <>
-                  <div className="text-xs text-zinc-400">
-                    {filtered.length} de {titles.length} título(s)
+                  <div className="flex items-center justify-between text-xs text-zinc-400">
+                    <span>{filtered.length} de {titles.length} título(s)</span>
+                    {totalPages > 1 && (
+                      <span>
+                        Página {currentPage} de {totalPages}
+                      </span>
+                    )}
                   </div>
                   <div className="max-h-[520px] overflow-y-auto rounded-md border border-zinc-800">
                     <table className="w-full border-collapse text-left">
@@ -649,14 +665,14 @@ export default function AdminCatalogPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-800 bg-zinc-950">
-                        {filtered.length === 0 ? (
+                        {paginatedTitles.length === 0 ? (
                           <tr>
                             <td colSpan={7} className="px-3 py-8 text-center text-xs text-zinc-500">
                               Nenhum título encontrado com os filtros aplicados.
                             </td>
                           </tr>
                         ) : (
-                          filtered.map((t) => (
+                          paginatedTitles.map((t) => (
                   <tr key={t.id} className="align-top text-[11px]">
                     <td className="px-3 py-2">
                       {t.posterUrl ? (
@@ -787,6 +803,56 @@ export default function AdminCatalogPage() {
                       </tbody>
                     </table>
                   </div>
+                  
+                  {/* PAGINAÇÃO */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-2 mt-3">
+                      <button
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        ← Anterior
+                      </button>
+                      
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => setCurrentPage(pageNum)}
+                              className={`rounded-md px-3 py-1 text-xs ${
+                                currentPage === pageNum
+                                  ? "bg-emerald-600 text-white font-semibold"
+                                  : "border border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      
+                      <button
+                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Próxima →
+                      </button>
+                    </div>
+                  )}
                 </>
               );
             })()}
