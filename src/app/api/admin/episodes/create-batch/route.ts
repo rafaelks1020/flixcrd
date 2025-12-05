@@ -39,10 +39,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Título não encontrado." }, { status: 404 });
     }
 
+    // Buscar ou criar a temporada
+    let season = await prisma.season.findFirst({
+      where: {
+        titleId,
+        seasonNumber,
+      },
+    });
+
+    if (!season) {
+      season = await prisma.season.create({
+        data: {
+          titleId,
+          seasonNumber,
+          name: `Temporada ${seasonNumber}`,
+        },
+      });
+    }
+
     // Criar episódios em batch
     const created = await prisma.episode.createMany({
       data: episodes.map((ep) => ({
         titleId,
+        seasonId: season.id,
         seasonNumber,
         episodeNumber: ep.episodeNumber,
         name: ep.name,

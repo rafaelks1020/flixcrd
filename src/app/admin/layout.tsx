@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Toaster } from "react-hot-toast";
+import { useState } from "react";
 import GlobalSearch from "@/components/admin/GlobalSearch";
 import ShortcutsModal from "@/components/admin/ShortcutsModal";
+import ThemeToggle from "@/components/admin/ThemeToggle";
 import { useAdminShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 const navItems = [
@@ -27,6 +29,7 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   useAdminShortcuts();
 
   return (
@@ -42,7 +45,16 @@ export default function AdminLayout({
           },
         }}
       />
-      <aside className="flex w-64 flex-col border-r border-zinc-800 bg-gradient-to-b from-zinc-950 to-zinc-900 px-4 py-6 space-y-6">
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="fixed top-4 left-4 z-50 rounded-lg border border-zinc-700 bg-zinc-900 p-2 text-zinc-300 hover:bg-zinc-800 lg:hidden"
+      >
+        {sidebarOpen ? "✕" : "☰"}
+      </button>
+
+      {/* Sidebar */}
+      <aside className={`fixed lg:static inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-zinc-800 bg-gradient-to-b from-zinc-950 to-zinc-900 px-4 py-6 space-y-6 transition-transform duration-300 ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <div className="relative">
           <div className="absolute -inset-1 bg-gradient-to-r from-emerald-600 to-blue-600 rounded-lg blur opacity-20"></div>
           <div className="relative">
@@ -93,9 +105,20 @@ export default function AdminLayout({
           </button>
         </div>
       </aside>
-      <main className="flex-1 px-6 py-6 bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950">
+      {/* Overlay for mobile */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      <main className="flex-1 px-6 py-6 bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 lg:ml-0">
         {children}
       </main>
+
+      <GlobalSearch />
+      <ShortcutsModal />
     </div>
   );
 }

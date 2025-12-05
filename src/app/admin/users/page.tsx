@@ -307,8 +307,12 @@ export default function AdminUsersPage() {
               />
             </div>
           </div>
-        )}
-        {!loading && users.length > 0 && (
+          {!loading && users.length === 0 && (
+            <p className="text-center text-xs text-zinc-500 py-8">
+              Nenhum usuário encontrado.
+            </p>
+          )}
+          {!loading && users.length > 0 && (
           <div className="max-h-[480px] overflow-y-auto rounded-md border border-zinc-800">
             <table className="w-full border-collapse text-left">
               <thead className="bg-zinc-900 text-[11px] uppercase text-zinc-400">

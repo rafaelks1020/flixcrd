@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
-import { TitleType } from "@prisma/client";
+import { useState, useEffect, FormEvent } from "react";
 import BulkActions from "@/components/admin/BulkActions";
 
 type TitleType = "MOVIE" | "SERIES" | "ANIME" | "OTHER";
@@ -81,6 +80,9 @@ export default function AdminCatalogPage() {
   
   // SELEÇÃO MÚLTIPLA
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  
+  // VIEW MODE (LIST ou GRID)
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
   const [form, setForm] = useState({
     tmdbId: "",
@@ -524,15 +526,42 @@ export default function AdminCatalogPage() {
 
         {/* BUSCA E FILTROS */}
         <div className="space-y-2 rounded-md border border-zinc-700 bg-zinc-900/50 p-3">
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            {/* VIEW MODE TOGGLE */}
+            <div className="flex rounded-lg border border-zinc-700 bg-zinc-900 overflow-hidden">
+              <button
+                onClick={() => setViewMode("list")}
+                className={`px-3 py-1 text-xs transition-colors ${
+                  viewMode === "list"
+                    ? "bg-emerald-600 text-white"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+                title="Visualização em lista"
+              >
+                ☰
+              </button>
+              <button
+                onClick={() => setViewMode("grid")}
+                className={`px-3 py-1 text-xs transition-colors ${
+                  viewMode === "grid"
+                    ? "bg-emerald-600 text-white"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+                title="Visualização em grade"
+              >
+                ⊞
+              </button>
+            </div>
+            
             <input
               type="text"
-              placeholder="🔍 Buscar por nome..."
+              placeholder="🔍 Buscar título..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-600 focus:outline-none"
+              className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-600 focus:outline-none"
             />
-            {searchQuery && (
+            
+            {(searchQuery || filterType !== "ALL" || filterHlsStatus !== "ALL") && (
               <button
                 onClick={() => {
                   setSearchQuery("");
