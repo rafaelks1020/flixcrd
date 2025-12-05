@@ -5,12 +5,37 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export default async function AdminHomePage() {
-  const [titlesCount, titlesWithHlsCount, usersCount, adminsCount] = await Promise.all([
+  const [
+    titlesCount,
+    titlesWithHlsCount,
+    usersCount,
+    adminsCount,
+    moviesCount,
+    seriesCount,
+    animesCount,
+    recentTitles,
+  ] = await Promise.all([
     prisma.title.count(),
     prisma.title.count({ where: { hlsPath: { not: null } } }),
     prisma.user.count(),
     prisma.user.count({ where: { role: "ADMIN" as any } }),
+    prisma.title.count({ where: { type: "MOVIE" } }),
+    prisma.title.count({ where: { type: "SERIES" } }),
+    prisma.title.count({ where: { type: "ANIME" } }),
+    prisma.title.findMany({
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        posterUrl: true,
+        createdAt: true,
+      },
+    }),
   ]);
+
+  const hlsPercentage = titlesCount > 0 ? Math.round((titlesWithHlsCount / titlesCount) * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -26,15 +51,21 @@ export default async function AdminHomePage() {
         <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
           <p className="text-[11px] uppercase text-zinc-500">Títulos no catálogo</p>
           <p className="mt-2 text-3xl font-semibold text-zinc-50">{titlesCount}</p>
-          <p className="mt-1 text-[11px] text-zinc-500">Filmes, séries, animes e outros.</p>
+          <p className="mt-1 text-[11px] text-zinc-500">
+            {moviesCount} filmes · {seriesCount} séries · {animesCount} animes
+          </p>
         </div>
 
         <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
           <p className="text-[11px] uppercase text-zinc-500">Títulos com HLS pronto</p>
           <p className="mt-2 text-3xl font-semibold text-emerald-300">{titlesWithHlsCount}</p>
-          <p className="mt-1 text-[11px] text-zinc-500">
-            Já possuem playlist HLS detectada no B2.
-          </p>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-800">
+            <div
+              className="h-full bg-emerald-600 transition-all"
+              style={{ width: `${hlsPercentage}%` }}
+            />
+          </div>
+          <p className="mt-1 text-[11px] text-zinc-500">{hlsPercentage}% do catálogo</p>
         </div>
 
         <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
@@ -48,6 +79,41 @@ export default async function AdminHomePage() {
           <p className="mt-2 text-3xl font-semibold text-sky-300">{adminsCount}</p>
           <p className="mt-1 text-[11px] text-zinc-500">Podem gerenciar catálogo e HLS.</p>
         </div>
+      </div>
+
+      {/* Últimos Títulos Adicionados */}
+      <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
+        <h3 className="text-sm font-semibold mb-3">📺 Últimos Títulos Adicionados</h3>
+        {recentTitles.length === 0 ? (
+          <p className="text-xs text-zinc-500">Nenhum título cadastrado ainda.</p>
+        ) : (
+          <div className="space-y-2">
+            {recentTitles.map((title) => (
+              <div
+                key={title.id}
+                className="flex items-center gap-3 rounded-md border border-zinc-800 bg-zinc-900/50 p-2"
+              >
+                {title.posterUrl ? (
+                  <img
+                    src={title.posterUrl}
+                    alt={title.name}
+                    className="h-12 w-8 rounded object-cover"
+                  />
+                ) : (
+                  <div className="flex h-12 w-8 items-center justify-center rounded bg-zinc-800 text-[10px] text-zinc-500">
+                    N/A
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-zinc-100 truncate">{title.name}</p>
+                  <p className="text-[10px] text-zinc-500">
+                    {title.type} · {new Date(title.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid gap-3 md:grid-cols-4">
