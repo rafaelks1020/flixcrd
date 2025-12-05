@@ -24,7 +24,7 @@ export default function BulkActions({
     setLoading(true);
     try {
       const promises = selectedIds.map((id) =>
-        fetch(`/api/admin/titles/${id}`, { method: "DELETE" })
+        fetch(`/api/titles/${id}`, { method: "DELETE" })
       );
       await Promise.all(promises);
       toast.success(`✅ ${selectedIds.length} título(s) deletado(s)!`);

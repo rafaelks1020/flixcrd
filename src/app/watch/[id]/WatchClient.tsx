@@ -3,7 +3,7 @@
 import Hls from "hls.js";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type MouseEvent, type SyntheticEvent, useEffect, useRef, useState } from "react";
+import { type MouseEvent, type SyntheticEvent, useCallback, useEffect, useRef, useState } from "react";
 
 type TitleType = "MOVIE" | "SERIES" | "ANIME" | "OTHER";
 
@@ -77,6 +77,9 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const [currentSubtitleIndex, setCurrentSubtitleIndex] = useState<number | null>(null);
   const [useCloudflareProxy, setUseCloudflareProxy] = useState<boolean | null>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [nextEpisode, setNextEpisode] = useState<{ id: string; name: string; episodeNumber: number; seasonNumber: number } | null>(null);
+  const [showNextEpisodeCountdown, setShowNextEpisodeCountdown] = useState(false);
+  const [countdown, setCountdown] = useState(10);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -94,16 +97,16 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
 
   useEffect(() => {
     async function testarVelocidadeCloudflare(): Promise<number> {
-      // Testa a velocidade do Cloudflare (B2_LINK)
-      // Se der erro ou demorar muito, cai pro B2 direto
+      // Testa a velocidade do Cloudflare Worker (Wasabi)
+      // Se der erro ou demorar muito, usa direto
       if (typeof performance === "undefined" || typeof fetch === "undefined") {
         return Infinity;
       }
 
       const inicio = performance.now();
       try {
-        // Tenta acessar um arquivo pequeno via Cloudflare
-        const testUrl = "https://hlspaelflix.top/b2/ping.txt";
+        // Tenta acessar um arquivo pequeno via Cloudflare Worker (Wasabi)
+        const testUrl = "https://hlspaelflix.top/titles/a-nevoa-da-guerra/seg_0003.ts";
         await fetch(testUrl, {
           method: "HEAD",
           cache: "no-store",
@@ -137,15 +140,15 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         setUseCloudflareProxy(proxyFlag);
 
         // 2) Decidir origem: SEMPRE Cloudflare primeiro se o toggle estiver ativo
-        let source: "b2" | "cloudflare" = "b2";
+        let source: "direct" | "cloudflare" = "direct";
         if (proxyFlag) {
           // Testa se Cloudflare está respondendo bem
           const tempo = await testarVelocidadeCloudflare();
-          const limite = 300; // ms - se demorar mais ou falhar, cai pro B2 direto
+          const limite = 300; // ms - se demorar mais ou falhar, usa acesso direto
           if (tempo <= limite) {
             source = "cloudflare"; // Cloudflare OK, usa ele
           } else {
-            source = "b2"; // Cloudflare lento/off, cai pro B2 direto
+            source = "direct"; // Cloudflare lento/off, usa direto
           }
         }
 
@@ -179,6 +182,86 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     loadPlayback();
   }, [titleId, episodeId, profileId]);
 
+  // Buscar próximo episódio se for série/anime
+  useEffect(() => {
+    async function fetchNextEpisode() {
+      if (!episodeId || !data) return;
+      
+      try {
+        const res = await fetch(`/api/titles/${titleId}/seasons`);
+        if (!res.ok) return;
+        
+        const seasons = await res.json();
+        
+        // Encontrar episódio atual
+        let currentSeason: any = null;
+        let currentEp: any = null;
+        
+        for (const season of seasons) {
+          const ep = season.episodes?.find((e: any) => e.id === episodeId);
+          if (ep) {
+            currentSeason = season;
+            currentEp = ep;
+            break;
+          }
+        }
+        
+        if (!currentEp || !currentSeason) return;
+        
+        // Buscar próximo episódio na mesma temporada
+        const nextEpInSeason = currentSeason.episodes?.find(
+          (e: any) => e.episodeNumber === currentEp.episodeNumber + 1
+        );
+        
+        if (nextEpInSeason) {
+          setNextEpisode({
+            id: nextEpInSeason.id,
+            name: nextEpInSeason.name,
+            episodeNumber: nextEpInSeason.episodeNumber,
+            seasonNumber: currentSeason.seasonNumber,
+          });
+          return;
+        }
+        
+        // Se não houver, buscar primeiro episódio da próxima temporada
+        const nextSeason = seasons.find(
+          (s: any) => s.seasonNumber === currentSeason.seasonNumber + 1
+        );
+        
+        if (nextSeason && nextSeason.episodes?.length > 0) {
+          const firstEp = nextSeason.episodes[0];
+          setNextEpisode({
+            id: firstEp.id,
+            name: firstEp.name,
+            episodeNumber: firstEp.episodeNumber,
+            seasonNumber: nextSeason.seasonNumber,
+          });
+        }
+      } catch (err) {
+        console.error('Erro ao buscar próximo episódio:', err);
+      }
+    }
+    
+    fetchNextEpisode();
+  }, [titleId, episodeId, data]);
+
+  // Countdown e autoplay para próximo episódio
+  useEffect(() => {
+    if (!showNextEpisodeCountdown || !nextEpisode) return;
+    
+    if (countdown === 0) {
+      // Ir para próximo episódio
+      router.push(`/watch/${titleId}?episodeId=${nextEpisode.id}`);
+      return;
+    }
+    
+    const timer = setTimeout(() => {
+      setCountdown(prev => prev - 1);
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, [showNextEpisodeCountdown, countdown, nextEpisode, titleId, router]);
+
   useEffect(() => {
     function handleFullscreenChange() {
       setIsFullscreen(Boolean(document.fullscreenElement));
@@ -190,17 +273,22 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     };
   }, []);
 
-  const showControlsTemporarily = () => {
-    setIsHovering(true);
+  const showControlsTemporarily = useCallback(() => {
+    setIsHovering((prev) => {
+      if (prev) return prev; // Já está true, não precisa atualizar
+      return true;
+    });
+    
     if (hideControlsTimeoutRef.current) {
       clearTimeout(hideControlsTimeoutRef.current);
     }
+    
     if (isPlaying) {
       hideControlsTimeoutRef.current = setTimeout(() => {
         setIsHovering(false);
       }, 3000);
     }
-  };
+  }, [isPlaying]);
 
   const handleTrackLoad = (event: SyntheticEvent<HTMLTrackElement>) => {
     const video = videoRef.current;
@@ -700,6 +788,12 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
                 profileId,
               }),
             }).catch(() => {});
+            
+            // Mostrar countdown para próximo episódio
+            if (nextEpisode) {
+              setShowNextEpisodeCountdown(true);
+              setCountdown(10);
+            }
           }}
         >
           {data.subtitles?.map((sub, index) => (
@@ -747,8 +841,43 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
           </div>
         )}
 
+        {/* Countdown Overlay para Próximo Episódio */}
+        {showNextEpisodeCountdown && nextEpisode && (
+          <div className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+            <div className="text-center">
+              <div className="mb-6">
+                <div className="text-6xl font-bold text-white mb-4">{countdown}</div>
+                <p className="text-xl text-zinc-300 mb-2">Próximo episódio em...</p>
+                <p className="text-lg text-zinc-400">
+                  S{nextEpisode.seasonNumber.toString().padStart(2, '0')}E{nextEpisode.episodeNumber.toString().padStart(2, '0')} - {nextEpisode.name}
+                </p>
+              </div>
+              <div className="flex gap-4 justify-center">
+                <button
+                  onClick={() => router.push(`/watch/${titleId}?episodeId=${nextEpisode.id}`)}
+                  className="rounded-lg bg-emerald-600 px-6 py-3 text-sm font-semibold text-white hover:bg-emerald-700 flex items-center gap-2"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  Assistir Agora
+                </button>
+                <button
+                  onClick={() => {
+                    setShowNextEpisodeCountdown(false);
+                    setCountdown(10);
+                  }}
+                  className="rounded-lg bg-zinc-700 px-6 py-3 text-sm font-semibold text-white hover:bg-zinc-600"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Play/Pause central */}
-        {!loading && !error && (!isPlaying || isHovering) && (
+        {!loading && !error && (!isPlaying || isHovering) && !showNextEpisodeCountdown && (
           <button
             type="button"
             onClick={handleTogglePlay}
@@ -812,6 +941,22 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
             <span className="tabular-nums text-[11px] text-zinc-200 md:text-xs">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
+
+            {/* Botão Próximo Episódio */}
+            {nextEpisode && (
+              <button
+                type="button"
+                onClick={() => router.push(`/watch/${titleId}?episodeId=${nextEpisode.id}`)}
+                className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 md:text-sm flex items-center gap-2"
+                title={`S${nextEpisode.seasonNumber.toString().padStart(2, '0')}E${nextEpisode.episodeNumber.toString().padStart(2, '0')} - ${nextEpisode.name}`}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z" />
+                  <path d="M19 5v14" strokeWidth="2" stroke="currentColor" />
+                </svg>
+                Próximo
+              </button>
+            )}
 
             <div className="ml-4 flex items-center gap-2">
               <button

@@ -45,7 +45,7 @@ interface HomeClientProps {
   } | null;
 }
 
-export default function HomeClientNew({
+export default function HomeClient({
   isLoggedIn,
   isAdmin,
   heroTitle,

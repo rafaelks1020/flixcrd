@@ -4,9 +4,9 @@ import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
-import { b2Client } from "@/lib/b2";
+import { wasabiClient } from "@/lib/wasabi";
 
-const bucketName = process.env.B2_BUCKET;
+const bucketName = process.env.WASABI_BUCKET_NAME;
 
 interface RouteContext {
   params: Promise<{
@@ -24,7 +24,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
     if (!bucketName) {
       return NextResponse.json(
-        { error: "B2_BUCKET não configurado." },
+        { error: "WASABI_BUCKET_NAME não configurado." },
         { status: 500 },
       );
     }
@@ -47,7 +47,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       Prefix: prefix,
     });
 
-    const listed = await b2Client.send(listCmd);
+    const listed = await wasabiClient.send(listCmd);
 
     const hasHls = Boolean(
       listed.Contents?.some((obj) =>

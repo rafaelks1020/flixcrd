@@ -1,11 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Navbar from "@/components/ui/Navbar";
-import TitleCard from "@/components/ui/TitleCard";
-import SearchBar from "@/components/ui/SearchBar";
-import SkeletonCard from "@/components/ui/SkeletonCard";
-import Toast from "@/components/ui/Toast";
+import Link from "next/link";
+import PremiumNavbar from "@/components/ui/PremiumNavbar";
 
 interface Title {
   id: string;
@@ -17,22 +14,23 @@ interface Title {
   releaseDate?: string | null;
 }
 
-interface BrowseClientNewProps {
+interface BrowseClientProps {
   initialTitles: Title[];
   isLoggedIn: boolean;
   isAdmin: boolean;
 }
 
-export default function BrowseClientNew({
+export default function BrowseClient({
   initialTitles,
   isLoggedIn,
   isAdmin,
-}: BrowseClientNewProps) {
+}: BrowseClientProps) {
   const [titles, setTitles] = useState<Title[]>(initialTitles);
   const [loading, setLoading] = useState(false);
   const [filterType, setFilterType] = useState<string>("ALL");
   const [sortBy, setSortBy] = useState<string>("popularity");
   const [searchQuery, setSearchQuery] = useState("");
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   useEffect(() => {
     loadTitles();
@@ -58,50 +56,78 @@ export default function BrowseClientNew({
     }
   };
 
-  return (
-    <div className="min-h-screen bg-black">
-      <Toast />
-      <Navbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
+  const selectStyle: React.CSSProperties = {
+    background: '#1a1a1a',
+    border: '1px solid #333',
+    borderRadius: '4px',
+    padding: '10px 16px',
+    color: '#fff',
+    fontSize: '14px',
+    cursor: 'pointer',
+    outline: 'none',
+  };
 
-      <div className="mx-auto max-w-7xl px-4 pt-24 pb-16 md:px-8">
+  return (
+    <div style={{ minHeight: '100vh', background: '#000', color: '#fff' }}>
+      <PremiumNavbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
+
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '100px 4% 60px' }}>
         {/* Header */}
-        <div className="mb-8 space-y-6">
-          <h1 className="text-4xl font-bold text-white">Catálogo</h1>
+        <div style={{ marginBottom: '40px' }}>
+          <h1 style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', fontWeight: 700, marginBottom: '24px' }}>
+            Catálogo
+          </h1>
 
           {/* Search */}
-          <SearchBar
-            initialQuery={searchQuery}
-            onSearch={(query) => setSearchQuery(query)}
-          />
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ position: 'relative', maxWidth: '500px' }}>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar títulos..."
+                style={{
+                  width: '100%',
+                  padding: '14px 20px',
+                  paddingLeft: '50px',
+                  background: '#1a1a1a',
+                  border: '1px solid #333',
+                  borderRadius: '4px',
+                  color: '#fff',
+                  fontSize: '15px',
+                  outline: 'none',
+                }}
+                onFocus={(e) => e.currentTarget.style.borderColor = '#e50914'}
+                onBlur={(e) => e.currentTarget.style.borderColor = '#333'}
+              />
+              <svg
+                style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', width: '20px', height: '20px', color: 'rgba(255,255,255,0.5)' }}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
 
           {/* Filters */}
-          <div className="flex flex-wrap items-center gap-4">
-            {/* Type Filter */}
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-white focus:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-600/50"
-            >
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px' }}>
+            <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={selectStyle}>
               <option value="ALL">Todos os Tipos</option>
               <option value="MOVIE">Filmes</option>
               <option value="SERIES">Séries</option>
               <option value="ANIME">Animes</option>
             </select>
 
-            {/* Sort */}
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-white focus:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-600/50"
-            >
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={selectStyle}>
               <option value="popularity">Mais Populares</option>
               <option value="recent">Mais Recentes</option>
               <option value="rating">Melhor Avaliados</option>
               <option value="name">Nome (A-Z)</option>
             </select>
 
-            {/* Results Count */}
-            <span className="ml-auto text-sm text-zinc-400">
+            <span style={{ marginLeft: 'auto', fontSize: '14px', color: 'rgba(255,255,255,0.5)' }}>
               {titles.length} título{titles.length !== 1 ? "s" : ""}
             </span>
           </div>
@@ -109,26 +135,65 @@ export default function BrowseClientNew({
 
         {/* Grid */}
         {loading ? (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' }}>
             {[...Array(18)].map((_, i) => (
-              <SkeletonCard key={i} />
+              <div key={i} style={{ aspectRatio: '2/3', background: '#1a1a1a', borderRadius: '4px', animation: 'pulse 2s infinite' }} />
             ))}
           </div>
         ) : titles.length > 0 ? (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' }}>
             {titles.map((title) => (
-              <TitleCard key={title.id} {...title} />
+              <Link
+                key={title.id}
+                href={`/title/${title.id}`}
+                onMouseEnter={() => setHoveredId(title.id)}
+                onMouseLeave={() => setHoveredId(null)}
+                style={{
+                  display: 'block',
+                  borderRadius: '4px',
+                  overflow: 'hidden',
+                  background: '#141414',
+                  textDecoration: 'none',
+                  color: '#fff',
+                  transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                  transform: hoveredId === title.id ? 'scale(1.05)' : 'scale(1)',
+                  boxShadow: hoveredId === title.id ? '0 10px 30px rgba(0,0,0,0.5)' : 'none',
+                }}
+              >
+                <div style={{ position: 'relative' }}>
+                  {title.posterUrl ? (
+                    <img src={title.posterUrl} alt={title.name} style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ width: '100%', aspectRatio: '2/3', background: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '48px' }}>🎬</div>
+                  )}
+                  
+                  {/* Rating Badge */}
+                  {title.voteAverage && (
+                    <div style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.8)', padding: '4px 8px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
+                      <span style={{ color: '#ffd700' }}>★</span>
+                      <span>{title.voteAverage.toFixed(1)}</span>
+                    </div>
+                  )}
+
+                  {/* Hover Overlay */}
+                  {hoveredId === title.id && (
+                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px', background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, transparent 100%)' }}>
+                      <p style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{title.name}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>
+                        {title.releaseDate && <span>{new Date(title.releaseDate).getFullYear()}</span>}
+                        <span style={{ textTransform: 'uppercase' }}>{title.type === 'MOVIE' ? 'Filme' : title.type === 'SERIES' ? 'Série' : title.type}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Link>
             ))}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <svg className="mb-4 h-16 w-16 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <h3 className="text-xl font-semibold text-white">Nenhum título encontrado</h3>
-            <p className="mt-2 text-sm text-zinc-400">
-              Tente ajustar os filtros ou fazer uma nova busca
-            </p>
+          <div style={{ textAlign: 'center', padding: '80px 0' }}>
+            <div style={{ fontSize: '64px', marginBottom: '16px', opacity: 0.3 }}>🎬</div>
+            <h3 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '8px' }}>Nenhum título encontrado</h3>
+            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '14px' }}>Tente ajustar os filtros ou fazer uma nova busca</p>
           </div>
         )}
       </div>

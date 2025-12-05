@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 
-const CLOUDFLARE_URL = process.env.B2_LINK || "https://hlspaelflix.top/b2/";
+const CLOUDFLARE_URL = process.env.WASABI_CDN_URL || "https://hlspaelflix.top/";
 
 export async function GET() {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    // Tenta acessar um arquivo que sabemos que existe (do teste B2)
+    // Tenta acessar um arquivo que sabemos que existe (do Wasabi)
     // Usa um arquivo .ts de vídeo que já existe
     const testUrl = `${CLOUDFLARE_URL}titles/a-era-do-gelo/seg_0000.ts`;
     const response = await fetch(testUrl, {

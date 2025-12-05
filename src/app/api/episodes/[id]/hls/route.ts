@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 
-const B2_CLOUDFLARE_BASE = process.env.B2_LINK;
+const WASABI_CDN_BASE = process.env.WASABI_CDN_URL;
 
 interface RouteContext {
   params: Promise<{
@@ -37,9 +37,9 @@ async function streamToString(body: any): Promise<string> {
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
-  if (!B2_CLOUDFLARE_BASE) {
+  if (!WASABI_CDN_BASE) {
     return NextResponse.json(
-      { error: "B2_LINK não configurado." },
+      { error: "WASABI_CDN_URL não configurado." },
       { status: 500 },
     );
   }
@@ -77,12 +77,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
       : `${episode.hlsPath}/`;
 
     const source =
-      (request.nextUrl.searchParams.get("source") as "b2" | "cloudflare" | null) ??
+      (request.nextUrl.searchParams.get("source") as "direct" | "cloudflare" | null) ??
       "cloudflare"; // Padrão Cloudflare
 
     // Busca o playlist diretamente via URL pública
     const playlistPath = `${prefix}master.m3u8`;
-    const playlistUrl = `${B2_CLOUDFLARE_BASE}${playlistPath}`;
+    const playlistUrl = `${WASABI_CDN_BASE}${playlistPath}`;
 
     const response = await fetch(playlistUrl);
     if (!response.ok) {
@@ -109,10 +109,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
           return line;
         }
 
-        // Segmentos de vídeo (.ts): sempre URL pública via B2_LINK
+        // Segmentos de vídeo (.ts): sempre URL pública via Wasabi CDN
         if (trimmed.toLowerCase().endsWith(".ts")) {
           const objectKey = `${prefix}${trimmed}`;
-          return `${B2_CLOUDFLARE_BASE}${objectKey}`;
+          return `${WASABI_CDN_BASE}${objectKey}`;
         }
 
         return line;

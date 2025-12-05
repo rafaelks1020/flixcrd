@@ -86,7 +86,7 @@ export default function TitleCard({
         )}
 
         {/* Hover Info */}
-        <div className="absolute bottom-0 left-0 right-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+        <div className="absolute bottom-0 left-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-t from-black via-black/90 to-transparent">
           <h3 className="text-sm font-semibold text-white line-clamp-2 mb-1">
             {name}
           </h3>

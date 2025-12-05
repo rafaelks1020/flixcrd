@@ -17,6 +17,7 @@ const navItems = [
   { href: "/admin/catalog", label: "Catálogo" },
   { href: "/admin/upload-v2", label: "🚀 Upload Unificado" },
   { href: "/admin/jobs", label: "Jobs HLS" },
+  { href: "/admin/subtitles", label: "🎬 Legendas" },
   { href: "/admin/users", label: "Usuários" },
   { href: "/admin/quick-actions", label: "⚡ Ações Rápidas" },
   { href: "/admin/logs", label: "📋 Logs" },

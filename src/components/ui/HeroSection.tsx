@@ -94,34 +94,42 @@ export default function HeroSection({ title, isLoggedIn }: HeroSectionProps) {
           )}
 
           {/* Actions */}
-          <div className="flex flex-wrap items-center gap-3 pt-2">
+          <div className="flex flex-wrap items-center gap-3 pt-4">
+            {/* Primary: Assistir */}
             <Link
               href={`/title/${title.id}`}
-              className="flex items-center gap-2 rounded-lg bg-white px-6 py-3 font-semibold text-black shadow-lg transition-all hover:bg-zinc-200 hover:scale-105"
+              className="flex items-center gap-3 rounded-full bg-gradient-to-r from-red-600 to-red-500 px-8 py-3 text-sm font-semibold text-white shadow-xl hover:from-red-500 hover:to-red-400 transition-all hover:scale-105"
             >
-              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z" />
-              </svg>
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
+                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </span>
               <span>Assistir</span>
             </Link>
 
+            {/* Secondary: Mais informações */}
             <Link
               href={`/title/${title.id}`}
-              className="flex items-center gap-2 rounded-lg border-2 border-zinc-400 bg-zinc-900/60 backdrop-blur-sm px-6 py-3 font-semibold text-white shadow-lg transition-all hover:border-white hover:bg-zinc-800/80"
+              className="flex items-center gap-2 rounded-full border border-zinc-500 bg-zinc-900/70 px-7 py-3 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition-all hover:border-white hover:bg-zinc-800/80"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="16" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12.01" y2="8" />
               </svg>
-              <span>Mais Informações</span>
+              <span>Mais informações</span>
             </Link>
 
+            {/* Tertiary: Favoritos */}
             {isLoggedIn && (
               <button
-                className="flex items-center gap-2 rounded-lg border-2 border-zinc-600 bg-zinc-900/40 backdrop-blur-sm p-3 text-white shadow-lg transition-all hover:border-zinc-400 hover:bg-zinc-800/60"
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-zinc-600 bg-zinc-900/60 text-white shadow-lg backdrop-blur-sm transition-all hover:border-white hover:bg-zinc-800/80"
                 title="Adicionar aos favoritos"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
               </button>
             )}

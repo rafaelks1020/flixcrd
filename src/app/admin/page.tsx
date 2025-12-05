@@ -123,7 +123,7 @@ export default function AdminHomePage() {
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-zinc-100 truncate">{title.name}</p>
-                  <p className="text-[10px] text-zinc-500">
+                  <p className="text-[10px] text-zinc-500" suppressHydrationWarning>
                     {title.type} · {new Date(title.createdAt).toLocaleDateString()}
                   </p>
                 </div>
@@ -150,7 +150,7 @@ export default function AdminHomePage() {
         >
           <p className="font-semibold">Upload / HLS</p>
           <p className="mt-1 text-[11px] text-zinc-400">
-            Enviar arquivos para o B2 e disparar jobs HLS.
+            Enviar arquivos para o Wasabi e disparar jobs HLS.
           </p>
         </Link>
 

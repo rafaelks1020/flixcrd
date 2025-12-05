@@ -126,7 +126,7 @@ export default function AdminJobsPage() {
             <h3 className="text-sm font-semibold text-zinc-100">Jobs recentes</h3>
             {loading && <span className="text-[10px] text-zinc-500">Atualizando...</span>}
             {lastUpdate && !loading && (
-              <span className="text-[10px] text-zinc-500">
+              <span className="text-[10px] text-zinc-500" suppressHydrationWarning>
                 Última atualização: {lastUpdate.toLocaleTimeString()}
               </span>
             )}

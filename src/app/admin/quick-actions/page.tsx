@@ -73,6 +73,25 @@ export default function QuickActionsPage() {
     }
   }
 
+  async function refreshTmdbData() {
+    setLoading(true);
+    const toastId = toast.loading("🔄 Reimportando dados do TMDB (cast, trailers, etc)... Isso pode demorar!");
+    try {
+      const res = await fetch("/api/admin/titles/refresh-tmdb", { method: "POST" });
+      const data = await res.json();
+      
+      if (res.ok) {
+        toast.success(`✅ ${data.updated}/${data.total} títulos atualizados com sucesso!`, { id: toastId });
+      } else {
+        toast.error(`❌ ${data.error || "Erro ao atualizar"}`, { id: toastId });
+      }
+    } catch (err) {
+      toast.error("❌ Erro ao reimportar dados do TMDB", { id: toastId });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -115,6 +134,13 @@ export default function QuickActionsPage() {
         <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 space-y-3">
           <h3 className="text-sm font-semibold">🛠️ Manutenção</h3>
           <div className="space-y-2">
+            <button
+              onClick={refreshTmdbData}
+              disabled={loading}
+              className="w-full rounded-md border border-emerald-700 bg-emerald-900/50 px-4 py-2 text-sm text-emerald-100 hover:bg-emerald-800/50 disabled:opacity-50"
+            >
+              🎬 Reimportar TMDB (Cast, Trailers)
+            </button>
             <button
               onClick={clearCache}
               disabled={loading}

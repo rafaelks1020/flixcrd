@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 
 import { prisma } from "@/lib/prisma";
-import { b2Client } from "@/lib/b2";
+import { wasabiClient } from "@/lib/wasabi";
 
-const bucketName = process.env.B2_BUCKET;
+const bucketName = process.env.WASABI_BUCKET_NAME;
 const transcoderBaseUrl = process.env.TRANSCODER_BASE_URL;
 
 interface RouteContext {
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 export async function POST(_request: NextRequest, context: RouteContext) {
   if (!bucketName) {
     return NextResponse.json(
-      { error: "B2_BUCKET não configurado." },
+      { error: "WASABI_BUCKET_NAME não configurado." },
       { status: 500 },
     );
   }
@@ -106,11 +106,11 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       Prefix: prefix,
     });
 
-    const listed = await b2Client.send(listCmd);
+    const listed = await wasabiClient.send(listCmd);
 
     if (!listed.Contents || listed.Contents.length === 0) {
       return NextResponse.json(
-        { error: "Nenhum arquivo encontrado nesse prefixo no B2." },
+        { error: "Nenhum arquivo encontrado nesse prefixo no Wasabi." },
         { status: 404 },
       );
     }

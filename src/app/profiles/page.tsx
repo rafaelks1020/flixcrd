@@ -9,18 +9,15 @@ interface Profile {
   name: string;
   avatar: string | null;
   isKids: boolean;
-  useCloudflareProxy?: boolean;
 }
 
-const DEFAULT_AVATARS = [
-  "👤", "😀", "😎", "🤓", "🥳", "🤩", "😇", "🤠",
-  "👨", "👩", "👦", "👧", "🧑", "👶", "🐶", "🐱",
-];
+const DEFAULT_AVATARS = ["👤", "😀", "😎", "🤓", "🥳", "🤩", "😇", "🤠", "👨", "👩", "👦", "👧"];
 
 export default function ProfilesPage() {
   const router = useRouter();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   useEffect(() => {
     loadProfiles();
@@ -41,72 +38,165 @@ export default function ProfilesPage() {
   }
 
   function handleSelectProfile(profileId: string) {
-    // Salvar perfil ativo no localStorage
     localStorage.setItem("activeProfileId", profileId);
     router.push("/");
   }
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black text-zinc-50">
-        <div className="text-sm text-zinc-400">Carregando perfis...</div>
+      <div style={{ minHeight: '100vh', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '16px' }}>Carregando perfis...</div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-black px-4 text-zinc-50">
-      <div className="w-full max-w-5xl">
-        <h1 className="mb-12 text-center text-4xl font-semibold md:text-5xl">
-          Quem está assistindo?
-        </h1>
+    <div style={{ minHeight: '100vh', background: '#141414', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+      {/* Logo */}
+      <Link href="/" style={{ position: 'absolute', top: '24px', left: '4%', textDecoration: 'none' }}>
+        <span style={{ fontSize: '32px', fontWeight: 800, background: 'linear-gradient(135deg, #e50914 0%, #b81d24 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+          PaelFlix
+        </span>
+      </Link>
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {profiles.map((profile) => (
-            <button
-              key={profile.id}
-              type="button"
-              onClick={() => handleSelectProfile(profile.id)}
-              className="group flex flex-col items-center gap-3 rounded-md p-4 transition hover:bg-zinc-900"
+      {/* Title */}
+      <h1 style={{ fontSize: 'clamp(1.8rem, 4vw, 3.5rem)', fontWeight: 400, color: '#fff', marginBottom: '40px', textAlign: 'center' }}>
+        Quem está assistindo?
+      </h1>
+
+      {/* Profiles Grid */}
+      <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', justifyContent: 'center', marginBottom: '50px' }}>
+        {profiles.map((profile) => (
+          <button
+            key={profile.id}
+            onClick={() => handleSelectProfile(profile.id)}
+            onMouseEnter={() => setHoveredId(profile.id)}
+            onMouseLeave={() => setHoveredId(null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '8px',
+              transition: 'transform 0.2s ease',
+              transform: hoveredId === profile.id ? 'scale(1.05)' : 'scale(1)',
+            }}
+          >
+            <div
+              style={{
+                width: '140px',
+                height: '140px',
+                borderRadius: '8px',
+                background: 'linear-gradient(135deg, #333 0%, #1a1a1a 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '64px',
+                border: hoveredId === profile.id ? '3px solid #fff' : '3px solid transparent',
+                transition: 'border-color 0.2s ease',
+                overflow: 'hidden',
+              }}
             >
-              <div className="flex h-32 w-32 items-center justify-center rounded-md border-4 border-transparent bg-zinc-800 text-6xl transition group-hover:border-zinc-400">
-                {profile.avatar || DEFAULT_AVATARS[0]}
-              </div>
-              <div className="text-center">
-                <div className="font-medium text-zinc-200 group-hover:text-white">
-                  {profile.name}
-                </div>
-                {profile.isKids && (
-                  <div className="mt-1 text-xs text-zinc-500">Kids</div>
-                )}
-              </div>
-            </button>
-          ))}
+              {profile.avatar || DEFAULT_AVATARS[0]}
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <p
+                style={{
+                  color: hoveredId === profile.id ? '#fff' : 'rgba(255,255,255,0.7)',
+                  fontSize: '16px',
+                  fontWeight: 500,
+                  transition: 'color 0.2s ease',
+                }}
+              >
+                {profile.name}
+              </p>
+              {profile.isKids && (
+                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px', marginTop: '4px' }}>
+                  Kids
+                </p>
+              )}
+            </div>
+          </button>
+        ))}
 
-          {profiles.length < 5 && (
-            <Link
-              href="/profiles/manage"
-              className="group flex flex-col items-center gap-3 rounded-md p-4 transition hover:bg-zinc-900"
-            >
-              <div className="flex h-32 w-32 items-center justify-center rounded-md border-4 border-transparent bg-zinc-800 text-6xl transition group-hover:border-zinc-400">
-                <span className="text-zinc-500 group-hover:text-zinc-300">+</span>
-              </div>
-              <div className="text-center font-medium text-zinc-400 group-hover:text-zinc-200">
-                Adicionar perfil
-              </div>
-            </Link>
-          )}
-        </div>
-
-        <div className="mt-12 text-center">
+        {/* Add Profile */}
+        {profiles.length < 5 && (
           <Link
             href="/profiles/manage"
-            className="inline-block rounded-md border border-zinc-700 px-6 py-2 text-sm font-semibold text-zinc-300 hover:border-zinc-500 hover:text-zinc-100"
+            onMouseEnter={() => setHoveredId('add')}
+            onMouseLeave={() => setHoveredId(null)}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '8px',
+              textDecoration: 'none',
+              transition: 'transform 0.2s ease',
+              transform: hoveredId === 'add' ? 'scale(1.05)' : 'scale(1)',
+            }}
           >
-            Gerenciar perfis
+            <div
+              style={{
+                width: '140px',
+                height: '140px',
+                borderRadius: '8px',
+                background: 'transparent',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '64px',
+                border: hoveredId === 'add' ? '3px solid #fff' : '3px solid rgba(255,255,255,0.3)',
+                transition: 'border-color 0.2s ease',
+                color: hoveredId === 'add' ? '#fff' : 'rgba(255,255,255,0.5)',
+              }}
+            >
+              <svg style={{ width: '60px', height: '60px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+              </svg>
+            </div>
+            <p
+              style={{
+                color: hoveredId === 'add' ? '#fff' : 'rgba(255,255,255,0.5)',
+                fontSize: '16px',
+                fontWeight: 500,
+                transition: 'color 0.2s ease',
+              }}
+            >
+              Adicionar perfil
+            </p>
           </Link>
-        </div>
+        )}
       </div>
+
+      {/* Manage Profiles Button */}
+      <Link
+        href="/profiles/manage"
+        style={{
+          padding: '10px 28px',
+          background: 'transparent',
+          border: '1px solid rgba(255,255,255,0.5)',
+          borderRadius: '4px',
+          color: 'rgba(255,255,255,0.7)',
+          fontSize: '14px',
+          fontWeight: 500,
+          textDecoration: 'none',
+          transition: 'all 0.2s ease',
+        }}
+        onMouseOver={(e) => {
+          e.currentTarget.style.borderColor = '#fff';
+          e.currentTarget.style.color = '#fff';
+        }}
+        onMouseOut={(e) => {
+          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.5)';
+          e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
+        }}
+      >
+        Gerenciar perfis
+      </Link>
     </div>
   );
 }

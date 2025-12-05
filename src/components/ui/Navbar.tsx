@@ -108,7 +108,7 @@ export default function Navbar({ isLoggedIn, isAdmin, onSearch }: NavbarProps) {
                 ) : (
                   <button
                     onClick={() => setShowSearch(true)}
-                    className="rounded-full p-2 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all"
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900/70 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
                     title="Buscar"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -123,9 +123,9 @@ export default function Navbar({ isLoggedIn, isAdmin, onSearch }: NavbarProps) {
             {isAdmin && (
               <Link
                 href="/admin"
-                className="hidden sm:flex items-center gap-1 rounded-full border border-emerald-700 bg-emerald-900/30 px-3 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/50 transition-all"
+                className="hidden sm:flex items-center gap-1 rounded-full bg-zinc-900/50 px-3 py-1.5 text-[11px] font-medium text-zinc-200 hover:bg-zinc-800/80 hover:text-white transition-colors"
               >
-                <span>⚙️</span>
+                <span className="text-[12px]">⚙️</span>
                 <span>Admin</span>
               </Link>
             )}

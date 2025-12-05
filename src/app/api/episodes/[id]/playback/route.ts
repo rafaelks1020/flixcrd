@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 
-const B2_CLOUDFLARE_BASE = process.env.B2_LINK; // https://hlspaelflix.top/b2/
+const WASABI_CDN_BASE = process.env.WASABI_CDN_URL;
 
 interface RouteContext {
   params: Promise<{
@@ -23,9 +23,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
     }
 
-    if (!B2_CLOUDFLARE_BASE) {
+    if (!WASABI_CDN_BASE) {
       return NextResponse.json(
-        { error: "B2_LINK não configurado." },
+        { error: "WASABI_CDN_URL não configurado." },
         { status: 500 },
       );
     }
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
     }
 
-    // Como o B2 é público via Cloudflare, usamos URLs diretas
+    // Como o Wasabi é público via Cloudflare, usamos URLs diretas
     const hlsPath = episode.hlsPath?.endsWith("/") ? episode.hlsPath : `${episode.hlsPath}/`;
     const kind = "hls"; // Assumimos HLS por padrão
 
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const base = `/api/episodes/${episode.id}/hls`;
     const playbackUrl = sourceParam ? `${base}?source=${sourceParam}` : base;
 
-    // Legendas também são públicas via Cloudflare
+    // Legendas também são públicas via Cloudflare Worker
     const subtitles: any[] = []; // TODO: implementar busca de .vtt se necessário
 
     const title = episode.title as any;

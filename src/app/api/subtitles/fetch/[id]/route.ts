@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import zlib from "zlib";
 
 import { prisma } from "@/lib/prisma";
-import { b2Client } from "@/lib/b2";
+import { wasabiClient } from "@/lib/wasabi";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 
-const bucketName = process.env.B2_BUCKET;
+const bucketName = process.env.WASABI_BUCKET_NAME;
 const openSubApiKey = process.env.OPENSUBTITLES_API_KEY;
 
 interface RouteContext {
@@ -45,7 +45,7 @@ async function srtToVtt(srt: string): Promise<string> {
 export async function POST(request: NextRequest, context: RouteContext) {
   if (!bucketName) {
     return NextResponse.json(
-      { error: "B2_BUCKET não configurado." },
+      { error: "WASABI_BUCKET_NAME não configurado." },
       { status: 500 },
     );
   }
@@ -179,7 +179,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       ContentType: "text/vtt; charset=utf-8",
     });
 
-    await b2Client.send(putCmd);
+    await wasabiClient.send(putCmd);
 
     return NextResponse.json({ ok: true, key });
   } catch (error) {

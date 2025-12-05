@@ -128,7 +128,7 @@ export default function LogsPage() {
               <span className="text-xl">{getLevelIcon(log.level)}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-mono text-zinc-400">
+                  <span className="text-xs font-mono text-zinc-400" suppressHydrationWarning>
                     {log.timestamp.toLocaleTimeString()}
                   </span>
                   <span className="text-xs font-semibold uppercase">

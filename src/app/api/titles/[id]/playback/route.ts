@@ -4,10 +4,10 @@ import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
-import { b2Client } from "@/lib/b2";
+import { wasabiClient } from "@/lib/wasabi";
 
-const B2_CLOUDFLARE_BASE = process.env.B2_LINK; // https://hlspaelflix.top/b2/
-const B2_BUCKET = process.env.B2_BUCKET;
+const WASABI_CDN_BASE = process.env.WASABI_CDN_URL; // URL do CDN
+const WASABI_BUCKET = process.env.WASABI_BUCKET_NAME;
 
 interface RouteContext {
   params: Promise<{
@@ -26,9 +26,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
     }
 
-    if (!B2_CLOUDFLARE_BASE) {
+    if (!WASABI_CDN_BASE) {
       return NextResponse.json(
-        { error: "B2_LINK não configurado." },
+        { error: "WASABI_CDN_URL não configurado." },
         { status: 500 },
       );
     }
@@ -54,15 +54,15 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const hlsPath = title.hlsPath?.endsWith("/") ? title.hlsPath : `${title.hlsPath}/`;
     const sourceParam = request.nextUrl.searchParams.get("source");
 
-    // Tenta verificar se existe HLS no B2
+    // Tenta verificar se existe HLS no Wasabi
     try {
       const listCmd = new ListObjectsV2Command({
-        Bucket: B2_BUCKET,
+        Bucket: WASABI_BUCKET,
         Prefix: hlsPath,
         MaxKeys: 10,
       });
 
-      const listed = await b2Client.send(listCmd);
+      const listed = await wasabiClient.send(listCmd);
       const objects = listed.Contents?.filter((obj) => obj.Key) || [];
 
       // Procura por arquivo HLS (.m3u8)
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       } else if (videoObject) {
         // Não tem HLS, mas tem vídeo direto
         const videoKey = videoObject.Key as string;
-        const playbackUrl = `${B2_CLOUDFLARE_BASE}${videoKey}`;
+        const playbackUrl = `${WASABI_CDN_BASE}${videoKey}`;
 
         return NextResponse.json({
           playbackUrl,
@@ -123,7 +123,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         );
       }
     } catch (listError) {
-      console.error("Erro ao listar arquivos no B2:", listError);
+      console.error("Erro ao listar arquivos no Wasabi:", listError);
       // Se der erro ao listar, tenta usar HLS mesmo assim
       const base = `/api/titles/${title.id}/hls`;
       const playbackUrl = sourceParam ? `${base}?source=${sourceParam}` : base;

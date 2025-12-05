@@ -64,37 +64,219 @@ function formatTime(seconds: number): string {
 }
 
 // ============================================================================
-// EPISODE DETECTION
+// EPISODE DETECTION - METICULOUS PARSER
 // ============================================================================
 
-function detectEpisode(filename: string): { season?: number; episode?: number } | null {
-  const patterns = [
-    /S(\d+)E(\d+)/i,           // S01E01
-    /(\d+)x(\d+)/i,            // 1x01
-    /Episode[\s-]?(\d+)/i,     // Episode 01
-    /Ep[\s-]?(\d+)/i,          // Ep01
-    /\[(\d+)\]/,               // [01]
-    /[\s-](\d+)[\s-]/,         // - 01 -
+// Dicionário de números romanos
+const ROMANS: Record<string, number> = {
+  I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10,
+  XI: 11, XII: 12, XIII: 13, XIV: 14, XV: 15, XVI: 16, XVII: 17, XVIII: 18, XIX: 19, XX: 20,
+};
+
+// Padrões de ruído para remover antes de analisar
+const NOISE_PATTERNS = [
+  /\[.*?\]/g,                           // [HorribleSubs] [1080p]
+  /\(.*?\)/g,                           // (2024) (Dual Audio)
+  /(1080|720|480|2160)[pk]?/gi,         // Resoluções
+  /(x264|x265|h264|h265|hevc|av1)/gi,   // Codecs de vídeo
+  /(aac|flac|ac3|dts|opus)/gi,          // Codecs de áudio
+  /(web-?dl|bluray|hdtv|dvdrip|bdrip|webrip)/gi, // Fonte
+  /(repack|proper|final)/gi,            // Versões
+  /\b(10bit|hi10p|hdr|sdr)\b/gi,        // Tech specs
+  /\b(dual[._-]?audio|multi[._-]?sub)\b/gi, // Audio/Sub info
+  /\b(legendado|dublado|ptbr|pt-br)\b/gi,   // Idioma
+];
+
+interface ParseResult {
+  season: number | null;
+  episode: number | null;
+  type: string;
+  absolute: boolean;
+  confidence: number;
+}
+
+function cleanFilename(filename: string): string {
+  let clean = filename;
+  for (const pattern of NOISE_PATTERNS) {
+    clean = clean.replace(pattern, " ");
+  }
+  // Remover extensão
+  clean = clean.replace(/\.(mkv|mp4|avi|mov|wmv|flv|webm|m4v)$/i, "");
+  // Normalizar espaços
+  clean = clean.replace(/[._]/g, " ").replace(/\s+/g, " ").trim();
+  return clean;
+}
+
+function checkRomanSeason(filename: string): number | null {
+  // Procura palavras isoladas que sejam números romanos
+  const words = filename.split(/[\s.\-_]+/);
+  for (const word of words) {
+    const upper = word.toUpperCase();
+    if (ROMANS[upper] !== undefined) {
+      return ROMANS[upper];
+    }
+  }
+  return null;
+}
+
+function detectEpisodeMeticulous(filename: string): ParseResult {
+  const originalFilename = filename;
+  const cleanName = cleanFilename(filename);
+  
+  const result: ParseResult = {
+    season: null,
+    episode: null,
+    type: "Unknown",
+    absolute: false,
+    confidence: 0,
+  };
+
+  // --- CAMADA 1: PADRÕES EXPLÍCITOS (SxxExx / 1x01) ---
+  const explicitPatterns = [
+    { regex: /[sS](\d+)\s*[eE](\d+)/, groups: 2 },           // S01E01, S01 E01
+    { regex: /[sS](\d+)[._-][eE](\d+)/, groups: 2 },         // S01.E01, S01_E01
+    { regex: /(\d+)[xX](\d+)/, groups: 2 },                  // 1x01
+    { regex: /[sS]eason\s*(\d+)\s*[eE]pisode\s*(\d+)/i, groups: 2 }, // Season 1 Episode 1
+    { regex: /[eE][pP]?\.?\s?(\d+)/, groups: 1 },            // Ep.01, EP01, E01
+    { regex: /[eE]pisode\s*(\d+)/i, groups: 1 },             // Episode 01
+    { regex: /[cC]ap(?:itulo)?\.?\s*(\d+)/, groups: 1 },     // Capitulo 01
+    { regex: /第(\d+)[話集]/, groups: 1 },                    // Japonês (第01話)
+    { regex: /(\d+)[話集]/, groups: 1 },                      // 01話
   ];
 
-  for (const pattern of patterns) {
-    const match = filename.match(pattern);
+  for (const { regex, groups } of explicitPatterns) {
+    const match = cleanName.match(regex);
     if (match) {
-      if (pattern.source.includes("S(") || pattern.source.includes("(\\d+)x")) {
-        // Tem season e episode
-        return {
-          season: parseInt(match[1], 10),
-          episode: parseInt(match[2], 10),
-        };
-      } else {
-        // Só episode
-        return {
-          episode: parseInt(match[1], 10),
-        };
+      if (groups === 2) {
+        result.season = parseInt(match[1], 10);
+        result.episode = parseInt(match[2], 10);
+        result.type = "Standard";
+        result.confidence = 95;
+        return result;
+      } else if (groups === 1) {
+        result.episode = parseInt(match[1], 10);
+        result.season = checkRomanSeason(cleanName);
+        if (result.season === null) {
+          result.season = 1;
+          result.type = "Absolute/Anime";
+          result.absolute = true;
+        } else {
+          result.type = "Roman Season";
+        }
+        result.confidence = 85;
+        return result;
       }
     }
   }
 
+  // --- CAMADA 2: NUMERAÇÃO ABSOLUTA (Anime " - 01") ---
+  // Padrão: Separador + Número + Fim (ou versão v2)
+  const absoluteMatches = cleanName.match(/(?:[\s\-_])(\d{1,4})(?:v\d)?(?:[\s.]|$)/g);
+  if (absoluteMatches) {
+    // Pega todos os números e filtra anos (1950-2030)
+    const candidates = absoluteMatches
+      .map(m => parseInt(m.replace(/[^\d]/g, ""), 10))
+      .filter(n => !(n > 1950 && n < 2030));
+    
+    if (candidates.length > 0) {
+      // Pega o último número que não é ano
+      result.episode = candidates[candidates.length - 1];
+      result.absolute = true;
+      result.type = "Absolute/Implicit";
+      result.season = checkRomanSeason(cleanName) || 1;
+      result.confidence = 70;
+      return result;
+    }
+  }
+
+  // --- CAMADA 3: PADRÃO COM VERSÃO (01v3, 12v2) - MAIS ESPECÍFICO ---
+  // Regex: _01v3_ ou -12v2- (captura só o número antes do v)
+  const versionMatch = originalFilename.match(/[_\-\s](\d{1,3})v\d+[_\-\s]/i);
+  if (versionMatch) {
+    const num = parseInt(versionMatch[1], 10);
+    if (num >= 1 && num <= 999) {
+      result.episode = num;
+      result.season = checkRomanSeason(originalFilename) || 1;
+      result.type = "Fansub Version";
+      result.confidence = 85;
+      return result;
+    }
+  }
+
+  // --- CAMADA 3.5: PADRÃO FANSUB GENÉRICO (Nome_-_01_HD) ---
+  const fansubMatch = originalFilename.match(/[_\-]\s*(\d{1,3})[_\-](?:HD|SD)?/i);
+  if (fansubMatch) {
+    const num = parseInt(fansubMatch[1], 10);
+    if (num >= 1 && num <= 999) {
+      result.episode = num;
+      result.season = checkRomanSeason(originalFilename) || 1;
+      result.type = "Fansub Style";
+      result.confidence = 75;
+      return result;
+    }
+  }
+
+  // --- CAMADA 4: CASOS EXTREMOS / ERROS OCR ---
+  // 0l (Zero + L), O1 (Letra O + 1)
+  if (/\b0[lL]\b/.test(originalFilename)) {
+    result.episode = 1;
+    result.season = 1;
+    result.type = "OCR Error Fix";
+    result.confidence = 50;
+    return result;
+  }
+
+  // --- CAMADA 5: ÚLTIMO RECURSO - Qualquer número de 2 dígitos ---
+  const lastResort = cleanName.match(/\b(\d{2})\b/);
+  if (lastResort) {
+    const num = parseInt(lastResort[1], 10);
+    if (num >= 1 && num <= 99 && !(num > 19 && num < 30)) { // Evita anos como 20, 21, 22...
+      result.episode = num;
+      result.season = checkRomanSeason(cleanName) || 1;
+      result.type = "Last Resort";
+      result.confidence = 40;
+      return result;
+    }
+  }
+
+  return result;
+}
+
+// Fallback com IA para casos impossíveis
+// IMPORTANTE: chamadas diretas para provedores de IA com API key NUNCA devem ficar no client.
+// Por enquanto, desabilitamos o fallback de IA para não expor segredos.
+// Se quiser reativar no futuro, crie uma rota de API server-side que use variáveis
+// de ambiente (ex.: GROQ_API_KEY) e chame essa rota a partir daqui.
+async function detectEpisodeWithAI(_filename: string): Promise<ParseResult | null> {
+  return null;
+}
+
+// Função principal de detecção
+async function detectEpisode(filename: string): Promise<{ season?: number; episode?: number } | null> {
+  // Primeiro tenta o parser meticuloso
+  const result = detectEpisodeMeticulous(filename);
+  
+  if (result.episode !== null && result.confidence >= 40) {
+    console.log(`[Parser] ${filename} → S${result.season}E${result.episode} (${result.type}, ${result.confidence}%)`);
+    return {
+      season: result.season || 1,
+      episode: result.episode,
+    };
+  }
+
+  // Se não encontrou com confiança, tenta IA
+  console.log(`[Parser] ${filename} → Não detectado, tentando IA...`);
+  const aiResult = await detectEpisodeWithAI(filename);
+  
+  if (aiResult && aiResult.episode !== null) {
+    console.log(`[Parser] ${filename} → S${aiResult.season}E${aiResult.episode} (${aiResult.type})`);
+    return {
+      season: aiResult.season || 1,
+      episode: aiResult.episode,
+    };
+  }
+
+  console.log(`[Parser] ${filename} → Não foi possível detectar`);
   return null;
 }
 
@@ -287,24 +469,59 @@ export default function UploadV2Page() {
     addFiles(files);
   }, []);
 
-  function addFiles(files: File[]) {
-    const newFiles: UploadFile[] = files.map((file) => {
-      const detected = detectEpisode(file.name);
-      return {
-        id: Math.random().toString(36).substring(7),
-        file,
-        seasonNumber: detected?.season,
-        episodeNumber: detected?.episode,
-        progress: 0,
-        status: "pending",
-      };
-    });
+  async function addFiles(files: File[]) {
+    // Primeiro adiciona os arquivos com status "detecting"
+    const initialFiles: UploadFile[] = files.map((file) => ({
+      id: Math.random().toString(36).substring(7),
+      file,
+      seasonNumber: undefined,
+      episodeNumber: undefined,
+      progress: 0,
+      status: "pending" as const,
+    }));
 
-    setUploadFiles((prev) => [...prev, ...newFiles]);
+    setUploadFiles((prev) => [...prev, ...initialFiles]);
+
+    // Depois detecta os episódios em paralelo (com IA se necessário)
+    for (const uploadFile of initialFiles) {
+      const detected = await detectEpisode(uploadFile.file.name);
+      if (detected) {
+        setUploadFiles((prev) =>
+          prev.map((f) =>
+            f.id === uploadFile.id
+              ? { ...f, seasonNumber: detected.season, episodeNumber: detected.episode }
+              : f
+          )
+        );
+      }
+    }
   }
 
   function removeFile(id: string) {
     setUploadFiles((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  // Corrigir episódio manualmente
+  function updateEpisode(id: string, season: number, episode: number) {
+    setUploadFiles((prev) =>
+      prev.map((f) =>
+        f.id === id ? { ...f, seasonNumber: season, episodeNumber: episode } : f
+      )
+    );
+  }
+
+  // Corrigir com IA
+  async function fixWithAI(uploadFile: UploadFile) {
+    const result = await detectEpisodeWithAI(uploadFile.file.name);
+    if (result && result.episode !== null && result.episode !== undefined) {
+      setUploadFiles((prev) =>
+        prev.map((f) =>
+          f.id === uploadFile.id
+            ? { ...f, seasonNumber: result.season || 1, episodeNumber: result.episode! }
+            : f
+        )
+      );
+    }
   }
 
   // ============================================================================
@@ -345,13 +562,55 @@ export default function UploadV2Page() {
         prev.map((f) => (f.id === uploadFile.id ? { ...f, status: "uploading", startTime } : f))
       );
 
+      let episodeId: string | undefined;
+
+      // Se for série/anime e tiver episódio detectado, criar o episódio primeiro
+      if (
+        (createdTitle!.type === "SERIES" || createdTitle!.type === "ANIME") &&
+        uploadFile.seasonNumber &&
+        uploadFile.episodeNumber
+      ) {
+        try {
+          const epRes = await fetch("/api/episodes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              titleId: createdTitle!.id,
+              seasonNumber: uploadFile.seasonNumber,
+              episodeNumber: uploadFile.episodeNumber,
+              name: `Episódio ${uploadFile.episodeNumber}`,
+            }),
+          });
+
+          if (epRes.ok) {
+            const epData = await epRes.json();
+            episodeId = epData.id;
+            console.log(`Episódio criado: S${uploadFile.seasonNumber}E${uploadFile.episodeNumber} -> ${episodeId}`);
+          } else {
+            // Episódio pode já existir, tentar buscar
+            const existingRes = await fetch(
+              `/api/episodes?titleId=${createdTitle!.id}&season=${uploadFile.seasonNumber}&episode=${uploadFile.episodeNumber}`
+            );
+            if (existingRes.ok) {
+              const existingData = await existingRes.json();
+              if (existingData.id) {
+                episodeId = existingData.id;
+                console.log(`Episódio existente: S${uploadFile.seasonNumber}E${uploadFile.episodeNumber} -> ${episodeId}`);
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Erro ao criar/buscar episódio:", err);
+        }
+      }
+
       // Get upload URL
       const res = await fetch("/api/wasabi/upload-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           titleId: createdTitle!.id,
-          episodeId: undefined, // TODO: criar episódio se for série
+          episodeId,
           filename: uploadFile.file.name,
           contentType: uploadFile.file.type,
         }),
@@ -438,21 +697,55 @@ export default function UploadV2Page() {
     if (!createdTitle) return;
 
     try {
-      const res = await fetch(`/api/transcode/hls/${createdTitle.id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          crf,
-          deleteSource,
-        }),
-      });
+      // Para séries/animes, usar API de transcodificação de episódios
+      if (createdTitle.type === "SERIES" || createdTitle.type === "ANIME") {
+        const res = await fetch(`/api/admin/titles/${createdTitle.id}/transcode-episodes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            crf,
+            deleteSource,
+          }),
+        });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error ?? "Erro ao iniciar transcodificação");
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.error ?? "Erro ao iniciar transcodificação");
+        }
+
+        const jobCount = data.jobs?.length || 0;
+        setInfo(`✅ Transcodificação iniciada para ${jobCount} episódio(s)!`);
+      } else {
+        // Para filmes, usar API padrão (mas primeiro precisa definir hlsPath)
+        // Primeiro atualiza o hlsPath do título
+        const updateRes = await fetch(`/api/titles/${createdTitle.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            hlsPath: `titles/${createdTitle.slug}/`,
+          }),
+        });
+
+        if (!updateRes.ok) {
+          throw new Error("Erro ao configurar caminho HLS");
+        }
+
+        const res = await fetch(`/api/transcode/hls/${createdTitle.id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            crf,
+            deleteSource,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.error ?? "Erro ao iniciar transcodificação");
+        }
+
+        setInfo(`✅ Transcodificação iniciada! Job ID: ${data.jobId}`);
       }
-
-      setInfo(`✅ Transcodificação iniciada! Job ID: ${data.jobId}`);
     } catch (err: any) {
       setError(err.message ?? "Erro ao iniciar transcodificação");
     }
@@ -657,15 +950,44 @@ export default function UploadV2Page() {
                 >
                   <div className="flex-1">
                     <p className="font-semibold text-zinc-100">{f.file.name}</p>
-                    <p className="text-xs text-zinc-500">
-                      {formatBytes(f.file.size)}
-                      {f.seasonNumber && f.episodeNumber && (
-                        <span className="ml-2 text-emerald-400">
-                          • Detectado: S{f.seasonNumber.toString().padStart(2, "0")}E
+                    <div className="flex items-center gap-2 text-xs text-zinc-500">
+                      <span>{formatBytes(f.file.size)}</span>
+                      {f.seasonNumber && f.episodeNumber ? (
+                        <span className="text-emerald-400">
+                          • ✅ S{f.seasonNumber.toString().padStart(2, "0")}E
                           {f.episodeNumber.toString().padStart(2, "0")}
                         </span>
+                      ) : f.status === "pending" ? (
+                        <span className="text-yellow-400 animate-pulse">
+                          • 🔍 Detectando...
+                        </span>
+                      ) : (
+                        <span className="text-red-400">• ⚠️ Não detectado</span>
                       )}
-                    </p>
+                      {/* Botões sempre visíveis */}
+                      {f.status !== "uploading" && f.status !== "completed" && (
+                        <>
+                          <button
+                            onClick={() => fixWithAI(f)}
+                            className="text-purple-400 hover:text-purple-300 underline"
+                          >
+                            🤖 IA
+                          </button>
+                          <button
+                            onClick={() => {
+                              const ep = prompt("Número do episódio:", f.episodeNumber?.toString() || "1");
+                              const season = prompt("Temporada:", f.seasonNumber?.toString() || "1");
+                              if (ep && season) {
+                                updateEpisode(f.id, parseInt(season), parseInt(ep));
+                              }
+                            }}
+                            className="text-blue-400 hover:text-blue-300 underline"
+                          >
+                            ✏️ Editar
+                          </button>
+                        </>
+                      )}
+                    </div>
                     {f.status === "uploading" && (
                       <div className="mt-2 space-y-1">
                         <div className="flex items-center justify-between text-xs">

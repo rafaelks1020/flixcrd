@@ -372,7 +372,7 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
                               {ep.episodeNumber.toString().padStart(2, "0")} – {ep.name}
                             </div>
                             {ep.airDate && (
-                              <div className="text-[10px] text-zinc-500">
+                              <div className="text-[10px] text-zinc-500" suppressHydrationWarning>
                                 {new Date(ep.airDate).toLocaleDateString("pt-BR")}
                                 {ep.runtime && ` · ${ep.runtime} min`}
                               </div>

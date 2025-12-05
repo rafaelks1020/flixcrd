@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CompleteMultipartUploadCommand } from "@aws-sdk/client-s3";
 
-import { b2Client } from "@/lib/b2";
+import { wasabiClient } from "@/lib/wasabi";
 
-const bucketName = process.env.B2_BUCKET;
+const bucketName = process.env.WASABI_BUCKET_NAME;
 
 interface CompletePartInput {
   partNumber: number;
@@ -13,7 +13,7 @@ interface CompletePartInput {
 export async function POST(request: NextRequest) {
   if (!bucketName) {
     return NextResponse.json(
-      { error: "B2_BUCKET não configurado" },
+      { error: "WASABI_BUCKET_NAME não configurado" },
       { status: 500 },
     );
   }
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const response = await b2Client.send(command);
+    const response = await wasabiClient.send(command);
 
     return NextResponse.json({
       location: response.Location ?? null,
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("POST /api/wasabi/multipart/complete error", error);
     return NextResponse.json(
-      { error: "Erro ao finalizar upload multipart no B2" },
+      { error: "Erro ao finalizar upload multipart no Wasabi" },
       { status: 500 },
     );
   }
