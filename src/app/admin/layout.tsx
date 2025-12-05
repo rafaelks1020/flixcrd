@@ -7,6 +7,7 @@ import { Toaster } from "react-hot-toast";
 
 const navItems = [
   { href: "/admin", label: "Dashboard" },
+  { href: "/admin/analytics", label: "📊 Analytics" },
   { href: "/admin/catalog", label: "Catálogo" },
   { href: "/admin/upload-v2", label: "🚀 Upload Unificado" },
   { href: "/admin/jobs", label: "Jobs HLS" },
@@ -14,7 +15,7 @@ const navItems = [
   { href: "/admin/quick-actions", label: "⚡ Ações Rápidas" },
   { href: "/admin/logs", label: "📋 Logs" },
   { href: "/admin/settings", label: "⚙️ Configurações" },
-  { href: "/admin/status", label: "📊 Status" },
+  { href: "/admin/status", label: "Status" },
 ];
 
 export default function AdminLayout({

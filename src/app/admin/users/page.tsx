@@ -295,14 +295,17 @@ export default function AdminUsersPage() {
           </form>
         </div>
 
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-zinc-100">Usuários</h3>
-          {loading && <span className="text-[10px] text-zinc-500">Carregando...</span>}
-        </div>
-
-        {users.length === 0 && !loading ? (
-          <p className="text-zinc-500 text-xs">
-            Nenhum usuário encontrado. Verifique se o seed foi executado no banco de produção.
+        <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 text-xs">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-zinc-100">Usuários cadastrados</h3>
+            <div className="flex items-center gap-2">
+              {loading && <span className="text-[10px] text-zinc-500">Carregando...</span>}
+              <input
+                type="text"
+                placeholder="🔍 Buscar usuário..."
+                className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-600 focus:outline-none"
+              />
+            </div>
           </p>
         ) : (
           <div className="max-h-[480px] overflow-y-auto rounded-md border border-zinc-800">
