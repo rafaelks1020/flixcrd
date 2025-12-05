@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth";
 
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
-import HomeClientNew from "./HomeClientNew";
+import HomeClient from "./HomeClient";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +26,7 @@ export default async function Home() {
   });
 
   return (
-    <HomeClientNew
+    <HomeClient
       isLoggedIn={isLoggedIn}
       isAdmin={isAdmin}
       heroTitle={heroTitle}
