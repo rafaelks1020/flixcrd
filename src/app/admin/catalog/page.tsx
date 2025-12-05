@@ -68,6 +68,11 @@ export default function AdminCatalogPage() {
   const [refreshingTmdb, setRefreshingTmdb] = useState(false);
   const [hlsStatus, setHlsStatus] = useState<Record<string, string>>({});
 
+  // BUSCA E FILTROS
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterType, setFilterType] = useState<TitleType | "ALL">("ALL");
+  const [filterHlsStatus, setFilterHlsStatus] = useState<"ALL" | "WITH_HLS" | "WITHOUT_HLS">("ALL");
+
   const [form, setForm] = useState({
     tmdbId: "",
     type: "MOVIE" as TitleType,
@@ -513,6 +518,53 @@ export default function AdminCatalogPage() {
           )}
         </div>
 
+        {/* BUSCA E FILTROS */}
+        <div className="space-y-2 rounded-md border border-zinc-700 bg-zinc-900/50 p-3">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="🔍 Buscar por nome..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-600 focus:outline-none"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => {
+                  setSearchQuery("");
+                  setFilterType("ALL");
+                  setFilterHlsStatus("ALL");
+                }}
+                className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value as TitleType | "ALL")}
+              className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 focus:border-emerald-600 focus:outline-none"
+            >
+              <option value="ALL">Todos os tipos</option>
+              <option value="MOVIE">🎬 Filmes</option>
+              <option value="SERIES">📺 Séries</option>
+              <option value="ANIME">🎌 Animes</option>
+              <option value="OTHER">📦 Outros</option>
+            </select>
+            <select
+              value={filterHlsStatus}
+              onChange={(e) => setFilterHlsStatus(e.target.value as "ALL" | "WITH_HLS" | "WITHOUT_HLS")}
+              className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 focus:border-emerald-600 focus:outline-none"
+            >
+              <option value="ALL">Todos os status</option>
+              <option value="WITH_HLS">✅ Com HLS</option>
+              <option value="WITHOUT_HLS">⚪ Sem HLS</option>
+            </select>
+          </div>
+        </div>
+
         <div className="mb-2">
           <button
             type="button"
@@ -561,20 +613,55 @@ export default function AdminCatalogPage() {
             Nenhum título cadastrado ainda. Use o botão "+ Novo título (TMDb)" para criar o primeiro.
           </p>
         ) : (
-          <div className="max-h-[520px] overflow-y-auto rounded-md border border-zinc-800">
-            <table className="w-full border-collapse text-left">
-              <thead className="bg-zinc-900 text-[11px] uppercase text-zinc-400">
-                <tr>
-                  <th className="px-3 py-2">Nome</th>
-                  <th className="px-3 py-2">Tipo</th>
-                  <th className="px-3 py-2">Slug</th>
-                  <th className="px-3 py-2">TMDb</th>
-                  <th className="px-3 py-2">HLS</th>
-                  <th className="px-3 py-2 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800 bg-zinc-950">
-                {titles.map((t) => (
+          <>
+            {(() => {
+              // APLICAR FILTROS
+              const filtered = titles.filter((t) => {
+                // Filtro de busca
+                if (searchQuery) {
+                  const query = searchQuery.toLowerCase();
+                  const matchName = t.name.toLowerCase().includes(query);
+                  const matchOriginal = t.originalName?.toLowerCase().includes(query);
+                  const matchSlug = t.slug.toLowerCase().includes(query);
+                  if (!matchName && !matchOriginal && !matchSlug) return false;
+                }
+                
+                // Filtro de tipo
+                if (filterType !== "ALL" && t.type !== filterType) return false;
+                
+                // Filtro de HLS
+                if (filterHlsStatus === "WITH_HLS" && hlsStatus[t.id] !== "hls_ready") return false;
+                if (filterHlsStatus === "WITHOUT_HLS" && hlsStatus[t.id] === "hls_ready") return false;
+                
+                return true;
+              });
+
+              return (
+                <>
+                  <div className="text-xs text-zinc-400">
+                    {filtered.length} de {titles.length} título(s)
+                  </div>
+                  <div className="max-h-[520px] overflow-y-auto rounded-md border border-zinc-800">
+                    <table className="w-full border-collapse text-left">
+                      <thead className="bg-zinc-900 text-[11px] uppercase text-zinc-400">
+                        <tr>
+                          <th className="px-3 py-2">Nome</th>
+                          <th className="px-3 py-2">Tipo</th>
+                          <th className="px-3 py-2">Slug</th>
+                          <th className="px-3 py-2">TMDb</th>
+                          <th className="px-3 py-2">HLS</th>
+                          <th className="px-3 py-2 text-right">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-800 bg-zinc-950">
+                        {filtered.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="px-3 py-8 text-center text-xs text-zinc-500">
+                              Nenhum título encontrado com os filtros aplicados.
+                            </td>
+                          </tr>
+                        ) : (
+                          filtered.map((t) => (
                   <tr key={t.id} className="align-top text-[11px]">
                     <td className="px-3 py-2">
                       <div className="font-medium text-zinc-100">{t.name}</div>
@@ -685,10 +772,15 @@ export default function AdminCatalogPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              );
+            })()}
+          </>
         )}
       </div>
 
