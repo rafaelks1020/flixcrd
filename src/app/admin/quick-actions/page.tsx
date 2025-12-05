@@ -61,10 +61,10 @@ export default function QuickActionsPage() {
       const res = await fetch("/api/status/cloudflare");
       const data = await res.json();
       
-      if (res.ok && data.status === "ok") {
-        toast.success("✅ Cloudflare proxy funcionando!");
+      if (res.ok && data.success) {
+        toast.success(`✅ ${data.message}`);
       } else {
-        toast.error("❌ Cloudflare proxy com erro");
+        toast.error(`❌ ${data.error || "Cloudflare proxy com erro"}`);
       }
     } catch (err) {
       toast.error("❌ Erro ao verificar Cloudflare");
