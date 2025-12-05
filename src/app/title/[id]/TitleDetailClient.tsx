@@ -80,7 +80,7 @@ export default function TitleDetailClient({
   };
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-black pt-16">
       <Toast />
       <Navbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
 

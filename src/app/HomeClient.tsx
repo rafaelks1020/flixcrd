@@ -162,7 +162,7 @@ export default function HomeClientNew({
       <HeroSection title={heroTitle} isLoggedIn={isLoggedIn} />
 
       {/* Content */}
-      <div className="relative z-10 -mt-32 space-y-8 pb-16">
+      <div className="relative z-10 -mt-32 space-y-8 pb-16 px-4">
         {loading ? (
           <>
             <SkeletonRow />

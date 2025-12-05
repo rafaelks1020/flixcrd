@@ -35,7 +35,7 @@ export default function HeroSection({ title, isLoggedIn }: HeroSectionProps) {
     : null;
 
   return (
-    <section className="relative h-[85vh] min-h-[600px] w-full overflow-hidden bg-black">
+    <section className="relative h-[85vh] min-h-[600px] w-full overflow-hidden bg-black pt-16">
       {/* Background Image/Video */}
       <div className="absolute inset-0">
         {title.backdropUrl && (

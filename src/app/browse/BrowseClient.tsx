@@ -63,7 +63,7 @@ export default function BrowseClientNew({
       <Toast />
       <Navbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
 
-      <div className="mx-auto max-w-7xl px-4 py-24 md:px-8">
+      <div className="mx-auto max-w-7xl px-4 pt-24 pb-16 md:px-8">
         {/* Header */}
         <div className="mb-8 space-y-6">
           <h1 className="text-4xl font-bold text-white">Catálogo</h1>
