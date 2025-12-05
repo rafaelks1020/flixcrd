@@ -33,7 +33,7 @@ export default async function AdminHomePage() {
           <p className="text-[11px] uppercase text-zinc-500">Títulos com HLS pronto</p>
           <p className="mt-2 text-3xl font-semibold text-emerald-300">{titlesWithHlsCount}</p>
           <p className="mt-1 text-[11px] text-zinc-500">
-            Já possuem playlist HLS detectada no Wasabi.
+            Já possuem playlist HLS detectada no B2.
           </p>
         </div>
 
@@ -67,7 +67,7 @@ export default async function AdminHomePage() {
         >
           <p className="font-semibold">Upload / HLS</p>
           <p className="mt-1 text-[11px] text-zinc-400">
-            Enviar arquivos para o Wasabi e disparar jobs HLS.
+            Enviar arquivos para o B2 e disparar jobs HLS.
           </p>
         </Link>
 
