@@ -190,6 +190,12 @@ export default function UploadV2Page() {
         setInfo(
           `ℹ️ Título "${existing.name}" já existe no catálogo! Você pode fazer upload de mais arquivos para ele.`
         );
+        
+        // Se for série/anime, criar episódios automaticamente se detectados
+        if ((existing.type === "SERIES" || existing.type === "ANIME") && uploadFiles.length > 0) {
+          await createEpisodesFromFiles(existing.id);
+        }
+        
         setCreatingTitle(false);
         return;
       }
@@ -216,10 +222,50 @@ export default function UploadV2Page() {
         type: data.type,
       });
       setInfo(`✅ Título "${data.name}" criado com sucesso!`);
+      
+      // Se for série/anime, criar episódios automaticamente se detectados
+      if ((data.type === "SERIES" || data.type === "ANIME") && uploadFiles.length > 0) {
+        await createEpisodesFromFiles(data.id);
+      }
     } catch (err: any) {
       setError(err.message ?? "Erro ao criar título");
     } finally {
       setCreatingTitle(false);
+    }
+  }
+
+  async function createEpisodesFromFiles(titleId: string) {
+    // Agrupar por temporada
+    const episodesBySeason = new Map<number, Array<{ episodeNumber: number; name: string }>>();
+    
+    uploadFiles.forEach((file) => {
+      if (file.seasonNumber && file.episodeNumber) {
+        const season = file.seasonNumber;
+        if (!episodesBySeason.has(season)) {
+          episodesBySeason.set(season, []);
+        }
+        episodesBySeason.get(season)!.push({
+          episodeNumber: file.episodeNumber,
+          name: `Episódio ${file.episodeNumber}`,
+        });
+      }
+    });
+
+    // Criar episódios para cada temporada
+    for (const [seasonNumber, episodes] of episodesBySeason.entries()) {
+      try {
+        await fetch("/api/admin/episodes/create-batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            titleId,
+            seasonNumber,
+            episodes,
+          }),
+        });
+      } catch (err) {
+        console.error(`Erro ao criar episódios da temporada ${seasonNumber}:`, err);
+      }
     }
   }
 
