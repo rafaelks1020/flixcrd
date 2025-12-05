@@ -40,10 +40,6 @@ export default function AdminLayout({
             color: "#fff",
             border: "1px solid #27272a",
           },
-              primary: "#ef4444",
-              secondary: "#fafafa",
-            },
-          },
         }}
       />
       <aside className="flex w-64 flex-col border-r border-zinc-800 px-4 py-6 space-y-6">

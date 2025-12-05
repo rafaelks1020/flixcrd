@@ -895,7 +895,7 @@ export default function AdminCatalogPage() {
         <BulkActions
           selectedIds={selectedIds}
           onClearSelection={() => setSelectedIds([])}
-          onRefresh={fetchTitles}
+          onRefresh={loadTitles}
         />
       </div>
 
