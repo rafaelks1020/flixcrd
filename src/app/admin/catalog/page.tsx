@@ -98,31 +98,26 @@ export default function AdminCatalogPage() {
       const data = await res.json();
       setTitles(data);
 
-      // Atualiza status de HLS consultando o Wasabi
-      const statusMap: Record<string, string> = {};
-      await Promise.all(
-        (data as Title[]).map(async (t) => {
-          if (!t.hlsPath) {
-            statusMap[t.id] = "no_upload";
-            return;
-          }
-
-          try {
-            const resStatus = await fetch(`/api/admin/titles/${t.id}/hls-status`);
+      // Atualiza status de HLS em BATCH (1 request só!)
+      const titleIds = (data as Title[]).map((t) => t.id);
+      
+      if (titleIds.length > 0) {
+        try {
+          const resStatus = await fetch("/api/admin/titles/hls-status-batch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ titleIds }),
+          });
+          
+          if (resStatus.ok) {
             const json = await resStatus.json();
-            if (json?.hasHls) {
-              statusMap[t.id] = "hls_ready";
-            } else if (json?.hasUpload) {
-              statusMap[t.id] = "upload_pending";
-            } else {
-              statusMap[t.id] = "no_upload";
-            }
-          } catch {
-            statusMap[t.id] = "no_upload";
+            setHlsStatus(json.statusMap || {});
           }
-        }),
-      );
-      setHlsStatus(statusMap);
+        } catch {
+          // Se falhar, deixa sem status
+          setHlsStatus({});
+        }
+      }
     } catch (err: any) {
       setError(err.message ?? "Erro ao carregar títulos");
     } finally {
@@ -689,17 +684,19 @@ export default function AdminCatalogPage() {
                     <td className="px-3 py-2 text-zinc-400">
                       {t.tmdbId ? `#${t.tmdbId}` : "-"}
                     </td>
-                    <td className="px-3 py-2 text-zinc-400">
+                    <td className="px-3 py-2">
                       {hlsStatus[t.id] === "hls_ready" ? (
                         <span className="inline-flex items-center rounded-md border border-emerald-700 px-2 py-0.5 text-[10px] text-emerald-300 bg-emerald-900/40">
-                          HLS pronto
+                          🟢 Pronto
                         </span>
                       ) : hlsStatus[t.id] === "upload_pending" ? (
                         <span className="inline-flex items-center rounded-md border border-yellow-700 px-2 py-0.5 text-[10px] text-yellow-300 bg-yellow-900/40">
-                          Upload feito (HLS pendente)
+                          🟡 Pendente
                         </span>
                       ) : (
-                        <span className="text-[10px] text-zinc-500">Sem upload</span>
+                        <span className="inline-flex items-center rounded-md border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-500 bg-zinc-900/40">
+                          ⚪ Sem vídeo
+                        </span>
                       )}
                     </td>
                     <td className="px-3 py-2 text-right">
