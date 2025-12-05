@@ -779,7 +779,10 @@ export default function AdminCatalogPage() {
                             ⋯
                           </button>
                           {openActionsId === t.id && (
-                            <div className="absolute right-0 z-20 mt-1 w-44 rounded-md border border-zinc-800 bg-zinc-900 p-1 text-left shadow-lg">
+                            <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-zinc-700 bg-zinc-900/95 backdrop-blur-xl p-2 text-left shadow-2xl">
+                              <div className="mb-2 px-2 py-1 text-[10px] font-semibold uppercase text-zinc-500 border-b border-zinc-800">
+                                AÇÕES
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -787,15 +790,19 @@ export default function AdminCatalogPage() {
                                   handleFetchSubtitle(t.id, "pt-BR");
                                 }}
                                 disabled={subtitleLoadingId === t.id}
-                                className="block w-full rounded-[4px] px-2 py-1 text-[11px] text-zinc-200 hover:bg-zinc-800 disabled:opacity-60"
+                                className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[11px] text-zinc-200 hover:bg-gradient-to-r hover:from-blue-600/20 hover:to-blue-700/20 hover:border-blue-500/30 border border-transparent transition-all disabled:opacity-60"
                               >
-                                {subtitleLoadingId === t.id
-                                  ? "Baixando legenda..."
-                                  : "Baixar legenda PT-BR"}
+                                <span className="text-sm">📥</span>
+                                <span className="flex-1 text-left">
+                                  {subtitleLoadingId === t.id
+                                    ? "Baixando legenda..."
+                                    : "Baixar legenda PT-BR"}
+                                </span>
                               </button>
                               {hlsStatus[t.id] === "hls_ready" ? (
-                                <div className="mt-0.5 block w-full rounded-[4px] px-2 py-1 text-[11px] text-emerald-300">
-                                  HLS pronto
+                                <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] text-emerald-400 bg-emerald-900/20 border border-emerald-700/30">
+                                  <span className="text-sm">✅</span>
+                                  <span>HLS pronto</span>
                                 </div>
                               ) : (
                                 <button
@@ -805,14 +812,17 @@ export default function AdminCatalogPage() {
                                     handleTranscode(t.id, t.type);
                                   }}
                                   disabled={transcodingId === t.id}
-                                  className="mt-0.5 block w-full rounded-[4px] px-2 py-1 text-[11px] text-emerald-200 hover:bg-emerald-900/40 disabled:opacity-60"
+                                  className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[11px] text-emerald-300 hover:bg-gradient-to-r hover:from-emerald-600/20 hover:to-emerald-700/20 hover:border-emerald-500/30 border border-transparent transition-all disabled:opacity-60"
                                 >
-                                  {transcodingId === t.id
-                                    ? transcodingStatus === "running" &&
-                                      transcodingProgress !== null
-                                      ? `Gerando HLS... ${Math.round(transcodingProgress)}%`
-                                      : "Gerando HLS..."
-                                    : "Gerar HLS"}
+                                  <span className="text-sm">🎬</span>
+                                  <span className="flex-1 text-left">
+                                    {transcodingId === t.id
+                                      ? transcodingStatus === "running" &&
+                                        transcodingProgress !== null
+                                        ? `Gerando HLS... ${Math.round(transcodingProgress)}%`
+                                        : "Gerando HLS..."
+                                      : "Gerar HLS"}
+                                  </span>
                                 </button>
                               )}
                               <button
@@ -821,9 +831,10 @@ export default function AdminCatalogPage() {
                                   setOpenActionsId(null);
                                   handleDelete(t.id);
                                 }}
-                                className="mt-0.5 block w-full rounded-[4px] px-2 py-1 text-[11px] text-red-300 hover:bg-red-900/40"
+                                className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[11px] text-red-300 hover:bg-gradient-to-r hover:from-red-600/20 hover:to-red-700/20 hover:border-red-500/30 border border-transparent transition-all"
                               >
-                                Excluir
+                                <span className="text-sm">🗑️</span>
+                                <span className="flex-1 text-left">Excluir</span>
                               </button>
                             </div>
                           )}
