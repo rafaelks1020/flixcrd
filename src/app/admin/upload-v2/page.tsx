@@ -555,7 +555,7 @@ export default function UploadV2Page() {
               <span className="text-zinc-400">Título:</span>
               <span className="font-semibold text-emerald-400">{createdTitle.name}</span>
               <a
-                href={`/admin/catalog/${createdTitle.id}`}
+                href="/admin/catalog"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-blue-400 hover:text-blue-300 underline"
