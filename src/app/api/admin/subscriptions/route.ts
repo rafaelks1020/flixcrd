@@ -33,7 +33,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userId, status, plan, currentPeriodStart, currentPeriodEnd } = body;
+    const { userId, status, plan, price, currentPeriodStart, currentPeriodEnd } = body;
 
     if (!userId || !status) {
       return NextResponse.json(
@@ -55,7 +55,8 @@ export async function POST(request: NextRequest) {
         where: { userId },
         data: {
           status,
-          plan,
+          plan: plan || existing.plan,
+          price: price || existing.price,
           currentPeriodStart: currentPeriodStart
             ? new Date(currentPeriodStart)
             : undefined,
@@ -70,7 +71,8 @@ export async function POST(request: NextRequest) {
         data: {
           userId,
           status,
-          plan,
+          plan: plan || "BASIC",
+          price: price || 10.00,
           currentPeriodStart: currentPeriodStart
             ? new Date(currentPeriodStart)
             : undefined,
