@@ -55,7 +55,7 @@ export default function ProfilesPage() {
       {/* Logo */}
       <Link href="/" style={{ position: 'absolute', top: '24px', left: '4%', textDecoration: 'none' }}>
         <span style={{ fontSize: '32px', fontWeight: 800, background: 'linear-gradient(135deg, #e50914 0%, #b81d24 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-          PaelFlix
+          Pflix
         </span>
       </Link>
 

@@ -64,7 +64,7 @@ export default function AdminLayout({
           <div className="absolute -inset-1 bg-gradient-to-r from-emerald-600 to-blue-600 rounded-lg blur opacity-20"></div>
           <div className="relative">
             <h1 className="text-lg font-bold bg-gradient-to-r from-emerald-400 to-blue-400 bg-clip-text text-transparent">
-              PaelFlix Admin
+              Pflix Admin
             </h1>
             <p className="text-xs text-zinc-500">Painel de controle</p>
           </div>
@@ -99,7 +99,7 @@ export default function AdminLayout({
             href="/"
             className="group relative rounded-lg border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:border-emerald-500/50 hover:bg-zinc-800 hover:text-zinc-50 transition-all"
           >
-            <span className="relative z-10">🏠 Ir para PaelFlix</span>
+            <span className="relative z-10">🏠 Ir para Pflix</span>
           </Link>
           <button
             type="button"

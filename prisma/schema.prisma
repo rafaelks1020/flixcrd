@@ -24,6 +24,8 @@ model User {
   id           String        @id @default(cuid())
   email        String        @unique
   name         String?
+  cpfCnpj      String?       // CPF ou CNPJ do usuário (para pagamentos)
+  phone        String?       // Telefone do usuário
   avatar       String?
   passwordHash String
   role         UserRole      @default(USER)
@@ -56,12 +58,42 @@ model Subscription {
   id                 String   @id @default(cuid())
   userId             String   @unique
   user               User     @relation(fields: [userId], references: [id])
-  status             String   // e.g. ACTIVE, CANCELED, TRIALING
-  plan               String?  // e.g. BASIC, PREMIUM
+  status             String   // ACTIVE, PENDING, OVERDUE, CANCELED, EXPIRED
+  plan               String   @default("BASIC") // BASIC = R$10/mês
+  price              Float    @default(10.00)
+  
+  // Asaas integration
+  asaasCustomerId    String?  // ID do cliente no Asaas
+  asaasSubscriptionId String? // ID da assinatura recorrente no Asaas
+  asaasPaymentId     String?  // ID do último pagamento
+  
   currentPeriodStart DateTime?
   currentPeriodEnd   DateTime?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+
+  payments           Payment[]
+}
+
+model Payment {
+  id                String   @id @default(cuid())
+  subscriptionId    String
+  subscription      Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  
+  asaasPaymentId    String   @unique // ID do pagamento no Asaas
+  status            String   // PENDING, CONFIRMED, RECEIVED, OVERDUE, REFUNDED, etc
+  value             Float
+  billingType       String   // PIX, BOLETO, CREDIT_CARD
+  dueDate           DateTime
+  paymentDate       DateTime?
+  invoiceUrl        String?  // Link do boleto/fatura
+  pixQrCode         String?  // QR Code PIX (base64)
+  pixCopiaECola     String?  // Código PIX copia e cola
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([subscriptionId])
 }
 
 model Genre {

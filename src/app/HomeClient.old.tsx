@@ -216,7 +216,7 @@ export default function HomeClient({ isLoggedIn, isAdmin, heroTitle }: HomeClien
           <header className="flex flex-col gap-3 px-4 py-4 text-sm text-zinc-200 md:flex-row md:items-center md:justify-between md:px-10">
             <div className="flex items-center gap-3">
               <span className="text-xl font-bold tracking-tight text-red-600">
-                PaelFlix
+                Pflix
               </span>
             </div>
             <div className="flex flex-1 items-center gap-3 md:justify-end">

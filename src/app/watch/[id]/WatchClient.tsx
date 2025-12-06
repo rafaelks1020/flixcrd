@@ -80,6 +80,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const [nextEpisode, setNextEpisode] = useState<{ id: string; name: string; episodeNumber: number; seasonNumber: number } | null>(null);
   const [showNextEpisodeCountdown, setShowNextEpisodeCountdown] = useState(false);
   const [countdown, setCountdown] = useState(10);
+  const [subscriptionBlocked, setSubscriptionBlocked] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -120,7 +121,19 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     async function loadPlayback() {
       setLoading(true);
       setError(null);
+      setSubscriptionBlocked(false);
+      
       try {
+        // 0) Verificar assinatura antes de carregar o vídeo
+        const subRes = await fetch('/api/subscription/check');
+        const subData = await subRes.json();
+        
+        if (!subData.canWatch) {
+          setSubscriptionBlocked(true);
+          setLoading(false);
+          return;
+        }
+        
         // 1) Buscar configuração do perfil
         let proxyFlag = false;
         if (profileId) {
@@ -606,6 +619,70 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-black px-4 text-center text-sm text-red-300">
         {error}
+      </div>
+    );
+  }
+
+  // Tela de bloqueio por falta de assinatura
+  if (subscriptionBlocked) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-black to-gray-900 px-4">
+        <div className="max-w-md w-full text-center">
+          <div className="mb-8">
+            <div className="w-24 h-24 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg className="w-12 h-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v2m0-2h2m-2 0H10m5-6a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-white mb-3">Assinatura Necessária</h1>
+            <p className="text-gray-400 mb-6">
+              Para assistir este conteúdo, você precisa ter uma assinatura ativa do FlixCRD.
+            </p>
+          </div>
+
+          <div className="bg-gray-800/50 backdrop-blur rounded-xl p-6 mb-6 border border-gray-700">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-white font-medium">Plano Básico</span>
+              <span className="text-2xl font-bold text-white">R$ 10<span className="text-sm text-gray-400">/mês</span></span>
+            </div>
+            <ul className="text-left text-sm text-gray-300 space-y-2 mb-4">
+              <li className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Acesso a todos os filmes e séries
+              </li>
+              <li className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Qualidade HD
+              </li>
+              <li className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Sem anúncios
+              </li>
+            </ul>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => router.push('/subscribe')}
+              className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
+            >
+              Assinar Agora
+            </button>
+            <button
+              onClick={() => router.back()}
+              className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors"
+            >
+              Voltar
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

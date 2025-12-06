@@ -65,7 +65,7 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
               letterSpacing: '-1px',
             }}
           >
-            PaelFlix
+            Pflix
           </span>
         </Link>
 
@@ -277,6 +277,7 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
                   {[
                     { href: '/profiles', label: 'Trocar Perfil' },
                     { href: '/settings', label: 'Configurações' },
+                    { href: '/subscribe', label: '💳 Minha Assinatura' },
                   ].map((item) => (
                     <Link
                       key={item.href}

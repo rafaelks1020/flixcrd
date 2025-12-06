@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import Providers from "@/components/Providers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,15 +15,15 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "PaelFlix",
-    template: "%s | PaelFlix",
+    default: "Pflix",
+    template: "%s | Pflix",
   },
-  description: "PaelFlix - streaming de filmes, séries e animes estilo Netflix.",
-  applicationName: "PaelFlix",
+  description: "Pflix - sua plataforma de entretenimento digital.",
+  applicationName: "Pflix",
   openGraph: {
-    title: "PaelFlix",
-    description: "PaelFlix - streaming de filmes, séries e animes estilo Netflix.",
-    siteName: "PaelFlix",
+    title: "Pflix",
+    description: "Pflix - sua plataforma de entretenimento digital.",
+    siteName: "Pflix",
     type: "website",
   },
   icons: {
@@ -40,7 +41,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );

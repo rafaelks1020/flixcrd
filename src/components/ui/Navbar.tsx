@@ -49,7 +49,7 @@ export default function Navbar({ isLoggedIn, isAdmin, onSearch }: NavbarProps) {
             className="flex items-center gap-2 group"
           >
             <span className="text-2xl font-bold bg-gradient-to-r from-red-600 to-red-500 bg-clip-text text-transparent group-hover:from-red-500 group-hover:to-red-400 transition-all">
-              PaelFlix
+              Pflix
             </span>
           </Link>
 
@@ -163,6 +163,13 @@ export default function Navbar({ isLoggedIn, isAdmin, onSearch }: NavbarProps) {
                           onClick={() => setShowProfileMenu(false)}
                         >
                           Configurações
+                        </Link>
+                        <Link
+                          href="/subscribe"
+                          className="block rounded-md px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+                          onClick={() => setShowProfileMenu(false)}
+                        >
+                          💳 Minha Assinatura
                         </Link>
                         <hr className="my-1 border-zinc-800" />
                         <Link

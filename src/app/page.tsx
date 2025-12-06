@@ -1,8 +1,11 @@
 import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
+import { hasActiveSubscription } from "@/lib/subscription";
 import HomeClientNew2 from "./HomeClientNew2";
+import LandingPage from "@/components/LandingPage";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +14,22 @@ export default async function Home() {
 
   const isLoggedIn = !!session;
   const isAdmin = session?.user?.role === "ADMIN";
+
+  // Se não está logado, mostrar landing page
+  if (!isLoggedIn) {
+    return <LandingPage />;
+  }
+
+  // Se está logado mas não é admin, verificar assinatura
+  if (!isAdmin) {
+    const userId = session?.user?.id;
+    if (userId) {
+      const hasAccess = await hasActiveSubscription(userId);
+      if (!hasAccess) {
+        redirect("/subscribe");
+      }
+    }
+  }
 
   // Buscar top 10 títulos populares para aleatorizar o hero
   const topTitles = await prisma.title.findMany({

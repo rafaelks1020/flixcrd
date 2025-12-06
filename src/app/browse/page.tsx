@@ -1,6 +1,8 @@
 import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
+import { hasActiveSubscription } from "@/lib/subscription";
 import BrowseClient from "./BrowseClient";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +11,17 @@ export default async function BrowsePage() {
   const session: any = await getServerSession(authOptions);
   const isLoggedIn = !!session;
   const isAdmin = session?.user?.role === "ADMIN";
+
+  // Verificar assinatura
+  if (isLoggedIn && !isAdmin) {
+    const userId = session?.user?.id;
+    if (userId) {
+      const hasAccess = await hasActiveSubscription(userId);
+      if (!hasAccess) {
+        redirect("/subscribe");
+      }
+    }
+  }
 
   const titlesRaw = await prisma.title.findMany({
     orderBy: { popularity: "desc" },

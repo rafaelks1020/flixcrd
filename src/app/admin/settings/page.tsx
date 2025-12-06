@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState({
-    siteName: "PaelFlix",
+    siteName: "Pflix",
     siteDescription: "Sua plataforma de streaming",
     maintenanceMode: false,
     allowRegistration: true,

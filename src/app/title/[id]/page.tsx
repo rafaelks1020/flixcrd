@@ -1,8 +1,9 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
+import { hasActiveSubscription } from "@/lib/subscription";
 import TitleDetailClient from "./TitleDetailClient";
 
 interface PageProps {
@@ -30,6 +31,15 @@ export default async function TitleDetailPage({ params }: PageProps) {
 
   const session: any = await getServerSession(authOptions);
   const userId = session?.user?.id as string | undefined;
+  const isAdmin = session?.user?.role === "ADMIN";
+
+  // Verificar assinatura
+  if (session && !isAdmin && userId) {
+    const hasAccess = await hasActiveSubscription(userId);
+    if (!hasAccess) {
+      redirect("/subscribe");
+    }
+  }
 
   const title = await prisma.title.findUnique({
     where: { id },
@@ -183,7 +193,6 @@ export default async function TitleDetailPage({ params }: PageProps) {
   }
 
   const isLoggedIn = !!session;
-  const isAdmin = session?.user?.role === "ADMIN";
 
   return (
     <TitleDetailClient

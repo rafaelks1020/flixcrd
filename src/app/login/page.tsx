@@ -1,39 +1,17 @@
-"use client";
+'use client';
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const router = useRouter();
 
-  const [email, setEmail] = useState("admin@flixcrd.local");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [bgUrl, setBgUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    async function loadBackground() {
-      try {
-        const res = await fetch("/api/titles");
-        const json = await res.json();
-
-        if (!Array.isArray(json) || json.length === 0) return;
-
-        const withBackdrop = json.find((t: any) => t.backdropUrl) ?? json[0];
-        const url = withBackdrop.backdropUrl || withBackdrop.posterUrl;
-        if (typeof url === "string" && url.length > 0) {
-          setBgUrl(url);
-        }
-      } catch {
-        // se falhar, mantemos o fundo preto
-      }
-    }
-
-    loadBackground();
-  }, []);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -58,80 +36,99 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-black text-zinc-50">
-      {bgUrl && (
-        <div className="pointer-events-none absolute inset-0">
-          <img
-            src={bgUrl}
-            alt="Plano de fundo de títulos"
-            className="h-full w-full object-cover opacity-40"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-black/40" />
-        </div>
-      )}
+    <div className="min-h-screen bg-black text-white">
+      {/* Background */}
+      <div className="fixed inset-0 bg-gradient-to-br from-red-900/20 via-black to-purple-900/20" />
+      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-600/10 via-transparent to-transparent" />
 
-      <div className="relative z-10 flex min-h-screen flex-col">
-        <header className="flex items-center justify-between px-4 py-4 text-sm text-zinc-200 md:px-10">
-          <Link href="/" className="text-lg font-semibold tracking-tight">
-            PaelFlix
+      {/* Content */}
+      <div className="relative z-10 min-h-screen flex flex-col">
+        {/* Header */}
+        <header className="flex items-center justify-between px-6 md:px-12 py-6">
+          <Link href="/" className="flex items-center gap-2">
+            <span className="text-2xl font-bold bg-gradient-to-r from-red-500 to-red-600 bg-clip-text text-transparent">
+              Pflix
+            </span>
+          </Link>
+          <Link
+            href="/register"
+            className="text-sm text-gray-300 hover:text-white transition-colors"
+          >
+            Criar conta
           </Link>
         </header>
 
-        <main className="flex flex-1 items-center justify-center px-4 pb-10 pt-4 md:justify-end md:px-10">
-          <div className="w-full max-w-md rounded-xl border border-zinc-800/80 bg-black/80 p-8 shadow-2xl">
-            <h1 className="mb-6 text-2xl font-semibold text-zinc-50 text-center">
-              Entrar
-            </h1>
-
-            {formError && (
-              <div className="mb-4 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-                {formError}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1">
-                <label className="block text-sm font-medium text-zinc-200" htmlFor="email">
-                  Email
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 focus:border-zinc-500"
-                  autoComplete="email"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-sm font-medium text-zinc-200" htmlFor="password">
-                  Senha
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 focus:border-zinc-500"
-                  autoComplete="current-password"
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="mt-2 flex w-full items-center justify-center rounded-md bg-zinc-100 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-white disabled:opacity-70"
-              >
-                {loading ? "Entrando..." : "Entrar"}
-              </button>
-
-              <p className="mt-4 text-xs text-zinc-500 text-center">
-                Admin padrão: <span className="font-mono">admin@flixcrd.local</span> / <span className="font-mono">admin123</span>
+        {/* Form */}
+        <main className="flex-1 flex items-center justify-center px-6 py-12">
+          <div className="w-full max-w-md">
+            <div className="bg-gray-900/80 backdrop-blur-xl rounded-2xl border border-gray-800 p-8 shadow-2xl">
+              <h1 className="text-2xl font-bold text-center mb-2">
+                Bem-vindo de volta
+              </h1>
+              <p className="text-gray-400 text-center mb-8">
+                Entre na sua conta Pflix
               </p>
-            </form>
+
+              {formError && (
+                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+                  <p className="text-red-400 text-sm text-center">{formError}</p>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="seu@email.com"
+                    required
+                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Senha
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Sua senha"
+                    required
+                    className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition-colors"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-4 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                      Entrando...
+                    </>
+                  ) : (
+                    "Entrar"
+                  )}
+                </button>
+              </form>
+
+              <div className="mt-8 pt-6 border-t border-gray-800 text-center">
+                <p className="text-gray-400">
+                  Não tem uma conta?{" "}
+                  <Link href="/register" className="text-red-500 hover:text-red-400 font-medium">
+                    Criar conta
+                  </Link>
+                </p>
+              </div>
+            </div>
           </div>
         </main>
       </div>
