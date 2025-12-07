@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-mobile";
 import { wasabiClient } from "@/lib/wasabi";
 import { generateStreamToken, isProtectedStreamingEnabled } from "@/lib/stream-token";
 
@@ -18,9 +17,9 @@ interface RouteContext {
 
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    const session = await getServerSession(authOptions);
+    const user = await getAuthUser(request);
 
-    if (!session || !session.user) {
+    if (!user) {
       return NextResponse.json(
         { error: "Não autenticado." },
         { status: 401 },
