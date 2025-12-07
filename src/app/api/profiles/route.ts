@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-mobile";
 
 // GET /api/profiles - Lista perfis do usuário logado
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const session: any = await getServerSession(authOptions);
+    const user = await getAuthUser(request);
 
-    if (!session?.user?.id) {
+    if (!user?.id) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
     const profiles = await prisma.profile.findMany({
-      where: { userId: session.user.id },
+      where: { userId: user.id },
       orderBy: { createdAt: "asc" },
       select: {
         id: true,
@@ -39,9 +38,9 @@ export async function GET() {
 // POST /api/profiles - Cria novo perfil
 export async function POST(request: NextRequest) {
   try {
-    const session: any = await getServerSession(authOptions);
+    const user = await getAuthUser(request);
 
-    if (!session?.user?.id) {
+    if (!user?.id) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
@@ -57,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     // Limitar a 5 perfis por usuário
     const count = await prisma.profile.count({
-      where: { userId: session.user.id },
+      where: { userId: user.id },
     });
 
     if (count >= 5) {
@@ -69,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     const profile = await prisma.profile.create({
       data: {
-        userId: session.user.id,
+        userId: user.id,
         name: name.trim(),
         avatar: avatar || null,
         isKids: Boolean(isKids),

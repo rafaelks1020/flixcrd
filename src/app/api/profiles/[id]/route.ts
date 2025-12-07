@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-mobile";
 
 interface RouteContext {
   params: Promise<{
@@ -11,11 +10,11 @@ interface RouteContext {
 }
 
 // GET /api/profiles/[id] - Busca perfil específico
-export async function GET(_request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    const session: any = await getServerSession(authOptions);
+    const user = await getAuthUser(request);
 
-    if (!session?.user?.id) {
+    if (!user?.id) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
@@ -24,7 +23,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     const profile = await prisma.profile.findFirst({
       where: {
         id,
-        userId: session.user.id,
+        userId: user.id,
       },
       select: {
         id: true,
@@ -53,9 +52,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 // PATCH /api/profiles/[id] - Atualiza perfil
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
-    const session: any = await getServerSession(authOptions);
+    const user = await getAuthUser(request);
 
-    if (!session?.user?.id) {
+    if (!user?.id) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
@@ -67,7 +66,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const existing = await prisma.profile.findFirst({
       where: {
         id,
-        userId: session.user.id,
+        userId: user.id,
       },
     });
 
@@ -98,11 +97,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 // DELETE /api/profiles/[id] - Deleta perfil
-export async function DELETE(_request: NextRequest, context: RouteContext) {
+export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
-    const session: any = await getServerSession(authOptions);
+    const user = await getAuthUser(request);
 
-    if (!session?.user?.id) {
+    if (!user?.id) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
@@ -112,7 +111,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     const existing = await prisma.profile.findFirst({
       where: {
         id,
-        userId: session.user.id,
+        userId: user.id,
       },
     });
 
@@ -122,7 +121,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
 
     // Verificar se não é o único perfil
     const count = await prisma.profile.count({
-      where: { userId: session.user.id },
+      where: { userId: user.id },
     });
 
     if (count <= 1) {
