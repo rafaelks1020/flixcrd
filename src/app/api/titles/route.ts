@@ -4,10 +4,12 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const q = searchParams.get("q") ?? undefined;
+  const q = searchParams.get("q") ?? searchParams.get("search") ?? undefined;
   const type = searchParams.get("type") ?? undefined;
+  const genre = searchParams.get("genre") ?? undefined;
   const page = parseInt(searchParams.get("page") || "1", 10);
-  const pageSize = 24;
+  const limit = parseInt(searchParams.get("limit") || "24", 10);
+  const pageSize = Math.min(limit, 50); // Max 50
   const skip = (page - 1) * pageSize;
 
   const where: any = {};
@@ -23,14 +25,22 @@ export async function GET(request: NextRequest) {
     where.type = type;
   }
 
-  // Se não tiver paginação (page=1 e sem filtros), assume que é admin e retorna tudo
-  const isAdminRequest = page === 1 && !type && !q;
+  if (genre) {
+    where.genres = {
+      some: {
+        genreId: genre,
+      },
+    };
+  }
+
+  // Contar total para paginação
+  const total = await prisma.title.count({ where: Object.keys(where).length > 0 ? where : undefined });
 
   const titles = await prisma.title.findMany({
     where: Object.keys(where).length > 0 ? where : undefined,
     orderBy: { popularity: "desc" },
-    skip: isAdminRequest ? undefined : skip,
-    take: isAdminRequest ? undefined : pageSize,
+    skip,
+    take: pageSize,
     select: {
       id: true,
       tmdbId: true,
@@ -47,7 +57,14 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  return NextResponse.json(titles);
+  // Retorna formato paginado
+  return NextResponse.json({
+    data: titles,
+    page,
+    limit: pageSize,
+    total,
+    totalPages: Math.ceil(total / pageSize),
+  });
 }
 
 export async function POST(request: NextRequest) {
