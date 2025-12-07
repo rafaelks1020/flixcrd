@@ -80,11 +80,19 @@ export async function GET(request: NextRequest, context: RouteContext) {
       (request.nextUrl.searchParams.get("source") as "direct" | "cloudflare" | null) ??
       "cloudflare"; // Padrão Cloudflare
 
+    const variant = request.nextUrl.searchParams.get("variant");
+
     // Busca o playlist diretamente via URL pública
-    const playlistPath = `${prefix}master.m3u8`;
+    const playlistPath = variant ? `${prefix}${variant.trim()}` : `${prefix}master.m3u8`;
     const playlistUrl = `${WASABI_CDN_BASE}${playlistPath}`;
 
-    const response = await fetch(playlistUrl);
+    const response = await fetch(playlistUrl, {
+      // Permite que o Cloudflare cache o playlist
+      cache: 'default',
+      headers: {
+        'Accept': 'application/vnd.apple.mpegurl, */*',
+      },
+    });
     if (!response.ok) {
       return NextResponse.json(
         { error: "Playlist HLS não encontrado." },
@@ -109,6 +117,16 @@ export async function GET(request: NextRequest, context: RouteContext) {
           return line;
         }
 
+        // Playlists variantes (.m3u8): apontar para esta mesma rota com ?variant= e manter o mesmo source
+        if (trimmed.toLowerCase().endsWith(".m3u8")) {
+          const url = new URL(request.url);
+          url.searchParams.set("variant", trimmed);
+          if (source) {
+            url.searchParams.set("source", source);
+          }
+          return `${url.pathname}?${url.searchParams.toString()}`;
+        }
+
         // Segmentos de vídeo (.ts): sempre URL pública via Wasabi CDN
         if (trimmed.toLowerCase().endsWith(".ts")) {
           const objectKey = `${prefix}${trimmed}`;
@@ -125,7 +143,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
       status: 200,
       headers: {
         "Content-Type": "application/vnd.apple.mpegurl",
-        "Cache-Control": "private, max-age=0, no-store",
+        // Cache por 5 minutos no browser, revalidar depois
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=60",
       },
     });
   } catch (error) {

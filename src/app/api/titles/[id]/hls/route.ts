@@ -86,7 +86,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const playlistPath = variant ? `${prefix}${variant.trim()}` : `${prefix}master.m3u8`;
     const playlistUrl = `${WASABI_CDN_BASE}${playlistPath}`;
 
-    const response = await fetch(playlistUrl);
+    const response = await fetch(playlistUrl, {
+      // Permite que o Cloudflare cache o playlist
+      cache: 'default',
+      headers: {
+        'Accept': 'application/vnd.apple.mpegurl, */*',
+      },
+    });
     if (!response.ok) {
       return NextResponse.json(
         { error: "Playlist HLS não encontrado." },
@@ -137,7 +143,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
       status: 200,
       headers: {
         "Content-Type": "application/vnd.apple.mpegurl",
-        "Cache-Control": "private, max-age=0, no-store",
+        // Cache por 5 minutos no browser, revalidar depois
+        "Cache-Control": "public, max-age=300, stale-while-revalidate=60",
       },
     });
   } catch (error) {

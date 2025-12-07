@@ -19,7 +19,7 @@ export default function SystemStatusPage() {
       icon: "🗄️",
     },
     {
-      name: "Backblaze B2",
+      name: "Storage (Wasabi)",
       status: "checking",
       message: "Verificando conexão...",
       icon: "☁️",
@@ -69,22 +69,22 @@ export default function SystemStatusPage() {
         });
       }
 
-      // 2. Verificar B2
+      // 2. Verificar Storage (Wasabi)
       try {
-        const b2Res = await fetch("/api/b2/test");
-        const b2Data = await b2Res.json();
+        const storageRes = await fetch("/api/status/storage");
+        const storageData = await storageRes.json();
         
-        if (b2Data.success) {
+        if (storageData.success) {
           updateCheck(1, {
             status: "success",
-            message: `Conectado ao bucket "${b2Data.bucket}" (${b2Data.objectCount} arquivos)`,
-            details: b2Data,
+            message: storageData.message,
+            details: storageData,
           });
         } else {
           updateCheck(1, {
             status: "error",
-            message: b2Data.error || "Erro desconhecido",
-            details: b2Data,
+            message: storageData.error || "Erro desconhecido",
+            details: storageData,
           });
         }
       } catch (error: any) {

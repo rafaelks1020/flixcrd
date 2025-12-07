@@ -19,19 +19,19 @@ export default function QuickActionsPage() {
     }
   }
 
-  async function checkB2Connection() {
+  async function checkStorageConnection() {
     setLoading(true);
     try {
-      const res = await fetch("/api/b2/test");
+      const res = await fetch("/api/status/storage");
       const data = await res.json();
       
-      if (res.ok) {
-        toast.success("✅ Conexão com B2 funcionando!");
+      if (res.ok && data.success) {
+        toast.success("✅ Storage Wasabi online!");
       } else {
-        toast.error(`❌ Erro: ${data.error || "Falha na conexão"}`);
+        toast.error(`❌ Erro: ${data.error || "Falha na conexão com storage"}`);
       }
     } catch (err) {
-      toast.error("❌ Erro ao testar conexão com B2");
+      toast.error("❌ Erro ao testar conexão com storage");
     } finally {
       setLoading(false);
     }
@@ -107,11 +107,11 @@ export default function QuickActionsPage() {
           <h3 className="text-sm font-semibold">🔌 Testes de Conexão</h3>
           <div className="space-y-2">
             <button
-              onClick={checkB2Connection}
+              onClick={checkStorageConnection}
               disabled={loading}
               className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-100 hover:bg-zinc-800 disabled:opacity-50"
             >
-              Testar B2
+              Testar Storage (Wasabi)
             </button>
             <button
               onClick={checkTranscoder}
@@ -200,7 +200,7 @@ export default function QuickActionsPage() {
             </div>
             <div className="flex items-center justify-between">
               <span>Storage:</span>
-              <span className="font-mono text-zinc-300">Backblaze B2</span>
+              <span className="font-mono text-zinc-300">Wasabi (S3 + Cloudflare)</span>
             </div>
             <div className="flex items-center justify-between">
               <span>CDN:</span>

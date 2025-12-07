@@ -71,6 +71,14 @@ export default function HomeClientNew2({
   const [isTransitioning, setIsTransitioning] = useState(false);
   const router = useRouter();
 
+  function handleProfileNotFound() {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("activeProfileId");
+    }
+    setActiveProfileId(null);
+    router.push("/profiles");
+  }
+
   // Aleatorizar hero inicial e configurar autoplay
   useEffect(() => {
     if (topTitles.length === 0) return;
@@ -138,7 +146,9 @@ export default function HomeClientNew2({
         if (isLoggedIn && activeProfileId) {
           try {
             const favRes = await fetch(`/api/user/favorites?profileId=${activeProfileId}`);
-            if (favRes.ok) {
+            if (favRes.status === 404) {
+              handleProfileNotFound();
+            } else if (favRes.ok) {
               const favData = await favRes.json();
               setFavorites(favData);
             }
@@ -148,7 +158,9 @@ export default function HomeClientNew2({
 
           try {
             const cwRes = await fetch(`/api/user/continue-watching?profileId=${activeProfileId}`);
-            if (cwRes.ok) {
+            if (cwRes.status === 404) {
+              handleProfileNotFound();
+            } else if (cwRes.ok) {
               const cwData = await cwRes.json();
               setContinueWatching(cwData);
             }

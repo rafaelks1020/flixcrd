@@ -51,6 +51,17 @@ export default function FavoriteButton({
       });
 
       const data = await res.json();
+
+      if (res.status === 404 && data?.error === "Perfil não encontrado.") {
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem("activeProfileId");
+        }
+        setProfileId(null);
+        setError("Seu perfil selecionado não existe mais. Escolha um perfil novamente.");
+        router.push("/profiles");
+        return;
+      }
+
       if (!res.ok) {
         throw new Error(data?.error ?? "Erro ao atualizar Minha lista.");
       }

@@ -10,7 +10,7 @@ const CLOUDFLARE_CONFIG = {
   zoneId: process.env.CLOUDFLARE_ZONE_ID || "88bf779fc8e2b0dff34261c302b0b121",
   apiKey: process.env.CLOUDFLARE_API_KEY || "6983f515cbe2b2233123d5212159ffaba2ecb",
   email: process.env.CLOUDFLARE_EMAIL || "",
-  baseUrl: process.env.HLS_BASE_URL || "https://hlspaelflix.top",
+  baseUrl: process.env.WASABI_CDN_URL || process.env.HLS_BASE_URL || "https://hlspaelflix.top",
 };
 
 interface PurgeResponse {

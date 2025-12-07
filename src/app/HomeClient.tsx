@@ -58,6 +58,15 @@ export default function HomeClient({
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const router = useRouter();
 
+  function handleProfileNotFound() {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("activeProfileId");
+    }
+    setActiveProfileId(null);
+    toast.error("O perfil selecionado não existe mais. Escolha um perfil novamente.");
+    router.push("/profiles");
+  }
+
   // Carregar perfil ativo
   useEffect(() => {
     if (isLoggedIn && typeof window !== "undefined") {
@@ -101,14 +110,22 @@ export default function HomeClient({
             fetch(`/api/user/continue-watching?profileId=${activeProfileId}`),
           ]);
 
-          if (favRes.status === "fulfilled" && favRes.value.ok) {
-            const favData = await favRes.value.json();
-            setFavorites(favData);
+          if (favRes.status === "fulfilled") {
+            if (favRes.value.status === 404) {
+              handleProfileNotFound();
+            } else if (favRes.value.ok) {
+              const favData = await favRes.value.json();
+              setFavorites(favData);
+            }
           }
 
-          if (cwRes.status === "fulfilled" && cwRes.value.ok) {
-            const cwData = await cwRes.value.json();
-            setContinueWatching(cwData);
+          if (cwRes.status === "fulfilled") {
+            if (cwRes.value.status === 404) {
+              handleProfileNotFound();
+            } else if (cwRes.value.ok) {
+              const cwData = await cwRes.value.json();
+              setContinueWatching(cwData);
+            }
           }
         }
       } catch (error) {

@@ -7,13 +7,11 @@ export async function GET() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    // Tenta acessar um arquivo que sabemos que existe (do Wasabi)
-    // Usa um arquivo .ts de vídeo que já existe
-    const testUrl = `${CLOUDFLARE_URL}titles/a-era-do-gelo/seg_0000.ts`;
-    const response = await fetch(testUrl, {
+    // Testa se o CDN está acessível fazendo um HEAD request na raiz
+    // Qualquer resposta (200, 403, 404) indica que o CDN está online
+    const response = await fetch(CLOUDFLARE_URL, {
       method: "HEAD",
       signal: controller.signal,
-      // Adiciona headers para evitar cache
       headers: {
         'Cache-Control': 'no-cache',
       },

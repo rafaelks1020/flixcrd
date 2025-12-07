@@ -3,8 +3,19 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { getOrCreateCustomer } from '@/lib/asaas';
 
+const db = prisma as any;
+
 export async function POST(request: NextRequest) {
   try {
+    // Verificar se novos cadastros estão permitidos
+    const settings = await db.settings.findFirst().catch(() => null);
+    if (settings && settings.allowRegistration === false) {
+      return NextResponse.json(
+        { error: 'Novos cadastros estão temporariamente desativados.' },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { name, email, password, cpfCnpj } = body;
 

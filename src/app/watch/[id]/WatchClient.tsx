@@ -106,12 +106,9 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
 
       const inicio = performance.now();
       try {
-        // Tenta acessar um arquivo pequeno via Cloudflare Worker (Wasabi)
-        const testUrl = "https://hlspaelflix.top/titles/a-nevoa-da-guerra/seg_0003.ts";
-        await fetch(testUrl, {
-          method: "HEAD",
-          cache: "no-store",
-        });
+        // Tenta acessar a API de status do Cloudflare
+        const res = await fetch("/api/status/cloudflare", { cache: "no-store" });
+        if (!res.ok) return Infinity;
       } catch {
         return Infinity; // Erro = Cloudflare offline/inacessível
       }
@@ -142,6 +139,16 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
               `/api/profiles/${encodeURIComponent(profileId)}`,
               { cache: "no-store" },
             );
+            if (profileRes.status === 404) {
+              if (typeof window !== "undefined") {
+                window.localStorage.removeItem("activeProfileId");
+              }
+              setProfileId(null);
+              setError("Seu perfil selecionado não existe mais. Escolha um perfil novamente.");
+              setLoading(false);
+              router.push("/profiles");
+              return;
+            }
             if (profileRes.ok) {
               const profileJson = await profileRes.json();
               proxyFlag = Boolean(profileJson?.useCloudflareProxy);

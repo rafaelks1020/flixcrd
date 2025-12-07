@@ -3,25 +3,95 @@
 import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 
+interface SettingsState {
+  siteName: string;
+  siteDescription: string;
+  maintenanceMode: boolean;
+  allowRegistration: boolean;
+  maxUploadSize: number;
+  transcoderCrf: number;
+  deleteSourceAfterTranscode: boolean;
+}
+
 export default function SettingsPage() {
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<SettingsState>({
     siteName: "Pflix",
     siteDescription: "Sua plataforma de streaming",
     maintenanceMode: false,
     allowRegistration: true,
-    maxUploadSize: 10, // GB
+    maxUploadSize: 10,
     transcoderCrf: 20,
     deleteSourceAfterTranscode: true,
   });
 
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
-  function handleSave() {
-    setLoading(true);
-    setTimeout(() => {
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const res = await fetch("/api/admin/settings", { cache: "no-store" });
+        if (!res.ok) {
+          throw new Error("Erro ao carregar configurações");
+        }
+        const data = await res.json();
+
+        setSettings({
+          siteName: data.siteName ?? "Pflix",
+          siteDescription: data.siteDescription ?? "Sua plataforma de streaming",
+          maintenanceMode: Boolean(data.maintenanceMode),
+          allowRegistration: Boolean(data.allowRegistration ?? true),
+          maxUploadSize: Number.isFinite(data.maxUploadSize) ? data.maxUploadSize : 10,
+          transcoderCrf: Number.isFinite(data.transcoderCrf) ? data.transcoderCrf : 20,
+          deleteSourceAfterTranscode: Boolean(
+            typeof data.deleteSourceAfterTranscode === "boolean"
+              ? data.deleteSourceAfterTranscode
+              : true,
+          ),
+        });
+      } catch (error) {
+        console.error("Erro ao carregar configurações", error);
+        toast.error("Erro ao carregar configurações");
+      } finally {
+        setInitialLoading(false);
+      }
+    }
+
+    loadSettings();
+  }, []);
+
+  async function handleSave() {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Erro ao salvar configurações");
+      }
+
+      setSettings({
+        siteName: data.siteName,
+        siteDescription: data.siteDescription,
+        maintenanceMode: data.maintenanceMode,
+        allowRegistration: data.allowRegistration,
+        maxUploadSize: data.maxUploadSize,
+        transcoderCrf: data.transcoderCrf,
+        deleteSourceAfterTranscode: data.deleteSourceAfterTranscode,
+      });
+
       toast.success("✅ Configurações salvas!");
+    } catch (error: any) {
+      console.error("Erro ao salvar configurações", error);
+      toast.error(error.message || "Erro ao salvar configurações");
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   }
 
   return (
@@ -32,6 +102,10 @@ export default function SettingsPage() {
           Configure o comportamento geral do sistema.
         </p>
       </div>
+
+      {initialLoading && (
+        <div className="text-sm text-zinc-400">Carregando configurações...</div>
+      )}
 
       {/* Geral */}
       <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 space-y-4">

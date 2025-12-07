@@ -275,3 +275,16 @@ model UserFavorite {
   @@index([profileId])
   @@index([titleId])
 }
+
+model Settings {
+  id                       String  @id @default(cuid())
+  siteName                 String  @default("Pflix")
+  siteDescription          String  @default("Sua plataforma de streaming")
+  maintenanceMode          Boolean @default(false)
+  allowRegistration        Boolean @default(true)
+  maxUploadSize            Int     @default(10)  // GB
+  transcoderCrf            Int     @default(20)
+  deleteSourceAfterTranscode Boolean @default(true)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+}
