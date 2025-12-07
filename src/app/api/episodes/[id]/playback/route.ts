@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
+import { generateStreamToken, isProtectedStreamingEnabled } from "@/lib/stream-token";
 
 const WASABI_CDN_BASE = process.env.WASABI_CDN_URL;
 
@@ -53,16 +54,39 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
     }
 
-    // Como o Wasabi é público via Cloudflare, usamos URLs diretas
     const hlsPath = episode.hlsPath?.endsWith("/") ? episode.hlsPath : `${episode.hlsPath}/`;
-    const kind = "hls"; // Assumimos HLS por padrão
-
-    // Sempre usa a rota HLS que vai reescrever os segmentos
+    const kind = "hls";
     const sourceParam = request.nextUrl.searchParams.get("source");
-    const base = `/api/episodes/${episode.id}/hls`;
-    const playbackUrl = sourceParam ? `${base}?source=${sourceParam}` : base;
 
-    // Legendas também são públicas via Cloudflare Worker
+    // Tentar usar streaming protegido
+    let playbackUrl: string;
+    let expiresAt: number | null = null;
+    let isProtected = false;
+
+    if (isProtectedStreamingEnabled() && episode.hlsPath) {
+      // Gerar token via Cloudflare Worker
+      const cleanPath = episode.hlsPath.endsWith("/") 
+        ? episode.hlsPath.slice(0, -1) 
+        : episode.hlsPath;
+      
+      const tokenData = await generateStreamToken(cleanPath, "wasabi");
+      
+      if (tokenData) {
+        playbackUrl = tokenData.streamUrl;
+        expiresAt = tokenData.expiresAt;
+        isProtected = true;
+      } else {
+        // Fallback para API antiga
+        const base = `/api/episodes/${episode.id}/hls`;
+        playbackUrl = sourceParam ? `${base}?source=${sourceParam}` : base;
+      }
+    } else {
+      // Streaming protegido não configurado, usa API antiga
+      const base = `/api/episodes/${episode.id}/hls`;
+      playbackUrl = sourceParam ? `${base}?source=${sourceParam}` : base;
+    }
+
+    // Legendas
     const subtitles: any[] = []; // TODO: implementar busca de .vtt se necessário
 
     const title = episode.title as any;
@@ -70,6 +94,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return NextResponse.json({
       playbackUrl,
       kind,
+      expiresAt,
+      protected: isProtected,
       subtitles,
       title: {
         id: title.id,

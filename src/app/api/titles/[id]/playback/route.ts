@@ -5,6 +5,7 @@ import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import { wasabiClient } from "@/lib/wasabi";
+import { generateStreamToken, isProtectedStreamingEnabled } from "@/lib/stream-token";
 
 const WASABI_CDN_BASE = process.env.WASABI_CDN_URL; // URL do CDN
 const WASABI_BUCKET = process.env.WASABI_BUCKET_NAME;
@@ -76,13 +77,39 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
 
       if (hlsObject) {
-        // Tem HLS, usa ele
-        const base = `/api/titles/${title.id}/hls`;
-        const playbackUrl = sourceParam ? `${base}?source=${sourceParam}` : base;
+        // Tem HLS - tentar usar streaming protegido
+        let playbackUrl: string;
+        let expiresAt: number | null = null;
+        let isProtected = false;
+
+        if (isProtectedStreamingEnabled() && title.hlsPath) {
+          // Gerar token via Cloudflare Worker
+          const cleanPath = title.hlsPath.endsWith("/") 
+            ? title.hlsPath.slice(0, -1) 
+            : title.hlsPath;
+          
+          const tokenData = await generateStreamToken(cleanPath, "wasabi");
+          
+          if (tokenData) {
+            playbackUrl = tokenData.streamUrl;
+            expiresAt = tokenData.expiresAt;
+            isProtected = true;
+          } else {
+            // Fallback para API antiga
+            const base = `/api/titles/${title.id}/hls`;
+            playbackUrl = sourceParam ? `${base}?source=${sourceParam}` : base;
+          }
+        } else {
+          // Streaming protegido não configurado, usa API antiga
+          const base = `/api/titles/${title.id}/hls`;
+          playbackUrl = sourceParam ? `${base}?source=${sourceParam}` : base;
+        }
 
         return NextResponse.json({
           playbackUrl,
           kind: "hls",
+          expiresAt,
+          protected: isProtected,
           subtitles: [],
           title: {
             id: title.id,

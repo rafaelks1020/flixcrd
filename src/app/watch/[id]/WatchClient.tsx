@@ -25,6 +25,8 @@ interface PlaybackResponse {
   playbackUrl: string;
   kind: "hls" | "mp4";
   title: TitleData;
+  expiresAt?: number | null;
+  protected?: boolean;
   subtitles?: Array<{
     label: string;
     language?: string | null;
@@ -81,12 +83,16 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const [showNextEpisodeCountdown, setShowNextEpisodeCountdown] = useState(false);
   const [countdown, setCountdown] = useState(10);
   const [subscriptionBlocked, setSubscriptionBlocked] = useState(false);
+  const [tokenExpiresAt, setTokenExpiresAt] = useState<number | null>(null);
+  const [isProtectedStream, setIsProtectedStream] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const playerRef = useRef<HTMLDivElement | null>(null);
   const hideControlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastProgressSyncRef = useRef<number>(0);
+  const tokenRenewalTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLoadingPlaybackRef = useRef<boolean>(false); // Evitar chamadas duplicadas
   const router = useRouter();
 
   // Carrega o profileId ativo salvo pelo fluxo de perfis
@@ -116,6 +122,13 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     }
 
     async function loadPlayback() {
+      // Evitar chamadas duplicadas (React Strict Mode)
+      if (isLoadingPlaybackRef.current) {
+        console.log("[WatchClient] loadPlayback já em execução, ignorando...");
+        return;
+      }
+      isLoadingPlaybackRef.current = true;
+      
       setLoading(true);
       setError(null);
       setSubscriptionBlocked(false);
@@ -191,16 +204,91 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
           return;
         }
 
-        setData(json as PlaybackResponse);
+        const playbackData = json as PlaybackResponse;
+        setData(playbackData);
+        
+        // Configurar renovação de token se for streaming protegido
+        if (playbackData.protected && playbackData.expiresAt) {
+          setIsProtectedStream(true);
+          setTokenExpiresAt(playbackData.expiresAt);
+        }
       } catch (err: any) {
         setError(err.message ?? "Erro ao carregar playback.");
       } finally {
         setLoading(false);
+        // Não resetar isLoadingPlaybackRef aqui para evitar re-chamadas
       }
     }
 
     loadPlayback();
+    
+    // Cleanup: resetar flag quando componente desmontar ou deps mudarem
+    return () => {
+      isLoadingPlaybackRef.current = false;
+    };
   }, [titleId, episodeId, profileId]);
+
+  // Renovação automática de token para streaming protegido
+  // Só renova quando faltar 1 minuto para expirar (token dura 5 min)
+  useEffect(() => {
+    if (!isProtectedStream || !tokenExpiresAt || !data) return;
+
+    // Limpar timeout anterior
+    if (tokenRenewalTimeoutRef.current) {
+      clearTimeout(tokenRenewalTimeoutRef.current);
+    }
+
+    // Token dura 5 minutos, renovar quando faltar 1 minuto
+    const renewBeforeExpiry = 60 * 1000; // 1 minuto antes
+    const now = Date.now();
+    const timeUntilExpiry = tokenExpiresAt - now;
+    const timeUntilRenewal = timeUntilExpiry - renewBeforeExpiry;
+
+    console.log("[WatchClient] Token expira em", Math.round(timeUntilExpiry / 1000), "segundos");
+
+    // Se ainda falta mais de 1 minuto, agendar renovação
+    if (timeUntilRenewal > 0) {
+      console.log("[WatchClient] Agendando renovação para daqui", Math.round(timeUntilRenewal / 1000), "segundos");
+      
+      tokenRenewalTimeoutRef.current = setTimeout(async () => {
+        try {
+          console.log("[WatchClient] Renovando token de streaming...");
+          
+          const contentType = episodeId ? "episode" : "title";
+          const contentId = episodeId || titleId;
+          
+          const res = await fetch("/api/stream/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contentType, contentId }),
+          });
+
+          if (!res.ok) {
+            console.error("[WatchClient] Erro ao renovar token:", res.status);
+            return;
+          }
+
+          const newData = await res.json();
+          
+          if (newData.streamUrl && newData.expiresAt) {
+            console.log("[WatchClient] Token renovado com sucesso, novo expira em", 
+              Math.round((newData.expiresAt - Date.now()) / 1000), "segundos");
+            setTokenExpiresAt(newData.expiresAt);
+          }
+        } catch (err) {
+          console.error("[WatchClient] Erro ao renovar token:", err);
+        }
+      }, timeUntilRenewal);
+    }
+    // Se já passou do tempo de renovação mas ainda não expirou, não faz nada
+    // O token atual ainda é válido
+
+    return () => {
+      if (tokenRenewalTimeoutRef.current) {
+        clearTimeout(tokenRenewalTimeoutRef.current);
+      }
+    };
+  }, [isProtectedStream, tokenExpiresAt, data, episodeId, titleId]);
 
   // Buscar próximo episódio se for série/anime
   useEffect(() => {
