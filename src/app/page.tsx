@@ -14,14 +14,21 @@ export default async function Home() {
 
   const isLoggedIn = !!session;
   const isAdmin = session?.user?.role === "ADMIN";
+  const approvalStatus = session?.user?.approvalStatus;
 
   // Se não está logado, mostrar landing page
   if (!isLoggedIn) {
     return <LandingPage />;
   }
 
-  // Se está logado mas não é admin, verificar assinatura
+  // Se está logado mas não é admin, verificar aprovação e assinatura
   if (!isAdmin) {
+    // Primeiro verificar se foi aprovado
+    if (approvalStatus !== "APPROVED") {
+      redirect("/pending-approval");
+    }
+
+    // Depois verificar assinatura
     const userId = session?.user?.id;
     if (userId) {
       const hasAccess = await hasActiveSubscription(userId);

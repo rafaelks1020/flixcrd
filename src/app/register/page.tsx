@@ -99,8 +99,8 @@ export default function RegisterPage() {
         return;
       }
 
-      // Sucesso - redireciona para página de assinatura
-      router.push("/subscribe");
+      // Sucesso - redireciona para página de aguardando aprovação
+      router.push("/pending-approval");
       router.refresh();
 
     } catch (err: any) {
@@ -265,7 +265,7 @@ export default function RegisterPage() {
             {/* Info */}
             <div className="mt-6 text-center">
               <p className="text-gray-500 text-sm">
-                Após criar sua conta, você poderá escolher seu plano de assinatura.
+                Após criar sua conta, ela será analisada pela nossa equipe.
               </p>
             </div>
           </div>

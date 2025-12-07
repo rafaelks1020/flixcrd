@@ -13,6 +13,7 @@ import { useAdminShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 const navItems = [
   { href: "/admin", label: "Dashboard" },
+  { href: "/admin/approvals", label: "👥 Aprovações" },
   { href: "/admin/analytics", label: "📊 Analytics" },
   { href: "/admin/catalog", label: "Catálogo" },
   { href: "/admin/upload-v2", label: "🚀 Upload Unificado" },

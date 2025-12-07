@@ -52,6 +52,7 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name ?? undefined,
           role: (user as any).role ?? "USER",
+          approvalStatus: (user as any).approvalStatus ?? "PENDING",
         };
       },
     }),
@@ -64,6 +65,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         (token as any).id = (user as any).id;
         (token as any).role = (user as any).role ?? (token as any).role ?? "USER";
+        (token as any).approvalStatus = (user as any).approvalStatus ?? "PENDING";
       }
       return token;
     },
@@ -71,6 +73,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user && (token as any).id) {
         (session.user as any).id = (token as any).id;
         (session.user as any).role = (token as any).role ?? "USER";
+        (session.user as any).approvalStatus = (token as any).approvalStatus ?? "PENDING";
       }
       return session;
     },

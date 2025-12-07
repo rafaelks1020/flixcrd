@@ -20,21 +20,33 @@ enum UserRole {
   ADMIN
 }
 
-model User {
-  id           String        @id @default(cuid())
-  email        String        @unique
-  name         String?
-  cpfCnpj      String?       // CPF ou CNPJ do usuário (para pagamentos)
-  phone        String?       // Telefone do usuário
-  avatar       String?
-  passwordHash String
-  role         UserRole      @default(USER)
-  useCloudflareProxy Boolean @default(false)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+enum ApprovalStatus {
+  PENDING    // Aguardando aprovação do admin
+  APPROVED   // Aprovado, pode pagar e acessar
+  REJECTED   // Rejeitado pelo admin
+}
 
-  subscription Subscription?
-  profiles     Profile[]
+model User {
+  id             String         @id @default(cuid())
+  email          String         @unique
+  name           String?
+  cpfCnpj        String?        // CPF ou CNPJ do usuário (para pagamentos)
+  phone          String?        // Telefone do usuário
+  avatar         String?
+  passwordHash   String
+  role           UserRole       @default(USER)
+  approvalStatus ApprovalStatus @default(PENDING) // Status de aprovação pelo admin
+  approvedAt     DateTime?      // Data de aprovação
+  approvedBy     String?        // ID do admin que aprovou
+  rejectionReason String?       // Motivo da rejeição (se rejeitado)
+  useCloudflareProxy Boolean    @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  subscription   Subscription?
+  profiles       Profile[]
+  pushTokens     PushToken[]
+  notificationPreference NotificationPreference?
 }
 
 model Profile {
@@ -300,6 +312,8 @@ model PushToken {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@index([token])
 }
@@ -312,6 +326,8 @@ model NotificationPreference {
   recommendations Boolean @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }

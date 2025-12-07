@@ -25,7 +25,31 @@ function corsMiddleware(request: NextRequest) {
 
 // Auth middleware para rotas protegidas
 const authMiddleware = withAuth(
-  function middleware() {},
+  function middleware(req) {
+    const token = req.nextauth.token;
+    const path = req.nextUrl.pathname;
+    
+    // Se não é admin e não está aprovado, redirecionar para pending-approval
+    // Exceto se já está na página pending-approval ou em rotas públicas
+    if (token && (token as any).role !== "ADMIN") {
+      const approvalStatus = (token as any).approvalStatus;
+      const isApproved = approvalStatus === "APPROVED";
+      const isPendingPage = path === "/pending-approval";
+      const isSubscribePage = path === "/subscribe";
+      
+      // Se não está aprovado e não está na página de pending, redirecionar
+      if (!isApproved && !isPendingPage) {
+        return NextResponse.redirect(new URL("/pending-approval", req.url));
+      }
+      
+      // Se está aprovado mas está na página pending, redirecionar para subscribe
+      if (isApproved && isPendingPage) {
+        return NextResponse.redirect(new URL("/subscribe", req.url));
+      }
+    }
+    
+    return NextResponse.next();
+  },
   {
     callbacks: {
       authorized: ({ req, token }) => {
@@ -53,8 +77,17 @@ export default function middleware(request: NextRequest) {
     return corsMiddleware(request);
   }
 
-  // Auth para rotas protegidas
-  if (path.startsWith("/admin") || path.startsWith("/watch") || path.startsWith("/title")) {
+  // Auth para rotas protegidas (inclui verificação de aprovação)
+  if (
+    path.startsWith("/admin") ||
+    path.startsWith("/watch") ||
+    path.startsWith("/title") ||
+    path.startsWith("/browse") ||
+    path.startsWith("/profiles") ||
+    path.startsWith("/settings") ||
+    path.startsWith("/subscribe") ||
+    path === "/pending-approval"
+  ) {
     return (authMiddleware as any)(request);
   }
 
@@ -62,5 +95,15 @@ export default function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/api/:path*", "/admin/:path*", "/watch/:path*", "/title/:path*"],
+  matcher: [
+    "/api/:path*",
+    "/admin/:path*",
+    "/watch/:path*",
+    "/title/:path*",
+    "/browse/:path*",
+    "/profiles/:path*",
+    "/settings/:path*",
+    "/subscribe",
+    "/pending-approval",
+  ],
 };
