@@ -6,6 +6,16 @@ import { prisma } from "@/lib/prisma";
 
 const JWT_SECRET = process.env.NEXTAUTH_SECRET || "fallback-secret";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export async function OPTIONS() {
+  return NextResponse.json({}, { headers: corsHeaders });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
@@ -13,7 +23,7 @@ export async function POST(request: NextRequest) {
     if (!email || !password) {
       return NextResponse.json(
         { error: "Email e senha são obrigatórios" },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -24,7 +34,7 @@ export async function POST(request: NextRequest) {
     if (!user || !user.passwordHash) {
       return NextResponse.json(
         { error: "Email ou senha incorretos" },
-        { status: 401 }
+        { status: 401, headers: corsHeaders }
       );
     }
 
@@ -33,7 +43,7 @@ export async function POST(request: NextRequest) {
     if (!isValid) {
       return NextResponse.json(
         { error: "Email ou senha incorretos" },
-        { status: 401 }
+        { status: 401, headers: corsHeaders }
       );
     }
 
@@ -57,12 +67,12 @@ export async function POST(request: NextRequest) {
         name: user.name,
         role: (user as any).role ?? "USER",
       },
-    });
+    }, { headers: corsHeaders });
   } catch (error) {
     console.error("Mobile login error:", error);
     return NextResponse.json(
       { error: "Erro interno do servidor" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
