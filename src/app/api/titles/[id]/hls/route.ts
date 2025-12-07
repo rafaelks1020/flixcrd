@@ -86,6 +86,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const playlistPath = variant ? `${prefix}${variant.trim()}` : `${prefix}master.m3u8`;
     const playlistUrl = `${WASABI_CDN_BASE}${playlistPath}`;
 
+    console.log(`[HLS] Buscando playlist: ${playlistUrl}`);
+    
     const response = await fetch(playlistUrl, {
       // Permite que o Cloudflare cache o playlist
       cache: 'default',
@@ -93,9 +95,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
         'Accept': 'application/vnd.apple.mpegurl, */*',
       },
     });
+    
     if (!response.ok) {
+      console.error(`[HLS] Playlist não encontrado: ${playlistUrl} - Status: ${response.status}`);
       return NextResponse.json(
-        { error: "Playlist HLS não encontrado." },
+        { 
+          error: "Playlist HLS não encontrado.",
+          debug: {
+            playlistUrl,
+            hlsPath: title.hlsPath,
+            status: response.status,
+          }
+        },
         { status: 404 },
       );
     }
