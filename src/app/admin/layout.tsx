@@ -19,6 +19,7 @@ const navItems = [
   { href: "/admin/jobs", label: "Jobs HLS" },
   { href: "/admin/subtitles", label: "🎬 Legendas" },
   { href: "/admin/users", label: "Usuários" },
+  { href: "/admin/notifications", label: "🔔 Notificações" },
   { href: "/admin/quick-actions", label: "⚡ Ações Rápidas" },
   { href: "/admin/logs", label: "📋 Logs" },
   { href: "/admin/settings", label: "⚙️ Configurações" },
