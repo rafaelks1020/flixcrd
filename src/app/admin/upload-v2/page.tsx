@@ -354,12 +354,13 @@ export default function UploadV2Page() {
     setError(null);
     try {
       // Primeiro, verifica se já existe
-      const checkRes = await fetch("/api/titles");
-      const allTitles = await checkRes.json();
+      const checkRes = await fetch("/api/titles?limit=1000");
+      const allTitlesResponse = await checkRes.json();
+      const allTitles = allTitlesResponse.data || allTitlesResponse || [];
       
-      const existing = allTitles.find(
-        (t: any) => t.tmdbId === selectedTmdb.tmdbId
-      );
+      const existing = Array.isArray(allTitles) 
+        ? allTitles.find((t: any) => t.tmdbId === selectedTmdb.tmdbId)
+        : null;
 
       if (existing) {
         // Título já existe!
