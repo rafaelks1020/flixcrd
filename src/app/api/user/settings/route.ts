@@ -1,25 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 
-import { authOptions } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-mobile";
 import { prisma } from "@/lib/prisma";
 
-async function requireUser() {
-  const session: any = await getServerSession(authOptions as any);
-
-  if (!session || !session.user || !session.user.id) {
-    return { userId: null };
-  }
-
-  return { userId: session.user.id as string };
-}
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const { userId } = await requireUser();
-    if (!userId) {
+    const authUser = await getAuthUser(request);
+    if (!authUser) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
+    const userId = authUser.id;
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -38,10 +28,11 @@ export async function GET() {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const { userId } = await requireUser();
-    if (!userId) {
+    const authUser = await getAuthUser(request);
+    if (!authUser) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
+    const userId = authUser.id;
 
     const body = await request.json().catch(() => null);
     const rawFlag = body?.useCloudflareProxy;

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-mobile";
 
 interface RouteContext {
   params: Promise<{
@@ -12,14 +11,14 @@ interface RouteContext {
 
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    const session = await getServerSession(authOptions);
+    const authUser = await getAuthUser(request);
 
-    if (!session || !session.user || !(session.user as any).id) {
+    if (!authUser) {
       return NextResponse.json({ positionSeconds: 0, durationSeconds: 0 });
     }
 
     const { id } = await context.params;
-    const userId = (session.user as any).id as string;
+    const userId = authUser.id;
     const episodeIdParam = request.nextUrl.searchParams.get("episodeId");
     const profileId = request.headers.get("x-profile-id") || request.nextUrl.searchParams.get("profileId");
     const episodeId = episodeIdParam && episodeIdParam.trim().length > 0 ? episodeIdParam : null;
@@ -77,14 +76,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
-    const session = await getServerSession(authOptions);
+    const authUser = await getAuthUser(request);
 
-    if (!session || !session.user || !(session.user as any).id) {
+    if (!authUser) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
     const { id } = await context.params;
-    const userId = (session.user as any).id as string;
+    const userId = authUser.id;
 
     const body = await request.json().catch(() => null);
     const rawPosition = body?.positionSeconds;

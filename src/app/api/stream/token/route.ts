@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 
-import { authOptions } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-mobile";
 import { generateStreamToken, isProtectedStreamingEnabled } from "@/lib/stream-token";
 import { prisma } from "@/lib/prisma";
 
@@ -16,8 +15,8 @@ import { prisma } from "@/lib/prisma";
 export async function POST(request: NextRequest) {
   try {
     // 1. Verificar autenticação
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
+    const authUser = await getAuthUser(request);
+    if (!authUser) {
       return NextResponse.json(
         { error: "Não autenticado." },
         { status: 401 }
@@ -25,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Verificar assinatura do usuário
-    const userId = (session.user as any).id;
+    const userId = authUser.id;
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: { subscription: true },

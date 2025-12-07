@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-mobile";
 
 const WASABI_CDN_BASE = process.env.WASABI_CDN_URL;
 
@@ -44,9 +43,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
     );
   }
 
-  const session = await getServerSession(authOptions);
+  const user = await getAuthUser(request);
 
-  if (!session || !session.user) {
+  if (!user) {
     return NextResponse.json(
       { error: "Não autenticado." },
       { status: 401 },

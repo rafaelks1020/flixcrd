@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 
 import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-mobile";
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const authUser = await getAuthUser(request);
 
-    if (!session || !session.user || !(session.user as any).id) {
+    if (!authUser) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
-    const userId = (session.user as any).id as string;
+    const userId = authUser.id;
 
     // Pegar profileId do header ou query
     const profileId = request.headers.get("x-profile-id") || request.nextUrl.searchParams.get("profileId");

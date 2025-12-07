@@ -1,25 +1,24 @@
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { NextRequest, NextResponse } from 'next/server';
+import { getAuthUser } from '@/lib/auth-mobile';
 import { prisma } from '@/lib/prisma';
 
 /**
  * Verifica se o usuário tem assinatura ativa
  * Usado pelo player antes de carregar o vídeo
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const authUser = await getAuthUser(request);
     
-    if (!session?.user?.email) {
+    if (!authUser) {
       return NextResponse.json({ 
         canWatch: false, 
         reason: 'NOT_AUTHENTICATED' 
       });
     }
 
-    const userId = (session.user as any).id;
-    const userRole = (session.user as any).role;
+    const userId = authUser.id;
+    const userRole = authUser.role;
 
     // Admin sempre pode assistir
     if (userRole === 'ADMIN') {

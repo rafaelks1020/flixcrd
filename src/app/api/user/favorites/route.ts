@@ -1,25 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 
-import { authOptions } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth-mobile";
 import { prisma } from "@/lib/prisma";
-
-async function requireUser() {
-  const session: any = await getServerSession(authOptions as any);
-
-  if (!session || !session.user || !session.user.id) {
-    return { userId: null };
-  }
-
-  return { userId: session.user.id as string };
-}
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await requireUser();
-    if (!userId) {
+    const authUser = await getAuthUser(request);
+    if (!authUser) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
+    const userId = authUser.id;
 
     // Pegar profileId do header ou query
     const profileId = request.headers.get("x-profile-id") || request.nextUrl.searchParams.get("profileId");
@@ -82,10 +72,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await requireUser();
-    if (!userId) {
+    const authUser = await getAuthUser(request);
+    if (!authUser) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
+    const userId = authUser.id;
 
     const body = await request.json().catch(() => null);
     const titleId = body?.titleId as string | undefined;
@@ -148,10 +139,11 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = await requireUser();
-    if (!userId) {
+    const authUser = await getAuthUser(request);
+    if (!authUser) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
+    const userId = authUser.id;
 
     const body = await request.json().catch(() => null);
     const titleId = body?.titleId as string | undefined;
