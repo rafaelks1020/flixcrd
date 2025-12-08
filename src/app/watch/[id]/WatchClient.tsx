@@ -97,6 +97,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const isLoadingPlaybackRef = useRef<boolean>(false); // Evitar chamadas duplicadas
   const isRenewingTokenRef = useRef<boolean>(false); // Evitar renovações duplicadas
   const savedPositionRef = useRef<number>(0); // Salvar posição ao renovar token
+  const currentStreamUrlRef = useRef<string | null>(null); // URL atual do stream (para renovação silenciosa)
   const bufferIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const router = useRouter();
 
@@ -327,8 +328,11 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     };
   }, [titleId, episodeId, profileId]);
 
-  // Função para renovar token silenciosamente (sem recriar o player)
-  const renewTokenAndUpdatePlayer = useCallback(async () => {
+  // Função para renovar token silenciosamente (SEM recarregar o player)
+  // A nova estratégia: apenas atualizar a referência da URL para uso futuro
+  // O HLS.js continua usando os segmentos já carregados no buffer
+  // Só recarrega se houver erro 403 (token expirado no meio do stream)
+  const renewTokenAndUpdatePlayer = useCallback(async (forceReload = false) => {
     if (isRenewingTokenRef.current) {
       console.log("[WatchClient] Renovação já em andamento, ignorando...");
       return;
@@ -362,27 +366,44 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         // Atualizar expiração
         setTokenExpiresAt(newData.expiresAt);
         
-        // Atualizar URL no estado (para referência futura)
-        // Mas NÃO recriar o player - o HLS.js vai usar a nova URL nos próximos segmentos
-        // O token está na URL do manifest, então precisamos recarregar o source
-        if (hlsRef.current && videoRef.current) {
-          // Salvar posição atual
+        // Guardar nova URL para referência (usada se precisar recarregar)
+        currentStreamUrlRef.current = newData.streamUrl;
+        
+        // IMPORTANTE: NÃO recarregar o source automaticamente!
+        // O buffer do HLS.js já tem segmentos suficientes para continuar
+        // Só recarrega se forceReload=true (chamado quando dá erro 403)
+        if (forceReload && hlsRef.current && videoRef.current) {
           const currentPos = videoRef.current.currentTime;
+          const wasPlaying = !videoRef.current.paused;
           
           console.log("[WatchClient] Recarregando source com novo token (posição:", currentPos, ")");
+          
+          // Salvar posição para restaurar
+          savedPositionRef.current = currentPos;
           
           // Recarregar source com nova URL
           hlsRef.current.loadSource(newData.streamUrl);
           
-          // Restaurar posição após o manifest ser parseado
-          savedPositionRef.current = currentPos;
-          
           // Atualizar estado
           setData(prev => prev ? { ...prev, playbackUrl: newData.streamUrl } : prev);
+          
+          // Restaurar playback após manifest ser carregado
+          if (wasPlaying) {
+            let restored = false;
+            const onManifestParsed = () => {
+              if (restored) return;
+              restored = true;
+              if (videoRef.current) {
+                videoRef.current.currentTime = savedPositionRef.current;
+                videoRef.current.play().catch(() => {});
+                savedPositionRef.current = 0;
+              }
+            };
+            hlsRef.current.on(Hls.Events.MANIFEST_PARSED, onManifestParsed);
+          }
         } else {
-          // Fallback: atualizar estado (vai recriar o player)
-          savedPositionRef.current = videoRef.current?.currentTime || 0;
-          setData(prev => prev ? { ...prev, playbackUrl: newData.streamUrl } : prev);
+          // Renovação silenciosa: apenas log, sem interromper playback
+          console.log("[WatchClient] Token renovado silenciosamente (sem reload)");
         }
       }
     } catch (err) {
@@ -402,15 +423,16 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
       clearInterval(tokenRenewalTimeoutRef.current);
     }
 
-    // Renovar a cada 3 minutos (180 segundos) - bem antes dos 5 min de expiração
-    const RENEWAL_INTERVAL = 3 * 60 * 1000; // 3 minutos
+    // Renovar a cada 4 minutos (240 segundos) - antes dos 5 min de expiração
+    // Mas SEM recarregar o player - apenas manter o token atualizado
+    const RENEWAL_INTERVAL = 4 * 60 * 1000; // 4 minutos
     
-    console.log("[WatchClient] Iniciando renovação automática de token a cada 3 minutos");
+    console.log("[WatchClient] Iniciando renovação automática de token a cada 4 minutos (silenciosa)");
 
-    // Agendar renovação periódica
+    // Agendar renovação periódica (silenciosa, sem reload)
     tokenRenewalTimeoutRef.current = setInterval(() => {
-      console.log("[WatchClient] Renovação periódica do token...");
-      renewTokenAndUpdatePlayer();
+      console.log("[WatchClient] Renovação periódica do token (silenciosa)...");
+      renewTokenAndUpdatePlayer(false); // false = não forçar reload
     }, RENEWAL_INTERVAL);
 
     return () => {
@@ -739,15 +761,15 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
               (errorData.type === Hls.ErrorTypes.NETWORK_ERROR && 
                errorData.details === Hls.ErrorDetails.FRAG_LOAD_ERROR &&
                errorData.response?.code === 403)) {
-            console.log("[WatchClient] Token expirado detectado (403), renovando...");
+            console.log("[WatchClient] Token expirado detectado (403), renovando COM reload...");
             
             // Salvar posição atual antes de renovar
             if (video.currentTime > 0) {
               savedPositionRef.current = video.currentTime;
             }
             
-            // Renovar token imediatamente
-            renewTokenAndUpdatePlayer();
+            // Renovar token E forçar reload (true) porque o token atual expirou
+            renewTokenAndUpdatePlayer(true);
             return;
           }
           
