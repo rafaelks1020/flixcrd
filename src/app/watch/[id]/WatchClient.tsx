@@ -97,6 +97,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const isLoadingPlaybackRef = useRef<boolean>(false); // Evitar chamadas duplicadas
   const isRenewingTokenRef = useRef<boolean>(false); // Evitar renovações duplicadas
   const savedPositionRef = useRef<number>(0); // Salvar posição ao renovar token
+  const bufferIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const router = useRouter();
 
   // Detectar tipo de dispositivo para ajustar buffer
@@ -600,40 +601,63 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
       }
     };
 
+    console.log("[WatchClient] Tipo de stream:", kind, "| HLS.js suportado:", Hls.isSupported());
+    
     if (kind === "mp4") {
       video.src = src;
       video.addEventListener("loadedmetadata", restorePosition, { once: true });
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       video.play().catch(() => {});
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = src;
-      video.addEventListener("loadedmetadata", restorePosition, { once: true });
-      // best-effort play, ignore falhas automáticas
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      video.play().catch(() => {});
     } else if (Hls.isSupported()) {
+      // PRIORIZAR HLS.js para ter controle do buffer
+      console.log("%c[HLS] INICIANDO PLAYER HLS", "color: yellow; font-size: 20px; font-weight: bold");
+      
       // Função para atualizar informações do buffer
       const updateBufferInfo = () => {
-        if (!video || !duration) return;
+        const dur = video.duration;
+        if (!dur || !Number.isFinite(dur) || dur === 0) return;
         
         const buffered = video.buffered;
         if (buffered.length > 0) {
-          // Pegar o final do último range de buffer
           const bufferedEnd = buffered.end(buffered.length - 1);
-          const bufferedPercent = (bufferedEnd / duration) * 100;
-          setBufferedPercent(Math.min(100, bufferedPercent));
+          const pct = (bufferedEnd / dur) * 100;
+          const ahead = bufferedEnd - video.currentTime;
           
-          // Calcular saúde do buffer (quanto tempo à frente está bufferizado)
-          const bufferAhead = bufferedEnd - video.currentTime;
-          if (bufferAhead < 10) {
-            setBufferHealth("low");
-          } else if (bufferAhead < 30) {
-            setBufferHealth("medium");
-          } else {
-            setBufferHealth("high");
-          }
+          // Log para debug
+          console.log(`[BUFFER] ${pct.toFixed(1)}% | ${ahead.toFixed(0)}s ahead`);
+          
+          setBufferedPercent(Math.min(100, pct));
+          setBufferHealth(ahead < 10 ? "low" : ahead < 30 ? "medium" : "high");
         }
       };
+      
+      // Monitorar buffer via eventos do vídeo
+      console.log("[WatchClient] Adicionando listeners de buffer");
+      video.addEventListener("progress", updateBufferInfo);
+      video.addEventListener("timeupdate", updateBufferInfo);
+      
+      // Limpar interval anterior
+      if (bufferIntervalRef.current) {
+        clearInterval(bufferIntervalRef.current);
+      }
+      
+      // Atualizar buffer a cada 500ms
+      bufferIntervalRef.current = setInterval(() => {
+        const dur = video.duration;
+        if (!dur || !Number.isFinite(dur) || dur === 0) return;
+        
+        const buffered = video.buffered;
+        if (buffered.length > 0) {
+          const bufferedEnd = buffered.end(buffered.length - 1);
+          const pct = (bufferedEnd / dur) * 100;
+          const ahead = bufferedEnd - video.currentTime;
+          
+          console.log(`%c[BUFFER] ${ahead.toFixed(0)}s à frente | ${pct.toFixed(1)}% total`, 'color: lime; font-weight: bold');
+          
+          setBufferedPercent(Math.min(100, pct));
+          setBufferHealth(ahead < 10 ? "low" : ahead < 30 ? "medium" : "high");
+        }
+      }, 1000);
 
       // Detectar dispositivo e velocidade para configurar buffer adaptativo
       const deviceType = getDeviceType();
@@ -649,30 +673,24 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         });
 
         const hls = new Hls({
-          // Configurações de buffer adaptativo
-          maxBufferLength: bufferConfig.maxBufferLength,
-          maxMaxBufferLength: bufferConfig.maxMaxBufferLength,
-          backBufferLength: bufferConfig.backBufferLength,
-          // Configurações para melhor handling de erros de rede
-          fragLoadingMaxRetry: 3,
-          fragLoadingRetryDelay: 1000,
-          levelLoadingMaxRetry: 3,
-          manifestLoadingMaxRetry: 3,
-          // Configurações adicionais de buffer
+          // BUFFER GRANDE - carregar muitos segmentos à frente
+          maxBufferLength: 60,           // 60 segundos de buffer mínimo
+          maxMaxBufferLength: 600,       // Até 10 minutos de buffer máximo
+          backBufferLength: 30,          // Manter 30s atrás
+          
+          // Retry configs
+          fragLoadingMaxRetry: 5,
+          fragLoadingRetryDelay: 500,
+          levelLoadingMaxRetry: 5,
+          manifestLoadingMaxRetry: 5,
+          
+          // Carregar agressivamente
           maxBufferHole: 0.5,
-          lowBufferWatchdogPeriod: 0.5,
-          highBufferWatchdogPeriod: 3,
+          startPosition: -1,
         });
         hlsRef.current = hls;
-
-        // Monitorar progresso do buffer
-        hls.on(Hls.Events.FRAG_BUFFERED, () => {
-          updateBufferInfo();
-        });
-
-        hls.on(Hls.Events.BUFFER_APPENDED, () => {
-          updateBufferInfo();
-        });
+        
+        console.log("[HLS] Iniciado com buffer de 60s-600s");
 
         hls.on(Hls.Events.MANIFEST_PARSED, (_event, parsedData: any) => {
           const levelsArray = Array.isArray(parsedData?.levels) ? parsedData.levels : [];
@@ -745,17 +763,32 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
 
       // Inicializar HLS de forma assíncrona
       initHls();
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      // Fallback para HLS nativo (Safari/iOS)
+      console.log("[WatchClient] Usando HLS nativo");
+      video.src = src;
+      video.addEventListener("loadedmetadata", restorePosition, { once: true });
+      video.play().catch(() => {});
     } else {
       setError("Seu navegador não suporta HLS.");
     }
 
     return () => {
+      // Limpar interval de buffer
+      if (bufferIntervalRef.current) {
+        clearInterval(bufferIntervalRef.current);
+        bufferIntervalRef.current = null;
+      }
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
+      // Limpar estados de buffer
+      setBufferedPercent(0);
+      setBufferHealth("medium");
     };
-  }, [data?.playbackUrl, renewTokenAndUpdatePlayer, getDeviceType, measureNetworkSpeed, getBufferConfig, duration]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.playbackUrl]);
 
   useEffect(() => {
     return () => {
