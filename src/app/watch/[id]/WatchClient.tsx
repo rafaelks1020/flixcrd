@@ -697,37 +697,64 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         });
 
         const hls = new Hls({
-          // BUFFER GRANDE - carregar muitos segmentos à frente
-          maxBufferLength: 120,          // 2 minutos de buffer mínimo
-          maxMaxBufferLength: 600,       // Até 10 minutos de buffer máximo
-          backBufferLength: 60,          // Manter 1min atrás
-          
-          // Carregar mais rápido
-          maxBufferSize: 120 * 1000 * 1000, // 120MB de buffer
+          // === BUFFER CONFIG ===
+          // Buffer moderado para evitar problemas de memória
+          maxBufferLength: 60,           // 1 minuto de buffer à frente
+          maxMaxBufferLength: 120,       // Máximo 2 minutos
+          backBufferLength: 30,          // Manter 30s atrás
+          maxBufferSize: 60 * 1000 * 1000, // 60MB de buffer
           maxBufferHole: 0.5,
           
-          // Retry configs - mais agressivo
-          fragLoadingMaxRetry: 10,
-          fragLoadingRetryDelay: 200,
-          fragLoadingMaxRetryTimeout: 10000,
-          levelLoadingMaxRetry: 10,
-          manifestLoadingMaxRetry: 10,
+          // === ABR (Adaptive Bitrate) - ESTABILIDADE ===
+          // Configurações conservadoras para evitar trocas frequentes de qualidade
+          abrEwmaDefaultEstimate: 3000000,  // Assumir 3Mbps inicial (conservador)
+          abrBandWidthFactor: 0.7,          // Usar 70% da banda medida (margem de segurança)
+          abrBandWidthUpFactor: 0.5,        // Só sobe de qualidade se tiver 50% de margem
+          abrMaxWithRealBitrate: true,      // Considerar bitrate real do segmento
           
-          // Iniciar do começo
+          // Evitar trocas de qualidade quando buffer está baixo
+          // Só permite trocar se tiver pelo menos 10s de buffer
+          startLevel: -1,                   // Auto-detectar nível inicial
+          
+          // === RETRY CONFIG ===
+          fragLoadingMaxRetry: 6,
+          fragLoadingRetryDelay: 500,
+          fragLoadingMaxRetryTimeout: 8000,
+          levelLoadingMaxRetry: 4,
+          manifestLoadingMaxRetry: 4,
+          
+          // === OUTRAS CONFIGS ===
           startPosition: -1,
-          
-          // Carregar próximo nível mais rápido
-          abrEwmaDefaultEstimate: 5000000, // Assumir 5Mbps inicial
-          abrBandWidthFactor: 0.95,
-          abrBandWidthUpFactor: 0.7,
-          
-          // Não pausar carregamento
-          testBandwidth: true,
+          lowLatencyMode: false,            // Priorizar estabilidade sobre latência
           progressive: true,
+          
+          // Capstone: não abortar carregamento de fragmento ao trocar de nível
+          // Isso evita o "flash" da capa quando troca de qualidade
+          nextLoadLevel: -1,
         });
         hlsRef.current = hls;
         
-        console.log("[HLS] Iniciado com buffer de 60s-600s");
+        console.log("[HLS] Iniciado com ABR conservador (estabilidade > qualidade)");
+
+        // Log de trocas de qualidade para debug
+        hls.on(Hls.Events.LEVEL_SWITCHING, (_event, data: any) => {
+          console.log(`%c[HLS] Trocando para nível ${data.level}`, 'color: orange; font-weight: bold');
+        });
+
+
+        // Log de buffering (menos verbose)
+        let lastBufferLog = 0;
+        hls.on(Hls.Events.FRAG_BUFFERED, () => {
+          const now = Date.now();
+          if (now - lastBufferLog < 5000) return; // Log a cada 5s no máximo
+          lastBufferLog = now;
+          
+          const buffered = videoRef.current?.buffered;
+          if (buffered && buffered.length > 0) {
+            const ahead = buffered.end(buffered.length - 1) - (videoRef.current?.currentTime || 0);
+            console.log(`[HLS] Buffer: ${ahead.toFixed(0)}s à frente`);
+          }
+        });
 
         hls.on(Hls.Events.MANIFEST_PARSED, (_event, parsedData: any) => {
           const levelsArray = Array.isArray(parsedData?.levels) ? parsedData.levels : [];
@@ -750,6 +777,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
 
         hls.on(Hls.Events.LEVEL_SWITCHED, (_event, switchedData: any) => {
           if (typeof switchedData?.level === "number") {
+            console.log(`%c[HLS] Qualidade alterada para nível ${switchedData.level}`, 'color: green; font-weight: bold');
             setCurrentLevelIndex(switchedData.level);
           }
         });
