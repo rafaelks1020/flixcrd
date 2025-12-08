@@ -40,3 +40,80 @@ body {
 .animate-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* ============================================
+   TV/GAMEPAD NAVIGATION STYLES
+   Para Xbox, Smart TVs e navegação por controle
+   ============================================ */
+
+/* Foco visível para navegação por controle */
+*:focus {
+  outline: none;
+}
+
+*:focus-visible {
+  outline: 3px solid #e50914 !important;
+  outline-offset: 4px;
+  border-radius: 8px;
+  box-shadow: 0 0 20px rgba(229, 9, 20, 0.5);
+  transition: outline 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Cards de título com foco */
+.title-card:focus-visible,
+a:focus-visible,
+button:focus-visible {
+  transform: scale(1.05);
+  z-index: 50;
+}
+
+/* Transição suave para todos elementos focáveis */
+a, button, [tabindex]:not([tabindex="-1"]) {
+  transition: transform 0.2s ease, outline 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Scroll snap para carrosséis - melhor navegação por D-pad */
+.tv-carousel {
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+}
+
+.tv-carousel > * {
+  scroll-snap-align: start;
+}
+
+/* Aumentar área de toque/clique para TV */
+@media (min-width: 1280px) and (pointer: coarse),
+       (min-width: 1280px) and (hover: none) {
+  /* TV mode - botões maiores */
+  button, a {
+    min-height: 48px;
+    min-width: 48px;
+  }
+  
+  /* Texto maior para TV */
+  body {
+    font-size: 18px;
+  }
+}
+
+/* Classe para modo TV explícito */
+.tv-mode {
+  /* Cursor invisível no modo TV */
+  cursor: none;
+}
+
+.tv-mode *:focus-visible {
+  outline-width: 4px !important;
+  outline-offset: 6px;
+}
+
+/* Animação de foco pulsante para TV */
+@keyframes tv-focus-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(229, 9, 20, 0.5); }
+  50% { box-shadow: 0 0 30px rgba(229, 9, 20, 0.8); }
+}
+
+.tv-mode *:focus-visible {
+  animation: tv-focus-pulse 1.5s ease-in-out infinite;
+}

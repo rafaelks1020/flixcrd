@@ -31,6 +31,14 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: "/paelflix-favicon.svg",
+    apple: "/icons/icon-192.png",
+  },
+  manifest: "/manifest.json",
+  themeColor: "#e50914",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Pflix",
   },
 };
 
