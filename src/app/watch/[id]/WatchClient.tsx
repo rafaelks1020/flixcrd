@@ -86,6 +86,9 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const [tokenExpiresAt, setTokenExpiresAt] = useState<number | null>(null);
   const [isProtectedStream, setIsProtectedStream] = useState(false);
 
+  
+  const [bufferHealth, setBufferHealth] = useState<"low" | "medium" | "high">("medium");
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const playerRef = useRef<HTMLDivElement | null>(null);
@@ -93,7 +96,103 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const lastProgressSyncRef = useRef<number>(0);
   const tokenRenewalTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLoadingPlaybackRef = useRef<boolean>(false); // Evitar chamadas duplicadas
+  const isRenewingTokenRef = useRef<boolean>(false); // Evitar renovações duplicadas
+  const savedPositionRef = useRef<number>(0); // Salvar posição ao renovar token
   const router = useRouter();
+
+  // Detectar tipo de dispositivo para ajustar buffer
+  const getDeviceType = useCallback((): "xbox" | "mobile" | "tv" | "desktop" => {
+    if (typeof navigator === "undefined") return "desktop";
+    
+    const ua = navigator.userAgent.toLowerCase();
+    
+    // Xbox tem memória limitada - buffer pequeno
+    if (ua.includes("xbox") || ua.includes("xboxone") || ua.includes("xbox series")) {
+      return "xbox";
+    }
+    
+    // Smart TVs geralmente têm memória limitada
+    if (ua.includes("smart-tv") || ua.includes("smarttv") || ua.includes("webos") || 
+        ua.includes("tizen") || ua.includes("roku") || ua.includes("firetv") ||
+        ua.includes("appletv") || ua.includes("chromecast")) {
+      return "tv";
+    }
+    
+    // Mobile também tem limitações
+    if (/android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(ua)) {
+      return "mobile";
+    }
+    
+    return "desktop";
+  }, []);
+
+  // Medir velocidade de download para ajustar buffer
+  const measureNetworkSpeed = useCallback(async (): Promise<number> => {
+    if (typeof navigator !== "undefined" && "connection" in navigator) {
+      const conn = (navigator as any).connection;
+      if (conn?.downlink) {
+        // downlink está em Mbps
+        return conn.downlink;
+      }
+    }
+    
+    // Fallback: assumir velocidade média
+    return 10; // 10 Mbps default
+  }, []);
+
+  // Calcular configuração de buffer baseado no dispositivo e velocidade
+  const getBufferConfig = useCallback((deviceType: string, speedMbps: number) => {
+    // Configurações base por dispositivo (em segundos)
+    const configs = {
+      // Xbox: buffer pequeno para evitar travamentos de memória
+      xbox: {
+        maxBufferLength: 30,        // Máximo 30s de buffer
+        maxMaxBufferLength: 60,     // Nunca mais que 60s
+        backBufferLength: 10,       // Manter só 10s atrás
+      },
+      // TV: buffer moderado
+      tv: {
+        maxBufferLength: 45,
+        maxMaxBufferLength: 90,
+        backBufferLength: 15,
+      },
+      // Mobile: buffer médio
+      mobile: {
+        maxBufferLength: 60,
+        maxMaxBufferLength: 120,
+        backBufferLength: 20,
+      },
+      // Desktop: buffer grande se a internet permitir
+      desktop: {
+        maxBufferLength: 120,       // 2 minutos de buffer
+        maxMaxBufferLength: 300,    // Até 5 minutos se internet boa
+        backBufferLength: 30,       // Manter 30s atrás
+      },
+    };
+
+    const baseConfig = configs[deviceType as keyof typeof configs] || configs.desktop;
+    
+    // Ajustar baseado na velocidade da internet
+    let multiplier = 1;
+    if (speedMbps < 5) {
+      multiplier = 0.5; // Internet lenta: reduzir buffer
+    } else if (speedMbps < 15) {
+      multiplier = 0.75; // Internet média
+    } else if (speedMbps > 50) {
+      multiplier = 1.5; // Internet rápida: aumentar buffer
+    }
+    
+    // Para Xbox, nunca aumentar além do limite
+    if (deviceType === "xbox") {
+      multiplier = Math.min(multiplier, 1);
+    }
+
+    return {
+      maxBufferLength: Math.round(baseConfig.maxBufferLength * multiplier),
+      maxMaxBufferLength: Math.round(baseConfig.maxMaxBufferLength * multiplier),
+      backBufferLength: baseConfig.backBufferLength,
+    };
+  }, []);
 
   // Carrega o profileId ativo salvo pelo fluxo de perfis
   useEffect(() => {
@@ -228,67 +327,98 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     };
   }, [titleId, episodeId, profileId]);
 
-  // Renovação automática de token para streaming protegido
-  // Só renova quando faltar 1 minuto para expirar (token dura 5 min)
-  useEffect(() => {
-    if (!isProtectedStream || !tokenExpiresAt || !data) return;
-
-    // Limpar timeout anterior
-    if (tokenRenewalTimeoutRef.current) {
-      clearTimeout(tokenRenewalTimeoutRef.current);
+  // Função para renovar token silenciosamente (sem recriar o player)
+  const renewTokenAndUpdatePlayer = useCallback(async () => {
+    if (isRenewingTokenRef.current) {
+      console.log("[WatchClient] Renovação já em andamento, ignorando...");
+      return;
     }
-
-    // Token dura 5 minutos, renovar quando faltar 1 minuto
-    const renewBeforeExpiry = 60 * 1000; // 1 minuto antes
-    const now = Date.now();
-    const timeUntilExpiry = tokenExpiresAt - now;
-    const timeUntilRenewal = timeUntilExpiry - renewBeforeExpiry;
-
-    console.log("[WatchClient] Token expira em", Math.round(timeUntilExpiry / 1000), "segundos");
-
-    // Se ainda falta mais de 1 minuto, agendar renovação
-    if (timeUntilRenewal > 0) {
-      console.log("[WatchClient] Agendando renovação para daqui", Math.round(timeUntilRenewal / 1000), "segundos");
+    
+    isRenewingTokenRef.current = true;
+    
+    try {
+      console.log("[WatchClient] Renovando token de streaming...");
       
-      tokenRenewalTimeoutRef.current = setTimeout(async () => {
-        try {
-          console.log("[WatchClient] Renovando token de streaming...");
-          
-          const contentType = episodeId ? "episode" : "title";
-          const contentId = episodeId || titleId;
-          
-          const res = await fetch("/api/stream/token", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contentType, contentId }),
-          });
+      const contentType = episodeId ? "episode" : "title";
+      const contentId = episodeId || titleId;
+      
+      const res = await fetch("/api/stream/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contentType, contentId }),
+      });
 
-          if (!res.ok) {
-            console.error("[WatchClient] Erro ao renovar token:", res.status);
-            return;
-          }
+      if (!res.ok) {
+        console.error("[WatchClient] Erro ao renovar token:", res.status);
+        return;
+      }
 
-          const newData = await res.json();
+      const newData = await res.json();
+      
+      if (newData.streamUrl && newData.expiresAt) {
+        console.log("[WatchClient] Token renovado com sucesso, novo expira em", 
+          Math.round((newData.expiresAt - Date.now()) / 1000), "segundos");
+        
+        // Atualizar expiração
+        setTokenExpiresAt(newData.expiresAt);
+        
+        // Atualizar URL no estado (para referência futura)
+        // Mas NÃO recriar o player - o HLS.js vai usar a nova URL nos próximos segmentos
+        // O token está na URL do manifest, então precisamos recarregar o source
+        if (hlsRef.current && videoRef.current) {
+          // Salvar posição atual
+          const currentPos = videoRef.current.currentTime;
           
-          if (newData.streamUrl && newData.expiresAt) {
-            console.log("[WatchClient] Token renovado com sucesso, novo expira em", 
-              Math.round((newData.expiresAt - Date.now()) / 1000), "segundos");
-            setTokenExpiresAt(newData.expiresAt);
-          }
-        } catch (err) {
-          console.error("[WatchClient] Erro ao renovar token:", err);
+          console.log("[WatchClient] Recarregando source com novo token (posição:", currentPos, ")");
+          
+          // Recarregar source com nova URL
+          hlsRef.current.loadSource(newData.streamUrl);
+          
+          // Restaurar posição após o manifest ser parseado
+          savedPositionRef.current = currentPos;
+          
+          // Atualizar estado
+          setData(prev => prev ? { ...prev, playbackUrl: newData.streamUrl } : prev);
+        } else {
+          // Fallback: atualizar estado (vai recriar o player)
+          savedPositionRef.current = videoRef.current?.currentTime || 0;
+          setData(prev => prev ? { ...prev, playbackUrl: newData.streamUrl } : prev);
         }
-      }, timeUntilRenewal);
+      }
+    } catch (err) {
+      console.error("[WatchClient] Erro ao renovar token:", err);
+    } finally {
+      isRenewingTokenRef.current = false;
     }
-    // Se já passou do tempo de renovação mas ainda não expirou, não faz nada
-    // O token atual ainda é válido
+  }, [episodeId, titleId]);
+
+  // Renovação automática de token para streaming protegido
+  // Estratégia: renovar a cada 3 minutos (token dura 5 min) - sempre antes de expirar
+  useEffect(() => {
+    if (!isProtectedStream || !data) return;
+
+    // Limpar interval anterior
+    if (tokenRenewalTimeoutRef.current) {
+      clearInterval(tokenRenewalTimeoutRef.current);
+    }
+
+    // Renovar a cada 3 minutos (180 segundos) - bem antes dos 5 min de expiração
+    const RENEWAL_INTERVAL = 3 * 60 * 1000; // 3 minutos
+    
+    console.log("[WatchClient] Iniciando renovação automática de token a cada 3 minutos");
+
+    // Agendar renovação periódica
+    tokenRenewalTimeoutRef.current = setInterval(() => {
+      console.log("[WatchClient] Renovação periódica do token...");
+      renewTokenAndUpdatePlayer();
+    }, RENEWAL_INTERVAL);
 
     return () => {
       if (tokenRenewalTimeoutRef.current) {
-        clearTimeout(tokenRenewalTimeoutRef.current);
+        clearInterval(tokenRenewalTimeoutRef.current);
       }
     };
-  }, [isProtectedStream, tokenExpiresAt, data, episodeId, titleId]);
+  }, [isProtectedStream, data, renewTokenAndUpdatePlayer]);
 
   // Buscar próximo episódio se for série/anime
   useEffect(() => {
@@ -462,41 +592,160 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
       hlsRef.current = null;
     }
 
+    // Restaurar posição salva se houver (após renovação de token)
+    const restorePosition = () => {
+      if (savedPositionRef.current > 0) {
+        console.log("[WatchClient] Restaurando posição:", savedPositionRef.current);
+        video.currentTime = savedPositionRef.current;
+        savedPositionRef.current = 0;
+      }
+    };
+
     if (kind === "mp4") {
       video.src = src;
+      video.addEventListener("loadedmetadata", restorePosition, { once: true });
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       video.play().catch(() => {});
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = src;
+      video.addEventListener("loadedmetadata", restorePosition, { once: true });
       // best-effort play, ignore falhas automáticas
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       video.play().catch(() => {});
     } else if (Hls.isSupported()) {
-      const hls = new Hls();
-      hlsRef.current = hls;
-      hls.on(Hls.Events.MANIFEST_PARSED, (_event, data: any) => {
-        const levelsArray = Array.isArray(data?.levels) ? data.levels : [];
-        const mapped: QualityLevelInfo[] = levelsArray.map((level: any, index: number) => ({
-          index,
-          height: typeof level?.height === "number" ? level.height : undefined,
-          bitrate: typeof level?.bitrate === "number" ? level.bitrate : undefined,
-        }));
-        setQualityLevels(mapped);
-        if (hls.currentLevel >= 0) {
-          setCurrentLevelIndex(hls.currentLevel);
-        } else {
-          setCurrentLevelIndex(null);
+      // Função para atualizar informações do buffer
+      const updateBufferInfo = () => {
+        if (!video || !duration) return;
+        
+        const buffered = video.buffered;
+        if (buffered.length > 0) {
+          // Pegar o final do último range de buffer
+          const bufferedEnd = buffered.end(buffered.length - 1);
+          const bufferedPercent = (bufferedEnd / duration) * 100;
+          setBufferedPercent(Math.min(100, bufferedPercent));
+          
+          // Calcular saúde do buffer (quanto tempo à frente está bufferizado)
+          const bufferAhead = bufferedEnd - video.currentTime;
+          if (bufferAhead < 10) {
+            setBufferHealth("low");
+          } else if (bufferAhead < 30) {
+            setBufferHealth("medium");
+          } else {
+            setBufferHealth("high");
+          }
         }
-        setAutoQuality(Boolean(hls.autoLevelEnabled));
-      });
+      };
 
-      hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data: any) => {
-        if (typeof data?.level === "number") {
-          setCurrentLevelIndex(data.level);
-        }
-      });
-      hls.loadSource(src);
-      hls.attachMedia(video);
+      // Detectar dispositivo e velocidade para configurar buffer adaptativo
+      const deviceType = getDeviceType();
+      
+      const initHls = async () => {
+        const speedMbps = await measureNetworkSpeed();
+        const bufferConfig = getBufferConfig(deviceType, speedMbps);
+        
+        console.log("[WatchClient] Buffer adaptativo:", {
+          dispositivo: deviceType,
+          velocidade: `${speedMbps} Mbps`,
+          config: bufferConfig,
+        });
+
+        const hls = new Hls({
+          // Configurações de buffer adaptativo
+          maxBufferLength: bufferConfig.maxBufferLength,
+          maxMaxBufferLength: bufferConfig.maxMaxBufferLength,
+          backBufferLength: bufferConfig.backBufferLength,
+          // Configurações para melhor handling de erros de rede
+          fragLoadingMaxRetry: 3,
+          fragLoadingRetryDelay: 1000,
+          levelLoadingMaxRetry: 3,
+          manifestLoadingMaxRetry: 3,
+          // Configurações adicionais de buffer
+          maxBufferHole: 0.5,
+          lowBufferWatchdogPeriod: 0.5,
+          highBufferWatchdogPeriod: 3,
+        });
+        hlsRef.current = hls;
+
+        // Monitorar progresso do buffer
+        hls.on(Hls.Events.FRAG_BUFFERED, () => {
+          updateBufferInfo();
+        });
+
+        hls.on(Hls.Events.BUFFER_APPENDED, () => {
+          updateBufferInfo();
+        });
+
+        hls.on(Hls.Events.MANIFEST_PARSED, (_event, parsedData: any) => {
+          const levelsArray = Array.isArray(parsedData?.levels) ? parsedData.levels : [];
+          const mapped: QualityLevelInfo[] = levelsArray.map((level: any, index: number) => ({
+            index,
+            height: typeof level?.height === "number" ? level.height : undefined,
+            bitrate: typeof level?.bitrate === "number" ? level.bitrate : undefined,
+          }));
+          setQualityLevels(mapped);
+          if (hls.currentLevel >= 0) {
+            setCurrentLevelIndex(hls.currentLevel);
+          } else {
+            setCurrentLevelIndex(null);
+          }
+          setAutoQuality(Boolean(hls.autoLevelEnabled));
+          
+          // Restaurar posição após manifest parsed
+          restorePosition();
+        });
+
+        hls.on(Hls.Events.LEVEL_SWITCHED, (_event, switchedData: any) => {
+          if (typeof switchedData?.level === "number") {
+            setCurrentLevelIndex(switchedData.level);
+          }
+        });
+
+        // Handler de erro para detectar 403 (token expirado) e renovar
+        hls.on(Hls.Events.ERROR, (_event, errorData: any) => {
+          console.log("[WatchClient] HLS Error:", errorData.type, errorData.details, errorData.response?.code);
+          
+          // Verificar se é erro 403 (token expirado)
+          if (errorData.response?.code === 403 || 
+              (errorData.type === Hls.ErrorTypes.NETWORK_ERROR && 
+               errorData.details === Hls.ErrorDetails.FRAG_LOAD_ERROR &&
+               errorData.response?.code === 403)) {
+            console.log("[WatchClient] Token expirado detectado (403), renovando...");
+            
+            // Salvar posição atual antes de renovar
+            if (video.currentTime > 0) {
+              savedPositionRef.current = video.currentTime;
+            }
+            
+            // Renovar token imediatamente
+            renewTokenAndUpdatePlayer();
+            return;
+          }
+          
+          // Para outros erros fatais, mostrar erro
+          if (errorData.fatal) {
+            switch (errorData.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                console.error("[WatchClient] Erro de rede fatal, tentando recuperar...");
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.error("[WatchClient] Erro de mídia fatal, tentando recuperar...");
+                hls.recoverMediaError();
+                break;
+              default:
+                console.error("[WatchClient] Erro fatal não recuperável:", errorData);
+                setError("Erro ao reproduzir o vídeo. Tente recarregar a página.");
+                break;
+            }
+          }
+        });
+
+        hls.loadSource(src);
+        hls.attachMedia(video);
+      };
+
+      // Inicializar HLS de forma assíncrona
+      initHls();
     } else {
       setError("Seu navegador não suporta HLS.");
     }
@@ -507,7 +756,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         hlsRef.current = null;
       }
     };
-  }, [data?.playbackUrl]);
+  }, [data?.playbackUrl, renewTokenAndUpdatePlayer, getDeviceType, measureNetworkSpeed, getBufferConfig, duration]);
 
   useEffect(() => {
     return () => {
@@ -1065,12 +1314,19 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
             isHovering || !isPlaying ? "opacity-100" : "opacity-0"
           }`}
         >
+          {/* Barra de progresso com buffer */}
           <div
-            className="mb-2 h-1.5 w-full cursor-pointer rounded-full bg-zinc-700/80"
+            className="mb-2 h-1.5 w-full cursor-pointer rounded-full bg-zinc-700/80 relative overflow-hidden"
             onClick={handleSeekBarClick}
           >
+            {/* Buffer carregado (cinza claro) */}
             <div
-              className="h-full rounded-full bg-red-600"
+              className="absolute h-full rounded-full bg-zinc-500/60 transition-all duration-300"
+              style={{ width: `${bufferedPercent}%` }}
+            />
+            {/* Progresso atual (vermelho) */}
+            <div
+              className="absolute h-full rounded-full bg-red-600"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -1113,6 +1369,27 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
             <span className="tabular-nums text-[11px] text-zinc-200 md:text-xs">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
+
+            {/* Indicador de saúde do buffer */}
+            {bufferedPercent > 0 && (
+              <div 
+                className="flex items-center gap-1 text-[10px] text-zinc-400"
+                title={`Buffer: ${Math.round(bufferedPercent)}% carregado`}
+              >
+                <div 
+                  className={`w-2 h-2 rounded-full ${
+                    bufferHealth === "high" 
+                      ? "bg-green-500" 
+                      : bufferHealth === "medium" 
+                        ? "bg-yellow-500" 
+                        : "bg-red-500"
+                  }`}
+                />
+                <span className="hidden md:inline">
+                  {bufferHealth === "high" ? "Buffer OK" : bufferHealth === "medium" ? "Carregando..." : "Buffer baixo"}
+                </span>
+              </div>
+            )}
 
             {/* Botão Próximo Episódio */}
             {nextEpisode && (
