@@ -50,9 +50,9 @@ export function useServiceMonitor() {
       }
     }
 
-    // Verificar a cada 30 segundos
+    // Verificar a cada 60 segundos (economiza requests)
     checkService();
-    const interval = setInterval(checkService, 30000);
+    const interval = setInterval(checkService, 60000);
 
     return () => clearInterval(interval);
   }, []);

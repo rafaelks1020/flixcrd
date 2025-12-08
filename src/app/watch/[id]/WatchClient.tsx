@@ -85,8 +85,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const [subscriptionBlocked, setSubscriptionBlocked] = useState(false);
   const [tokenExpiresAt, setTokenExpiresAt] = useState<number | null>(null);
   const [isProtectedStream, setIsProtectedStream] = useState(false);
-
-  
+  const [bufferedPercent, setBufferedPercent] = useState(0);
   const [bufferHealth, setBufferHealth] = useState<"low" | "medium" | "high">("medium");
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -1109,22 +1108,47 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
             setCurrentSubtitleIndex(defaultIndex);
 
             // Buscar progresso salvo para Continuar assistindo
+            // Primeiro verifica localStorage (mais recente), depois servidor
             if (profileId) {
               // eslint-disable-next-line @typescript-eslint/no-floating-promises
               (async () => {
                 try {
-                  const baseUrl = episodeId
-                    ? `/api/titles/${titleId}/progress?episodeId=${encodeURIComponent(episodeId)}`
-                    : `/api/titles/${titleId}/progress`;
+                  let resume = 0;
+                  let total = loadedDuration;
 
-                  const sep = baseUrl.includes("?") ? "&" : "?";
-                  const progressUrl = `${baseUrl}${sep}profileId=${encodeURIComponent(profileId)}`;
+                  // 1. Verificar localStorage primeiro (progresso local mais recente)
+                  const progressKey = `progress_${episodeId || titleId}_${profileId}`;
+                  const localProgress = localStorage.getItem(progressKey);
+                  if (localProgress) {
+                    try {
+                      const parsed = JSON.parse(localProgress);
+                      // Usar local se for recente (menos de 1 hora)
+                      if (parsed.timestamp && Date.now() - parsed.timestamp < 3600000) {
+                        resume = Number(parsed.positionSeconds ?? 0);
+                        total = Number(parsed.durationSeconds ?? loadedDuration);
+                      }
+                    } catch {
+                      // JSON inválido, ignorar
+                    }
+                  }
 
-                  const res = await fetch(progressUrl);
-                  if (!res.ok) return;
-                  const json = await res.json();
-                  const resume = Number(json?.positionSeconds ?? 0);
-                  const total = Number(json?.durationSeconds ?? loadedDuration ?? 0);
+                  // 2. Se não tiver local recente, buscar do servidor
+                  if (resume === 0) {
+                    const baseUrl = episodeId
+                      ? `/api/titles/${titleId}/progress?episodeId=${encodeURIComponent(episodeId)}`
+                      : `/api/titles/${titleId}/progress`;
+
+                    const sep = baseUrl.includes("?") ? "&" : "?";
+                    const progressUrl = `${baseUrl}${sep}profileId=${encodeURIComponent(profileId)}`;
+
+                    const res = await fetch(progressUrl);
+                    if (res.ok) {
+                      const json = await res.json();
+                      resume = Number(json?.positionSeconds ?? 0);
+                      total = Number(json?.durationSeconds ?? loadedDuration ?? 0);
+                    }
+                  }
+
                   const effectiveDuration = total || loadedDuration;
                   if (
                     Number.isFinite(resume) &&
@@ -1147,12 +1171,21 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
             const total = videoEl.duration || duration;
             setCurrentTime(newTime);
 
+            // Salvar progresso localmente com alta frequência (para precisão)
+            const progressKey = `progress_${episodeId || titleId}_${profileId}`;
+            localStorage.setItem(progressKey, JSON.stringify({
+              positionSeconds: newTime,
+              durationSeconds: total,
+              timestamp: Date.now(),
+            }));
+
+            // Sincronizar com servidor apenas a cada 30 segundos (economiza requests)
             const now = Date.now();
             if (
               profileId &&
               total &&
               Number.isFinite(total) &&
-              now - lastProgressSyncRef.current > 5000
+              now - lastProgressSyncRef.current > 30000
             ) {
               lastProgressSyncRef.current = now;
               // eslint-disable-next-line @typescript-eslint/no-floating-promises
