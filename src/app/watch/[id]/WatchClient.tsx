@@ -99,6 +99,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const savedPositionRef = useRef<number>(0); // Salvar posição ao renovar token
   const currentStreamUrlRef = useRef<string | null>(null); // URL atual do stream (para renovação silenciosa)
   const bufferIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hasRestoredProgressRef = useRef<boolean>(false); // Evitar múltiplas restaurações de progresso
   const router = useRouter();
 
   // Detectar tipo de dispositivo para ajustar buffer
@@ -322,9 +323,10 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
 
     loadPlayback();
     
-    // Cleanup: resetar flag quando componente desmontar ou deps mudarem
+    // Cleanup: resetar flags quando componente desmontar ou deps mudarem
     return () => {
       isLoadingPlaybackRef.current = false;
+      hasRestoredProgressRef.current = false; // Resetar para permitir nova restauração
     };
   }, [titleId, episodeId, profileId]);
 
@@ -1207,7 +1209,9 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
 
             // Buscar progresso salvo para Continuar assistindo
             // Primeiro verifica localStorage (mais recente), depois servidor
-            if (profileId) {
+            // IMPORTANTE: Só fazer isso UMA VEZ para evitar loops
+            if (profileId && !hasRestoredProgressRef.current) {
+              hasRestoredProgressRef.current = true; // Marcar como já restaurado
               // eslint-disable-next-line @typescript-eslint/no-floating-promises
               (async () => {
                 try {
