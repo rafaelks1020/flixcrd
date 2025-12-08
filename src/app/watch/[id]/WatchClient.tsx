@@ -360,8 +360,8 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
       const newData = await res.json();
       
       if (newData.streamUrl && newData.expiresAt) {
-        console.log("[WatchClient] Token renovado com sucesso, novo expira em", 
-          Math.round((newData.expiresAt - Date.now()) / 1000), "segundos");
+        const expiresInMinutes = Math.round((newData.expiresAt - Date.now()) / 1000 / 60);
+        console.log("[WatchClient] Token renovado com sucesso, expira em", expiresInMinutes, "minutos (", Math.round(expiresInMinutes / 60 * 10) / 10, "horas)");
         
         // Atualizar expiração
         setTokenExpiresAt(newData.expiresAt);
@@ -414,7 +414,8 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   }, [episodeId, titleId]);
 
   // Renovação automática de token para streaming protegido
-  // Estratégia: renovar a cada 3 minutos (token dura 5 min) - sempre antes de expirar
+  // Token agora dura 3 HORAS no Worker, então renovamos a cada 2.5 horas (bem antes de expirar)
+  // Na prática, a maioria dos filmes/episódios termina antes disso
   useEffect(() => {
     if (!isProtectedStream || !data) return;
 
@@ -423,15 +424,16 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
       clearInterval(tokenRenewalTimeoutRef.current);
     }
 
-    // Renovar a cada 4 minutos (240 segundos) - antes dos 5 min de expiração
-    // Mas SEM recarregar o player - apenas manter o token atualizado
-    const RENEWAL_INTERVAL = 4 * 60 * 1000; // 4 minutos
+    // Token dura 3 horas no Worker, renovar a cada 2.5 horas (150 minutos)
+    // Isso dá 30 minutos de margem antes de expirar
+    const RENEWAL_INTERVAL = 150 * 60 * 1000; // 2.5 horas = 150 minutos
     
-    console.log("[WatchClient] Iniciando renovação automática de token a cada 4 minutos (silenciosa)");
+    console.log("[WatchClient] Token válido por 3 horas. Renovação agendada para 2.5 horas (se necessário)");
 
     // Agendar renovação periódica (silenciosa, sem reload)
+    // Na prática, raramente vai executar pois filmes duram menos que 2.5h
     tokenRenewalTimeoutRef.current = setInterval(() => {
-      console.log("[WatchClient] Renovação periódica do token (silenciosa)...");
+      console.log("[WatchClient] Renovação periódica do token (2.5h)...");
       renewTokenAndUpdatePlayer(false); // false = não forçar reload
     }, RENEWAL_INTERVAL);
 
