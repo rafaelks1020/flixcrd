@@ -674,19 +674,32 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
 
         const hls = new Hls({
           // BUFFER GRANDE - carregar muitos segmentos à frente
-          maxBufferLength: 60,           // 60 segundos de buffer mínimo
+          maxBufferLength: 120,          // 2 minutos de buffer mínimo
           maxMaxBufferLength: 600,       // Até 10 minutos de buffer máximo
-          backBufferLength: 30,          // Manter 30s atrás
+          backBufferLength: 60,          // Manter 1min atrás
           
-          // Retry configs
-          fragLoadingMaxRetry: 5,
-          fragLoadingRetryDelay: 500,
-          levelLoadingMaxRetry: 5,
-          manifestLoadingMaxRetry: 5,
-          
-          // Carregar agressivamente
+          // Carregar mais rápido
+          maxBufferSize: 120 * 1000 * 1000, // 120MB de buffer
           maxBufferHole: 0.5,
+          
+          // Retry configs - mais agressivo
+          fragLoadingMaxRetry: 10,
+          fragLoadingRetryDelay: 200,
+          fragLoadingMaxRetryTimeout: 10000,
+          levelLoadingMaxRetry: 10,
+          manifestLoadingMaxRetry: 10,
+          
+          // Iniciar do começo
           startPosition: -1,
+          
+          // Carregar próximo nível mais rápido
+          abrEwmaDefaultEstimate: 5000000, // Assumir 5Mbps inicial
+          abrBandWidthFactor: 0.95,
+          abrBandWidthUpFactor: 0.7,
+          
+          // Não pausar carregamento
+          testBandwidth: true,
+          progressive: true,
         });
         hlsRef.current = hls;
         
