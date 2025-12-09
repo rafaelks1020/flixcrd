@@ -70,6 +70,12 @@ export default function Navbar({ isLoggedIn, isAdmin, onSearch }: NavbarProps) {
                   Catálogo
                 </Link>
                 <Link
+                  href="/solicitacoes"
+                  className="text-sm font-medium text-zinc-300 hover:text-white transition-colors"
+                >
+                  Solicitações
+                </Link>
+                <Link
                   href="/profiles"
                   className="text-sm font-medium text-zinc-300 hover:text-white transition-colors"
                 >

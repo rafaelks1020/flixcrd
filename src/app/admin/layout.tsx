@@ -15,6 +15,7 @@ const navItems = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/approvals", label: "👥 Aprovações" },
   { href: "/admin/analytics", label: "📊 Analytics" },
+  { href: "/admin/solicitacoes", label: "📨 Solicitações" },
   { href: "/admin/catalog", label: "Catálogo" },
   { href: "/admin/upload-v2", label: "🚀 Upload Unificado" },
   { href: "/admin/jobs", label: "Jobs HLS" },

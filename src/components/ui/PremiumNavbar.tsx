@@ -75,6 +75,7 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
             {[
               { href: '/', label: 'Início' },
               { href: '/browse', label: 'Catálogo' },
+              { href: '/solicitacoes', label: 'Solicitações' },
               { href: '/profiles', label: 'Perfis' },
             ].map((item) => (
               <Link

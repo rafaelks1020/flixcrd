@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
         title: true,
         type: true,
         imdbId: true,
+        imdbJson: true,
         status: true,
         workflowState: true,
         followersCount: true,
@@ -85,6 +86,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Limite de solicitações ativas atingido." },
         { status: 400 },
+      );
+    }
+
+    // Rate-limit simples: máximo 1 nova solicitação a cada 30 segundos por usuário
+    const THROTTLE_WINDOW_MS = 30_000;
+    const thirtySecondsAgo = new Date(Date.now() - THROTTLE_WINDOW_MS);
+
+    const recentCount = await prisma.request.count({
+      where: {
+        userId: user.id,
+        createdAt: {
+          gte: thirtySecondsAgo,
+        },
+      },
+    });
+
+    if (recentCount > 0) {
+      return NextResponse.json(
+        { error: "Aguarde alguns segundos antes de criar outra solicitação." },
+        { status: 429 },
       );
     }
 

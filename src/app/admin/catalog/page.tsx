@@ -107,11 +107,17 @@ export default function AdminCatalogPage() {
       if (!res.ok) {
         throw new Error("Erro ao carregar títulos");
       }
-      const data = await res.json();
-      setTitles(data);
+      const json = await res.json();
+      const list: Title[] = Array.isArray(json)
+        ? (json as Title[])
+        : Array.isArray(json.data)
+          ? (json.data as Title[])
+          : [];
+
+      setTitles(list);
 
       // Atualiza status de HLS em BATCH (1 request só!)
-      const titleIds = (data as Title[]).map((t) => t.id);
+      const titleIds = list.map((t) => t.id);
       
       if (titleIds.length > 0) {
         try {
