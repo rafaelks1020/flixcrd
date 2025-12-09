@@ -46,8 +46,13 @@ export default function BrowseClient({
 
       const res = await fetch(`/api/titles?${params.toString()}`);
       if (res.ok) {
-        const data = await res.json();
-        setTitles(data);
+        const json = await res.json();
+        const list = Array.isArray(json)
+          ? json
+          : Array.isArray(json.data)
+            ? json.data
+            : [];
+        setTitles(list);
       }
     } catch (error) {
       console.error("Erro ao carregar títulos:", error);

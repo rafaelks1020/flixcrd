@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 // ============================================================================
 // TYPES
@@ -286,6 +286,7 @@ async function detectEpisode(filename: string): Promise<{ season?: number; episo
 
 export default function UploadV2Page() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // TMDB Search
   const [tmdbQuery, setTmdbQuery] = useState("");
@@ -309,6 +310,33 @@ export default function UploadV2Page() {
   // Status
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+
+  // Carregar título diretamente quando vier de uma solicitação atendida
+  useEffect(() => {
+    const titleIdFromUrl = searchParams.get("titleId");
+    if (!titleIdFromUrl || createdTitle) return;
+
+    (async () => {
+      try {
+        setError(null);
+        const res = await fetch(`/api/titles/${titleIdFromUrl}`);
+        if (!res.ok) return;
+
+        const data = await res.json();
+        if (!data?.id) return;
+
+        setCreatedTitle({
+          id: data.id,
+          name: data.name,
+          slug: data.slug,
+          type: (data.type || "MOVIE") as TitleType,
+        });
+        setInfo(`✅ Título "${data.name}" carregado a partir da solicitação.`);
+      } catch (err) {
+        console.error("Erro ao carregar título inicial para upload-v2:", err);
+      }
+    })();
+  }, [searchParams, createdTitle]);
 
   // ============================================================================
   // TMDB SEARCH

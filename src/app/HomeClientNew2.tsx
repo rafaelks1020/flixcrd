@@ -125,14 +125,24 @@ export default function HomeClientNew2({
 
         // Carregar gêneros
         const genresRes = await fetch("/api/genres");
-        const genresData = await genresRes.json();
+        const genresJson = await genresRes.json();
+        const genresData: Genre[] = Array.isArray(genresJson)
+          ? genresJson
+          : Array.isArray(genresJson?.data)
+            ? genresJson.data
+            : [];
         setGenres(genresData.slice(0, 5)); // Primeiros 5 gêneros
 
         // Carregar títulos por gênero
         const titlePromises = genresData.slice(0, 5).map(async (genre: Genre) => {
           const res = await fetch(`/api/genres/${genre.id}/titles`);
-          const data = await res.json();
-          return { genreId: genre.id, titles: data };
+          const json = await res.json();
+          const titles = Array.isArray(json)
+            ? json
+            : Array.isArray(json?.data)
+              ? json.data
+              : [];
+          return { genreId: genre.id, titles };
         });
 
         const titlesResults = await Promise.all(titlePromises);
@@ -149,7 +159,12 @@ export default function HomeClientNew2({
             if (favRes.status === 404) {
               handleProfileNotFound();
             } else if (favRes.ok) {
-              const favData = await favRes.json();
+              const favJson = await favRes.json();
+              const favData = Array.isArray(favJson)
+                ? favJson
+                : Array.isArray(favJson?.data)
+                  ? favJson.data
+                  : [];
               setFavorites(favData);
             }
           } catch (error) {
@@ -161,7 +176,12 @@ export default function HomeClientNew2({
             if (cwRes.status === 404) {
               handleProfileNotFound();
             } else if (cwRes.ok) {
-              const cwData = await cwRes.json();
+              const cwJson = await cwRes.json();
+              const cwData = Array.isArray(cwJson)
+                ? cwJson
+                : Array.isArray(cwJson?.data)
+                  ? cwJson.data
+                  : [];
               setContinueWatching(cwData);
             }
           } catch (error) {
