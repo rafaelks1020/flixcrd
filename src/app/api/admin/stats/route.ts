@@ -133,16 +133,16 @@ export async function GET(request: Request) {
         },
       }),
       
-      // Títulos por dia (últimos 7 dias)
-      prisma.$queryRaw`
-        SELECT 
-          DATE(created_at) as date,
-          COUNT(*)::int as count
-        FROM "Title"
-        WHERE created_at >= ${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)}
-        GROUP BY DATE(created_at)
-        ORDER BY date DESC
-      ` as Promise<{ date: Date; count: number }[]>,
+      // Títulos recentes (últimos 7 dias) para calcular por dia
+      prisma.title.findMany({
+        where: {
+          createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        },
+        select: {
+          createdAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+      }),
     ]);
 
     // Calcular variações percentuais
@@ -188,11 +188,15 @@ export async function GET(request: Request) {
         score: Math.round(t.popularity || 0),
       })),
       
-      // Gráfico de uploads
-      uploadsPerDay: (titlesPerDay || []).map((d: { date: Date; count: number }) => ({
-        date: new Date(d.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
-        count: d.count,
-      })),
+      // Gráfico de uploads - agrupar por dia
+      uploadsPerDay: (() => {
+        const grouped: Record<string, number> = {};
+        (titlesPerDay || []).forEach((t: { createdAt: Date }) => {
+          const dateKey = new Date(t.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+          grouped[dateKey] = (grouped[dateKey] || 0) + 1;
+        });
+        return Object.entries(grouped).map(([date, count]) => ({ date, count })).slice(0, 7);
+      })(),
     });
   } catch (error) {
     console.error("Erro ao buscar stats:", error);
