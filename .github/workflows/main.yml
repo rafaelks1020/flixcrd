@@ -1,0 +1,14 @@
+name: Cron para Vercel
+
+on:
+  schedule:
+    - cron: "*/15 * * * *" # executa a cada 15 minutos
+  workflow_dispatch: {} # permite executar manualmente também
+
+jobs:
+  call-vercel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Vercel endpoint
+        run: |
+          curl -X GET "https://pflix.com.br/api/rodaCron"
