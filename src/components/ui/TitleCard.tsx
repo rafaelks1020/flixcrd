@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
+// Image from next/image disponível se precisar migrar de <img>
+// import Image from "next/image";
 
 interface TitleCardProps {
   id: string;

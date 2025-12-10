@@ -1,6 +1,22 @@
 "use client";
 
 import Hls from "hls.js";
+
+// Tipos para eventos HLS
+interface HlsLevelData {
+  level: number;
+}
+
+interface HlsManifestData {
+  levels: Array<{ height?: number; bitrate?: number }>;
+}
+
+interface HlsErrorData {
+  type: string;
+  details: string;
+  fatal?: boolean;
+  response?: { code?: number };
+}
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type MouseEvent, type SyntheticEvent, useCallback, useEffect, useRef, useState } from "react";
@@ -313,8 +329,8 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
           setIsProtectedStream(true);
           setTokenExpiresAt(playbackData.expiresAt);
         }
-      } catch (err: any) {
-        setError(err.message ?? "Erro ao carregar playback.");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Erro ao carregar playback.");
       } finally {
         setLoading(false);
         // Não resetar isLoadingPlaybackRef aqui para evitar re-chamadas
@@ -455,14 +471,23 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         const res = await fetch(`/api/titles/${titleId}/seasons`);
         if (!res.ok) return;
         
-        const seasons = await res.json();
+        interface EpisodeInfo {
+          id: string;
+          name: string;
+          episodeNumber: number;
+        }
+        interface SeasonInfo {
+          seasonNumber: number;
+          episodes?: EpisodeInfo[];
+        }
+        const seasons: SeasonInfo[] = await res.json();
         
         // Encontrar episódio atual
-        let currentSeason: any = null;
-        let currentEp: any = null;
+        let currentSeason: SeasonInfo | null = null;
+        let currentEp: EpisodeInfo | null = null;
         
         for (const season of seasons) {
-          const ep = season.episodes?.find((e: any) => e.id === episodeId);
+          const ep = season.episodes?.find((e) => e.id === episodeId);
           if (ep) {
             currentSeason = season;
             currentEp = ep;
@@ -474,7 +499,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         
         // Buscar próximo episódio na mesma temporada
         const nextEpInSeason = currentSeason.episodes?.find(
-          (e: any) => e.episodeNumber === currentEp.episodeNumber + 1
+          (e) => e.episodeNumber === currentEp!.episodeNumber + 1
         );
         
         if (nextEpInSeason) {
@@ -489,10 +514,10 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         
         // Se não houver, buscar primeiro episódio da próxima temporada
         const nextSeason = seasons.find(
-          (s: any) => s.seasonNumber === currentSeason.seasonNumber + 1
+          (s) => s.seasonNumber === currentSeason!.seasonNumber + 1
         );
         
-        if (nextSeason && nextSeason.episodes?.length > 0) {
+        if (nextSeason && nextSeason.episodes?.length && nextSeason.episodes.length > 0) {
           const firstEp = nextSeason.episodes[0];
           setNextEpisode({
             id: firstEp.id,
@@ -559,7 +584,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     if (!video) return;
 
     const tracks = Array.from(video.textTracks || []);
-    // eslint-disable-next-line no-console
+     
     console.log("[WatchClient] track load", {
       loadedLabel: event.currentTarget.label,
       loadedSrc: event.currentTarget.src,
@@ -587,7 +612,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     }
 
     tracks.forEach((track, index) => {
-      // eslint-disable-next-line no-param-reassign
+       
       track.mode = defaultIndex !== null && index === defaultIndex ? "showing" : "hidden";
     });
 
@@ -632,7 +657,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     if (kind === "mp4") {
       video.src = src;
       video.addEventListener("loadedmetadata", restorePosition, { once: true });
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+       
       video.play().catch(() => {});
     } else if (Hls.isSupported()) {
       // PRIORIZAR HLS.js para ter controle do buffer
@@ -739,8 +764,9 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         console.log("[HLS] Iniciado com ABR conservador (estabilidade > qualidade)");
 
         // Log de trocas de qualidade para debug
-        hls.on(Hls.Events.LEVEL_SWITCHING, (_event, data: any) => {
-          console.log(`%c[HLS] Trocando para nível ${data.level}`, 'color: orange; font-weight: bold');
+        hls.on(Hls.Events.LEVEL_SWITCHING, (_event, data) => {
+          const levelData = data as HlsLevelData;
+          console.log(`%c[HLS] Trocando para nível ${levelData.level}`, 'color: orange; font-weight: bold');
         });
 
 
@@ -758,9 +784,10 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
           }
         });
 
-        hls.on(Hls.Events.MANIFEST_PARSED, (_event, parsedData: any) => {
+        hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
+          const parsedData = data as HlsManifestData;
           const levelsArray = Array.isArray(parsedData?.levels) ? parsedData.levels : [];
-          const mapped: QualityLevelInfo[] = levelsArray.map((level: any, index: number) => ({
+          const mapped: QualityLevelInfo[] = levelsArray.map((level: { height?: number; bitrate?: number }, index: number) => ({
             index,
             height: typeof level?.height === "number" ? level.height : undefined,
             bitrate: typeof level?.bitrate === "number" ? level.bitrate : undefined,
@@ -777,7 +804,8 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
           restorePosition();
         });
 
-        hls.on(Hls.Events.LEVEL_SWITCHED, (_event, switchedData: any) => {
+        hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
+          const switchedData = data as HlsLevelData;
           if (typeof switchedData?.level === "number") {
             console.log(`%c[HLS] Qualidade alterada para nível ${switchedData.level}`, 'color: green; font-weight: bold');
             setCurrentLevelIndex(switchedData.level);
@@ -785,7 +813,8 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         });
 
         // Handler de erro para detectar 403 (token expirado) e renovar
-        hls.on(Hls.Events.ERROR, (_event, errorData: any) => {
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          const errorData = data as HlsErrorData;
           console.log("[WatchClient] HLS Error:", errorData.type, errorData.details, errorData.response?.code);
           
           // Verificar se é erro 403 (token expirado)
@@ -889,7 +918,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
       if (key === " " || key === "k" || key === "K") {
         event.preventDefault();
         if (video.paused || video.ended) {
-          // eslint-disable-next-line @typescript-eslint/no-floating-promises
+           
           video.play().catch(() => {});
         } else {
           video.pause();
@@ -990,7 +1019,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     if (!video) return;
 
     if (video.paused || video.ended) {
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+       
       video.play().catch(() => {});
     } else {
       video.pause();
@@ -1176,7 +1205,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
 
             const tracks = Array.from(event.currentTarget.textTracks || []);
             // Debug rápido para garantir que as tracks estão sendo detectadas
-            // eslint-disable-next-line no-console
+             
             console.log("[WatchClient] textTracks", tracks.map((t) => ({
               label: t.label,
               language: t.language,
@@ -1201,7 +1230,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
 
             tracks.forEach((track, index) => {
               // Mantém legendas ocultas por padrão, mas se houver apenas uma faixa, já a exibe.
-              // eslint-disable-next-line no-param-reassign
+               
               track.mode = defaultIndex !== null && index === defaultIndex ? "showing" : "hidden";
             });
             setSubtitleTracks(tracks);
@@ -1212,7 +1241,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
             // IMPORTANTE: Só fazer isso UMA VEZ para evitar loops
             if (profileId && !hasRestoredProgressRef.current) {
               hasRestoredProgressRef.current = true; // Marcar como já restaurado
-              // eslint-disable-next-line @typescript-eslint/no-floating-promises
+               
               (async () => {
                 try {
                   let resume = 0;
@@ -1290,7 +1319,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
               now - lastProgressSyncRef.current > 30000
             ) {
               lastProgressSyncRef.current = now;
-              // eslint-disable-next-line @typescript-eslint/no-floating-promises
+               
               fetch(`/api/titles/${titleId}/progress`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -1313,7 +1342,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
             const pos = videoEl.currentTime;
             if (!total || !Number.isFinite(total)) return;
             if (!profileId) return;
-            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+             
             fetch(`/api/titles/${titleId}/progress`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -1333,7 +1362,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
             const total = videoEl.duration || duration;
             if (!total || !Number.isFinite(total)) return;
             if (!profileId) return;
-            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+             
             fetch(`/api/titles/${titleId}/progress`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -1354,7 +1383,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         >
           {data.subtitles?.map((sub, index) => (
             <track
-              // eslint-disable-next-line react/no-array-index-key
+               
               key={`${sub.url}-${index}`}
               kind="subtitles"
               src={sub.url}
@@ -1571,7 +1600,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
                   if (!hls) return;
                   if (value === "auto") {
                     hls.currentLevel = -1;
-                    // eslint-disable-next-line no-param-reassign
+                     
                     hls.autoLevelEnabled = true;
                     setAutoQuality(true);
                     return;
@@ -1579,7 +1608,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
                   const levelIndex = Number(value);
                   if (Number.isNaN(levelIndex)) return;
                   hls.currentLevel = levelIndex;
-                  // eslint-disable-next-line no-param-reassign
+                   
                   hls.autoLevelEnabled = false;
                   setCurrentLevelIndex(levelIndex);
                   setAutoQuality(false);
@@ -1613,7 +1642,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
                   const index = Number(event.target.value);
                   const tracks = subtitleTracks;
                   tracks.forEach((track, i) => {
-                    // eslint-disable-next-line no-param-reassign
+                     
                     track.mode = i === index ? "showing" : "hidden";
                   });
                   setCurrentSubtitleIndex(Number.isNaN(index) || index < 0 ? null : index);
@@ -1624,7 +1653,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
                 {subtitleTracks.map((track, index) => {
                   const label = track.label || track.language || `Legenda ${index + 1}`;
                   return (
-                    // eslint-disable-next-line react/no-array-index-key
+                     
                     <option key={index} value={index}>
                       {label}
                     </option>

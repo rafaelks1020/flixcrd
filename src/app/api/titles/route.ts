@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   const genre = searchParams.get("genre") ?? undefined;
   const page = parseInt(searchParams.get("page") || "1", 10);
   const limit = parseInt(searchParams.get("limit") || "24", 10);
-  const pageSize = Math.min(limit, 50); // Max 50
+  const pageSize = Math.min(limit, 200); // Max 200 para evitar respostas gigantes
   const skip = (page - 1) * pageSize;
 
   const where: any = {};

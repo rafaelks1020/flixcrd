@@ -19,8 +19,12 @@ interface HeroSectionProps {
 }
 
 export default function HeroSection({ title, isLoggedIn }: HeroSectionProps) {
-  const [isMuted, setIsMuted] = useState(true);
-  const [showVideo, setShowVideo] = useState(false);
+  // isMuted e showVideo preparados para exibir vídeo de fundo no futuro
+  const [_isMuted, _setIsMuted] = useState(true);
+  const [_showVideo, setShowVideo] = useState(false);
+  void _isMuted;
+  void _setIsMuted;
+  void _showVideo;
 
   useEffect(() => {
     // Auto-show video after 2s

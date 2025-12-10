@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-// Estrutura básica de resposta para cada solicitação no painel admin
 interface AdminRequestItem {
   id: string;
   title: string;
@@ -25,6 +23,17 @@ interface AdminRequestItem {
   ageHours: number;
   slaLevel: "LOW" | "MEDIUM" | "HIGH";
   computedPriorityScore: number;
+  upload: {
+    id: string;
+    titleId: string | null;
+    completedAt: Date | null;
+    title: {
+      id: string;
+      name: string;
+      slug: string;
+      type: string | null;
+    } | null;
+  } | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -43,6 +52,7 @@ export async function GET(request: NextRequest) {
     const to = searchParams.get("to");
     const minFollowers = searchParams.get("minFollowers");
     const sort = searchParams.get("sort") || "oldest"; // oldest | newest | priority | followers | sla
+    const linkFilter = searchParams.get("upload"); // with | without
 
     const where: any = {};
 
@@ -87,6 +97,12 @@ export async function GET(request: NextRequest) {
       orderBy = { followersCount: "desc" };
     }
 
+    if (linkFilter === "with") {
+      where.upload = { isNot: null };
+    } else if (linkFilter === "without") {
+      where.upload = { is: null };
+    }
+
     const requests = await prisma.request.findMany({
       where,
       orderBy,
@@ -99,12 +115,29 @@ export async function GET(request: NextRequest) {
             name: true,
           },
         },
+        upload: {
+          select: {
+            id: true,
+            titleId: true,
+            completedAt: true,
+            title: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                type: true,
+              },
+            },
+          },
+        },
       },
     });
 
     const now = new Date();
 
-    const items: AdminRequestItem[] = requests.map((req) => {
+    type RequestWithRelations = (typeof requests)[number];
+
+    const items: AdminRequestItem[] = requests.map((req: RequestWithRelations) => {
       const ageMs = now.getTime() - req.createdAt.getTime();
       const ageHours = ageMs / (1000 * 60 * 60);
 
@@ -156,6 +189,21 @@ export async function GET(request: NextRequest) {
         ageHours,
         slaLevel,
         computedPriorityScore,
+        upload: req.upload
+          ? {
+              id: req.upload.id,
+              titleId: req.upload.titleId,
+              completedAt: req.upload.completedAt,
+              title: req.upload.title
+                ? {
+                    id: req.upload.title.id,
+                    name: req.upload.title.name,
+                    slug: req.upload.title.slug,
+                    type: req.upload.title.type,
+                  }
+                : null,
+            }
+          : null,
       };
     });
 

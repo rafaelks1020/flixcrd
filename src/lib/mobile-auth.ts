@@ -1,7 +1,13 @@
 import { NextRequest } from 'next/server';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.NEXTAUTH_SECRET || 'fallback-secret';
+function getJwtSecret(): string {
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret) {
+    throw new Error('NEXTAUTH_SECRET não configurado para autenticação mobile');
+  }
+  return secret;
+}
 
 interface TokenPayload {
   id: string;
@@ -31,14 +37,15 @@ export async function verifyMobileToken(request: NextRequest): Promise<AuthResul
     const token = authHeader.substring(7); // Remove "Bearer "
 
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
+      const secret = getJwtSecret();
+      const decoded = jwt.verify(token, secret) as TokenPayload;
       
       return {
         success: true,
         userId: decoded.id,
         user: decoded,
       };
-    } catch (jwtError) {
+    } catch {
       return { success: false, error: 'Token inválido ou expirado' };
     }
   } catch (error) {
@@ -59,7 +66,8 @@ export function getUserIdFromToken(request: NextRequest): string | null {
     }
 
     const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
+    const secret = getJwtSecret();
+    const decoded = jwt.verify(token, secret) as TokenPayload;
     
     return decoded.id;
   } catch {

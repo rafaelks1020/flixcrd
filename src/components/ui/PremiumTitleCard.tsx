@@ -20,7 +20,7 @@ export default function PremiumTitleCard({
   id,
   name,
   posterUrl,
-  backdropUrl,
+  backdropUrl: _backdropUrl,
   type,
   year,
   rating,
@@ -28,6 +28,8 @@ export default function PremiumTitleCard({
   genres,
   showNewBadge,
 }: PremiumTitleCardProps) {
+  // backdropUrl disponível como _backdropUrl se precisar no futuro
+  void _backdropUrl;
   const [isHovered, setIsHovered] = useState(false);
   const [imageError, setImageError] = useState(false);
 

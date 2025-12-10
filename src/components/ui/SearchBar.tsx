@@ -170,7 +170,7 @@ export default function SearchBar({ initialQuery = "", onSearch }: SearchBarProp
 
       {showResults && results.length === 0 && !loading && query.trim().length >= 2 && (
         <div className="absolute top-full mt-2 w-full rounded-lg border border-zinc-800 bg-zinc-950/98 backdrop-blur-md shadow-2xl p-4 text-center text-sm text-zinc-500">
-          Nenhum resultado encontrado para "{query}"
+          Nenhum resultado encontrado para &quot;{query}&quot;
         </div>
       )}
     </div>

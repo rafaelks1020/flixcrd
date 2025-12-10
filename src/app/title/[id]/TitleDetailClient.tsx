@@ -4,14 +4,74 @@ import { useState, useRef, type RefObject } from "react";
 import Link from "next/link";
 import PremiumNavbar from "@/components/ui/PremiumNavbar";
 
+interface TitleData {
+  id: string;
+  name: string;
+  originalName?: string | null;
+  overview?: string | null;
+  posterUrl?: string | null;
+  backdropUrl?: string | null;
+  releaseDate?: string | Date | null;
+  voteAverage?: number | null;
+  type?: string | null;
+  runtime?: number | null;
+  status?: string | null;
+}
+
+interface CastMember {
+  id: string | number;
+  name: string;
+  character?: string | null;
+  profilePath?: string | null;
+}
+
+interface CrewMember {
+  id: string | number;
+  name: string;
+  job?: string | null;
+  department?: string | null;
+  profilePath?: string | null;
+}
+
+interface Episode {
+  id: string;
+  name: string;
+  episodeNumber: number;
+  overview?: string;
+  stillPath?: string;
+  runtime?: number;
+}
+
+interface Season {
+  id: string;
+  seasonNumber: number;
+  name?: string;
+  episodes?: Episode[];
+}
+
+interface SimilarTitle {
+  id: string;
+  name: string;
+  posterUrl?: string | null;
+  voteAverage?: number | null;
+}
+
+interface Video {
+  id: string;
+  key: string;
+  name: string;
+  type: string;
+  site: string;
+}
+
 interface TitleDetailClientProps {
-  title: any;
+  title: TitleData;
   genres: string[];
-  cast: any[];
-  crew: any[];
-  seasons: any[];
-  similarTitles: any[];
-  videos: any[];
+  cast: CastMember[];
+  crew: CrewMember[];
+  seasons: Season[];
+  similarTitles: SimilarTitle[];
+  videos: Video[];
   isFavorite: boolean;
   isLoggedIn: boolean;
   isAdmin: boolean;
@@ -47,7 +107,7 @@ export default function TitleDetailClient({
   const rating = title.voteAverage?.toFixed(1);
   const isSeries = title.type === 'SERIES' || title.type === 'ANIME';
 
-  const currentSeason = seasons.find((s: any) => s.seasonNumber === selectedSeason);
+  const currentSeason = seasons.find((s) => s.seasonNumber === selectedSeason);
   const episodes = currentSeason?.episodes || [];
 
   const handleAddFavorite = async () => {
@@ -181,14 +241,14 @@ export default function TitleDetailClient({
                 onChange={(e) => setSelectedSeason(Number(e.target.value))}
                 style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', padding: '8px 16px', color: '#fff', fontSize: '14px', cursor: 'pointer' }}
               >
-                {seasons.map((s: any) => (
+                {seasons.map((s) => (
                   <option key={s.seasonNumber} value={s.seasonNumber}>Temporada {s.seasonNumber}</option>
                 ))}
               </select>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {episodes.map((ep: any) => (
+              {episodes.map((ep) => (
                 <Link
                   key={ep.id}
                   href={`/watch/${title.id}?episodeId=${ep.id}`}
@@ -287,7 +347,7 @@ export default function TitleDetailClient({
                 className="scrollbar-hide"
                 style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '16px', scrollBehavior: 'smooth' }}
               >
-              {cast.slice(0, 12).map((person: any) => (
+              {cast.slice(0, 12).map((person) => (
                 <div key={person.id} style={{ flexShrink: 0, width: '140px', textAlign: 'center' }}>
                   <div style={{ width: '140px', height: '140px', borderRadius: '50%', overflow: 'hidden', marginBottom: '12px', background: '#1a1a1a' }}>
                     {person.profilePath ? (
@@ -367,7 +427,7 @@ export default function TitleDetailClient({
                 className="scrollbar-hide"
                 style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '16px', scrollBehavior: 'smooth' }}
               >
-              {similarTitles.map((item: any) => (
+              {similarTitles.map((item) => (
                 <Link
                   key={item.id}
                   href={`/title/${item.id}`}
@@ -392,7 +452,7 @@ export default function TitleDetailClient({
           <section style={{ marginBottom: '60px' }}>
             <h2 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>Trailers e Vídeos</h2>
             <div style={{ position: 'relative' }}>
-              {videos.filter((v: any) => v.site === 'YouTube').length > 2 && (
+              {videos.filter((v) => v.site === 'YouTube').length > 2 && (
                 <button
                   type="button"
                   onClick={() => scrollRow(videosRowRef, "left")}
@@ -418,7 +478,7 @@ export default function TitleDetailClient({
                   </svg>
                 </button>
               )}
-              {videos.filter((v: any) => v.site === 'YouTube').length > 2 && (
+              {videos.filter((v) => v.site === 'YouTube').length > 2 && (
                 <button
                   type="button"
                   onClick={() => scrollRow(videosRowRef, "right")}
@@ -450,9 +510,9 @@ export default function TitleDetailClient({
                 style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '16px', scrollBehavior: 'smooth' }}
               >
                 {videos
-                  .filter((v: any) => v.site === 'YouTube')
+                  .filter((v) => v.site === 'YouTube')
                   .slice(0, 6)
-                  .map((video: any) => (
+                  .map((video) => (
                     <div
                       key={video.id}
                       style={{

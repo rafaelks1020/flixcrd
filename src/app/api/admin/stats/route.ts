@@ -8,8 +8,8 @@ export async function GET(request: Request) {
 
     // Calcular data de início baseado no período
     const now = new Date();
-    let startDate = new Date();
-    let previousStartDate = new Date();
+    const startDate = new Date();
+    const previousStartDate = new Date();
     
     if (period === "7d") {
       startDate.setDate(now.getDate() - 7);

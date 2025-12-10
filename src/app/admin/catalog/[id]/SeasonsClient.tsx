@@ -64,8 +64,8 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
         throw new Error(json?.error ?? "Erro ao carregar temporadas/episódios.");
       }
       setData(json as TitleSeasonsResponse);
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao carregar temporadas/episódios.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao carregar temporadas/episódios.");
     } finally {
       setLoading(false);
     }
@@ -101,8 +101,8 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
 
       setInfo(parts.join(" "));
       await loadData();
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao enfileirar HLS para episódios.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao enfileirar HLS para episódios.");
     } finally {
       setBulkTranscoding(false);
     }
@@ -148,7 +148,7 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
       }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+     
     loadEpisodeHlsStatus();
   }, [data]);
 
@@ -173,8 +173,8 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
         `Importação concluída: ${imported} temporada(s) importada(s) de ${json.seasonsFound ?? imported}.`,
       );
       await loadData();
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao importar todas as temporadas.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao importar todas as temporadas.");
     } finally {
       setImportingAll(false);
     }
@@ -198,8 +198,8 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
       const total = json?.episodes?.total ?? 0;
       setInfo(`Temporada ${seasonNumber} importada com ${total} episódio(s).`);
       await loadData();
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao importar temporada.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao importar temporada.");
     } finally {
       setImportingSeason(null);
     }

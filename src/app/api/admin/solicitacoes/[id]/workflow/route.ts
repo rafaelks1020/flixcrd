@@ -104,7 +104,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           data: { requestId: id, type: "REQUEST_PROCESSING", state: normalized },
         });
       } catch (notifyError) {
-        // eslint-disable-next-line no-console
+         
         console.error("Failed to send push for request workflow:", notifyError);
       }
     }

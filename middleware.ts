@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { withAuth } from "next-auth/middleware";
+import type { JWT } from "next-auth/jwt";
+
+interface ExtendedToken extends JWT {
+  role?: string;
+  approvalStatus?: string;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,8 +37,8 @@ const authMiddleware = withAuth(
     
     // Se não é admin e não está aprovado, redirecionar para pending-approval
     // Exceto se já está na página pending-approval ou em rotas públicas
-    if (token && (token as any).role !== "ADMIN") {
-      const approvalStatus = (token as any).approvalStatus;
+    if (token && (token as ExtendedToken).role !== "ADMIN") {
+      const approvalStatus = (token as ExtendedToken).approvalStatus;
       const isApproved = approvalStatus === "APPROVED";
       const isPendingPage = path === "/pending-approval";
       const isSubscribePage = path === "/subscribe";
@@ -60,7 +66,7 @@ const authMiddleware = withAuth(
         const isAdminRoute = path.startsWith("/admin");
 
         if (isAdminRoute) {
-          return (token as any).role === "ADMIN";
+          return (token as ExtendedToken).role === "ADMIN";
         }
 
         return true;

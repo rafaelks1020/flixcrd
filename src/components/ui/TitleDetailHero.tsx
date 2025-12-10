@@ -26,7 +26,9 @@ export default function TitleDetailHero({
   isFavorite,
   onToggleFavorite,
 }: TitleDetailHeroProps) {
+  // Trailer modal disponível para implementação futura
   const [showTrailer, setShowTrailer] = useState(false);
+  void showTrailer;
 
   const year = title.releaseDate ? title.releaseDate.getFullYear() : null;
   const runtime = title.runtime

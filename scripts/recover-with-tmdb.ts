@@ -151,7 +151,7 @@ async function scanBucket(): Promise<TitleInfo[]> {
       type = "SERIES";
     }
 
-    let name = titlePath
+    const name = titlePath
       .replace(/^titles\//i, "")
       .replace(/-/g, " ")
       .replace(/\b\w/g, (l) => l.toUpperCase());

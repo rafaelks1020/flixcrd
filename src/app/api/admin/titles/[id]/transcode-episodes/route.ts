@@ -176,10 +176,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }
 
         queued.push({ episodeId: ep.id, jobId, status });
-      } catch (err: any) {
+      } catch (err) {
         errors.push({
           episodeId: ep.id,
-          message: err?.message || "Erro desconhecido ao enfileirar HLS.",
+          message: err instanceof Error ? err.message : "Erro desconhecido ao enfileirar HLS.",
         });
       }
     }

@@ -184,8 +184,8 @@ export default function SubscribePage() {
       } else {
         fetchSubscription();
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao criar assinatura");
     } finally {
       setCreating(false);
     }

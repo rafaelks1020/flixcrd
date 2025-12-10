@@ -64,6 +64,7 @@ const navSections: NavSection[] = [
     items: [
       { href: "/admin/quick-actions", label: "Ações Rápidas", icon: "⚡" },
       { href: "/admin/logs", label: "Logs", icon: "📋" },
+      { href: "/admin/changelog", label: "Changelog", icon: "📝" },
       { href: "/admin/settings", label: "Configurações", icon: "🔧" },
     ],
   },

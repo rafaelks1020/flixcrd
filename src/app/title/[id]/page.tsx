@@ -67,7 +67,7 @@ export default async function TitleDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  let isFavorite = false;
+  const isFavorite = false;
 
   const year = getYear(title.releaseDate as Date | null);
   const runtimeLabel = formatRuntime(title.runtime);
