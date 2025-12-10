@@ -3,7 +3,7 @@ name: Cron para Vercel
 on:
   schedule:
     - cron: "*/15 * * * *" # executa a cada 15 minutos
-  workflow_dispatch: {} # permite executar manualmente também
+  workflow_dispatch:  # permite executar manualmente também
 
 jobs:
   call-vercel:
@@ -11,4 +11,5 @@ jobs:
     steps:
       - name: Call Vercel endpoint
         run: |
-          curl -X GET "https://pflix.com.br/api/rodaCron"
+          curl -X GET "https://homol.pflix.com.br/"
+          # curl -X GET "https://pflix.com.br/api/rodaCron"
