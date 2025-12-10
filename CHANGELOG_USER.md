@@ -6,6 +6,13 @@
 
 Este arquivo registra mudanças que afetam diretamente quem assiste (web/app).
 
+## 2025-12-10
+
+### O que há de novo
+- **Recuperação de senha por email** – você recebe um link válido por 1 hora para redefinir a senha.
+- **Emails de pagamento mais claros** – PIX envia QR Code e código copia-e-cola; boleto envia link direto; cartão aprovado envia confirmação imediata.
+- **Confirmação/atraso de pagamento** – quando o pagamento é confirmado ou fica vencido, você recebe email automático avisando.
+
 ## 2025-12-09
 
 ### O que há de novo

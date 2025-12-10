@@ -6,6 +6,21 @@
 
 Resumo das mudanças que impactam o painel admin, fluxos de upload, legendas e monitoramento.
 
+## 2025-12-10 – Mailjet, Recuperação de Senha e Cron visível
+
+### Comunicação & Emails (Mailjet)
+- **Mailjet integrado e documentado** – `MAILJET-SETUP.md` com variáveis, testes e troubleshooting. Remetentes separados por tipo (`suporte@`, `contato@`, `financeiro@`).
+- **Notificação de solicitações** – toda nova solicitação de conteúdo dispara email automático para o admin (`ADMIN_EMAIL`) com detalhes e link direto para `/admin/solicitacoes`.
+- **Pagamentos** – emails transacionais para PIX (QR + copia-e-cola), boleto (link), cartão aprovado e confirmação/atraso via webhook Asaas.
+
+### Recuperação de Senha
+- **API de reset** – rotas `POST /api/auth/forgot-password` (gera token 1h) e `POST /api/auth/reset-password` (troca a senha e limpa tokens).
+- **Persistência segura** – tabela `PasswordResetToken` com expiração e limpeza automática de tokens usados.
+
+### Monitoramento de Cron
+- **Dispatcher `/api/rodaCron`** – distribui tarefas internas respeitando intervalos configurados em banco (`CronTask`).
+- **Painel no admin** – seção “Cron Jobs” em `/admin/status` exibindo última execução, status HTTP e duração de cada tarefa.
+
 ## 2025-12-09 – Limpeza de Lint, Tipagem e Estabilidade
 
 ### Qualidade de Código & TypeScript
