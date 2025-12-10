@@ -14,7 +14,7 @@ interface AdminRequestItem {
   priorityScore: number | null;
   createdAt: Date;
   updatedAt: Date;
-  user: {
+  User: {
     id: string;
     email: string;
     name: string | null;
@@ -23,11 +23,11 @@ interface AdminRequestItem {
   ageHours: number;
   slaLevel: "LOW" | "MEDIUM" | "HIGH";
   computedPriorityScore: number;
-  upload: {
+  RequestUpload: {
     id: string;
     titleId: string | null;
     completedAt: Date | null;
-    title: {
+    Title: {
       id: string;
       name: string;
       slug: string;
@@ -115,12 +115,12 @@ export async function GET(request: NextRequest) {
             name: true,
           },
         },
-        upload: {
+        RequestUpload: {
           select: {
             id: true,
             titleId: true,
             completedAt: true,
-            title: {
+            Title: {
               select: {
                 id: true,
                 name: true,
@@ -178,28 +178,28 @@ export async function GET(request: NextRequest) {
         priorityScore: req.priorityScore,
         createdAt: req.createdAt,
         updatedAt: req.updatedAt,
-        user: req.user
+        User: req.User
           ? {
-              id: req.user.id,
-              email: req.user.email,
-              name: req.user.name,
+              id: req.User.id,
+              email: req.User.email,
+              name: req.User.name,
             }
           : null,
         imdbRating,
         ageHours,
         slaLevel,
         computedPriorityScore,
-        upload: req.upload
+        RequestUpload: req.RequestUpload
           ? {
-              id: req.upload.id,
-              titleId: req.upload.titleId,
-              completedAt: req.upload.completedAt,
-              title: req.upload.title
+              id: req.RequestUpload.id,
+              titleId: req.RequestUpload.titleId,
+              completedAt: req.RequestUpload.completedAt,
+              Title: req.RequestUpload.Title
                 ? {
-                    id: req.upload.title.id,
-                    name: req.upload.title.name,
-                    slug: req.upload.title.slug,
-                    type: req.upload.title.type,
+                    id: req.RequestUpload.Title.id,
+                    name: req.RequestUpload.Title.name,
+                    slug: req.RequestUpload.Title.slug,
+                    type: req.RequestUpload.Title.type,
                   }
                 : null,
             }

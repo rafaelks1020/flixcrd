@@ -66,11 +66,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const episode = await prisma.episode.findUnique({
       where: { id },
       include: {
-        title: true,
+        Title: true,
       },
     });
 
-    if (!episode || !episode.title) {
+    if (!episode || !episode.Title) {
       return NextResponse.json(
         { error: "Episódio não encontrado." },
         { status: 404 },
@@ -147,7 +147,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       }
     }
 
-    const { title } = episode;
+    const title = episode.Title;
 
     return NextResponse.json({
       playbackUrl,

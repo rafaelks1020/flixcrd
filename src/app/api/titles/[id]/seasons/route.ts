@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       where: { titleId: id },
       orderBy: { seasonNumber: "asc" },
       include: {
-        episodes: {
+        Episode: {
           orderBy: { episodeNumber: "asc" },
           select: {
             id: true,
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const seasonsWithSubtitles = await Promise.all(
       seasons.map(async (season) => {
         const episodesWithFlag = await Promise.all(
-          (season.episodes ?? []).map(async (ep) => {
+          (season.Episode ?? []).map(async (ep) => {
             let hasSubtitle = false;
 
             if (ep.hlsPath && ep.hlsPath.trim() !== "") {

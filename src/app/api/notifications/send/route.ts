@@ -72,9 +72,9 @@ export async function POST(request: NextRequest) {
         where: { isActive: true },
         select: {
           token: true,
-          user: {
+          User: {
             select: {
-              notificationPreference: true,
+              NotificationPreference: true,
             },
           },
         },

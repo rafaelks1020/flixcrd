@@ -45,8 +45,8 @@ export function userAllowsCategory(
 
 type TokenWithPreference = {
   token: string;
-  user?: {
-    notificationPreference?: PreferenceShape | null;
+  User?: {
+    NotificationPreference?: PreferenceShape | null;
   } | null;
 };
 
@@ -56,7 +56,7 @@ export function filterTokensByPreference<T extends TokenWithPreference>(
 ) {
   return records
     .filter((record) =>
-      userAllowsCategory(record.user?.notificationPreference ?? null, category),
+      userAllowsCategory(record.User?.NotificationPreference ?? null, category),
     )
     .map((record) => record.token);
 }
@@ -75,9 +75,9 @@ async function fetchTokensForUsers(userIds: string[], category?: NotificationCat
     select: {
       token: true,
       userId: true,
-      user: {
+      User: {
         select: {
-          notificationPreference: true,
+          NotificationPreference: true,
         },
       },
     },

@@ -60,7 +60,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       select: {
         id: true,
         type: true,
-        episodes: {
+        Episode: {
           select: {
             id: true,
             hlsPath: true,
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const episodesWithPrefix = (title.episodes ?? []).filter(
+    const episodesWithPrefix = (title.Episode ?? []).filter(
       (ep) => ep.hlsPath && ep.hlsPath.trim() !== "",
     );
 
@@ -186,7 +186,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     return NextResponse.json({
       ok: true,
-      totalEpisodes: title.episodes?.length ?? 0,
+      totalEpisodes: title.Episode?.length ?? 0,
       episodesWithPrefix: episodesWithPrefix.length,
       queued,
       skipped,

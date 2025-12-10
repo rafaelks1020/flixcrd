@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     // Buscar usuário
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { subscription: true },
+      include: { Subscription: true },
     });
 
     if (!user) {
@@ -78,12 +78,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar se já tem assinatura ativa
-    if (user.subscription?.status === 'ACTIVE') {
+    if (user.Subscription?.status === 'ACTIVE') {
       const now = new Date();
-      if (user.subscription.currentPeriodEnd && user.subscription.currentPeriodEnd > now) {
+      if (user.Subscription.currentPeriodEnd && user.Subscription.currentPeriodEnd > now) {
         return NextResponse.json({ 
           error: 'Você já possui uma assinatura ativa',
-          subscription: user.subscription,
+          subscription: user.Subscription,
         }, { status: 400 });
       }
     }
@@ -151,9 +151,9 @@ export async function POST(request: NextRequest) {
     };
 
     let subscription;
-    if (user.subscription) {
+    if (user.Subscription) {
       subscription = await prisma.subscription.update({
-        where: { id: user.subscription.id },
+        where: { id: user.Subscription.id },
         data: subscriptionData,
       });
     } else {
@@ -375,7 +375,7 @@ export async function GET() {
     const subscription = await prisma.subscription.findUnique({
       where: { userId },
       include: {
-        payments: {
+        Payment: {
           orderBy: { createdAt: 'desc' },
           take: 5,
         },

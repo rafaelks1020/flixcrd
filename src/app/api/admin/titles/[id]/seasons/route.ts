@@ -28,7 +28,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         type: true,
         slug: true,
         tmdbId: true,
-        seasons: {
+        Season: {
           orderBy: { seasonNumber: "asc" },
           select: {
             id: true,
@@ -38,7 +38,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
             airDate: true,
             posterUrl: true,
             episodeCount: true,
-            episodes: {
+            Episode: {
               orderBy: { episodeNumber: "asc" },
               select: {
                 id: true,
@@ -67,7 +67,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
           type: true,
           slug: true,
           tmdbId: true,
-          seasons: {
+          Season: {
             orderBy: { seasonNumber: "asc" },
             select: {
               id: true,
@@ -77,7 +77,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
               airDate: true,
               posterUrl: true,
               episodeCount: true,
-              episodes: {
+              Episode: {
                 orderBy: { episodeNumber: "asc" },
                 select: {
                   id: true,

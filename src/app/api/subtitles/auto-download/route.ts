@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     // Buscar episódio
     const episode = await prisma.episode.findUnique({
       where: { id: episodeId },
-      include: { title: true },
+      include: { Title: true },
     });
 
     if (!episode) {

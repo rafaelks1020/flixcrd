@@ -6,7 +6,7 @@ export async function GET() {
   try {
     const subscriptions = await prisma.subscription.findMany({
       include: {
-        user: {
+        User: {
           select: {
             id: true,
             email: true,

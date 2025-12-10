@@ -182,13 +182,14 @@ export async function POST(request: NextRequest) {
     const adminEmail = process.env.ADMIN_EMAIL;
     if (adminEmail) {
       try {
-        const requestTypeLabel = {
+        const typeLabels: Record<string, string> = {
           MOVIE: "Filme",
           SERIES: "Série",
           ANIME: "Anime",
           DORAMA: "Dorama",
           OTHER: "Outro",
-        }[requestType] || "Desconhecido";
+        };
+        const requestTypeLabel = typeLabels[requestType] || "Desconhecido";
 
         await sendMail({
           to: adminEmail,

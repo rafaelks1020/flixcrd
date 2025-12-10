@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
 
     const tokensWithUsers = tokens.map((token: PushTokenRecord) => ({
       ...token,
-      user: userMap.get(token.userId) || null,
+      User: userMap.get(token.userId) || null,
     }));
 
     // Calcular estatísticas globais (não só da página atual)

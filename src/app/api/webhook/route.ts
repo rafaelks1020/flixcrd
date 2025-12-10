@@ -53,9 +53,9 @@ export async function POST(request: NextRequest) {
     let dbPayment = await prisma.payment.findUnique({
       where: { asaasPaymentId: payment.id },
       include: { 
-        subscription: {
+        Subscription: {
           include: {
-            user: true,
+            User: true,
           },
         },
       },
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
             paymentDate: payment.paymentDate ? new Date(payment.paymentDate) : null,
             invoiceUrl: payment.invoiceUrl || payment.bankSlipUrl,
           },
-          include: { subscription: true },
+          include: { Subscription: { include: { User: true } } },
         });
         console.log('[Webhook] Pagamento criado a partir do webhook:', dbPayment.id);
       }
@@ -121,9 +121,9 @@ export async function POST(request: NextRequest) {
         console.log(`[Webhook] Assinatura ${dbPayment.subscriptionId} ATIVADA por 30 dias`);
 
         // Enviar email de confirmação
-        if (dbPayment.subscription?.user) {
-          const user = dbPayment.subscription.user;
-          const planName = dbPayment.subscription.plan === 'DUO' ? 'Plano Duo' : 'Plano Basic';
+        if (dbPayment.Subscription?.User) {
+          const user = dbPayment.Subscription.User;
+          const planName = dbPayment.Subscription.plan === 'DUO' ? 'Plano Duo' : 'Plano Basic';
           
           try {
             await sendMail({
@@ -183,9 +183,9 @@ Aproveite todo o conteúdo disponível na plataforma!
         console.log(`[Webhook] Assinatura ${dbPayment.subscriptionId} marcada como VENCIDA`);
 
         // Enviar email de pagamento vencido
-        if (dbPayment.subscription?.user) {
-          const user = dbPayment.subscription.user;
-          const planName = dbPayment.subscription.plan === 'DUO' ? 'Plano Duo' : 'Plano Basic';
+        if (dbPayment.Subscription?.User) {
+          const user = dbPayment.Subscription.User;
+          const planName = dbPayment.Subscription.plan === 'DUO' ? 'Plano Duo' : 'Plano Basic';
           
           try {
             await sendMail({

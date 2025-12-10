@@ -44,18 +44,18 @@ export default async function TitleDetailPage({ params }: PageProps) {
   const title = await prisma.title.findUnique({
     where: { id },
     include: {
-      genres: {
-        include: { genre: true },
+      TitleGenre: {
+        include: { Genre: true },
       },
-      cast: {
+      Cast: {
         orderBy: { order: "asc" },
       },
-      crew: true,
-      videos: true,
-      seasons: {
+      Crew: true,
+      Video: true,
+      Season: {
         orderBy: { seasonNumber: "asc" },
         include: {
-          episodes: {
+          Episode: {
             orderBy: { episodeNumber: "asc" },
           },
         },
@@ -72,8 +72,8 @@ export default async function TitleDetailPage({ params }: PageProps) {
   const year = getYear(title.releaseDate as Date | null);
   const runtimeLabel = formatRuntime(title.runtime);
 
-  const genres = (title.genres as any[])
-    .map((tg) => tg.genre?.name as string | undefined)
+  const genres = (title.TitleGenre as any[])
+    .map((tg) => tg.Genre?.name as string | undefined)
     .filter(Boolean) as string[];
 
   let spokenLanguages: string[] = [];
@@ -114,25 +114,25 @@ export default async function TitleDetailPage({ params }: PageProps) {
 
   const isSeries = title.type === "SERIES" || title.type === "ANIME";
 
-  const mainCast = title.cast.slice(0, 12);
+  const mainCast = title.Cast.slice(0, 12);
   const importantJobs = ["Director", "Writer", "Screenplay", "Producer"];
-  const mainCrew = title.crew
+  const mainCrew = title.Crew
     .filter((c: any) => importantJobs.includes(c.job))
     .slice(0, 10);
 
-  const youtubeVideos = title.videos.filter((v: any) => v.site === "YouTube");
+  const youtubeVideos = title.Video.filter((v: any) => v.site === "YouTube");
 
   let relatedTitles: { id: string; name: string; posterUrl: string | null }[] = [];
   let prevTitle: { id: string; name: string } | null = null;
   let nextTitle: { id: string; name: string } | null = null;
 
-  const titleGenresAny = title.genres as any[];
+  const titleGenresAny = title.TitleGenre as any[];
   if (titleGenresAny.length > 0) {
     const primaryGenreId = titleGenresAny[0]?.genreId as string | undefined;
     if (primaryGenreId) {
       const genreTitles = await prisma.title.findMany({
         where: {
-          genres: {
+          TitleGenre: {
             some: { genreId: primaryGenreId },
           },
         },
@@ -163,7 +163,7 @@ export default async function TitleDetailPage({ params }: PageProps) {
     }
   }
 
-  const seasonsAny = (title as any).seasons as any[] | undefined;
+  const seasonsAny = (title as any).Season as any[] | undefined;
   const seasonsForUi = Array.isArray(seasonsAny)
     ? [...seasonsAny].sort(
         (a, b) => (a.seasonNumber ?? 0) - (b.seasonNumber ?? 0),

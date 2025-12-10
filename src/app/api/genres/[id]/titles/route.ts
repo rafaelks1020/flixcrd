@@ -22,7 +22,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const titleGenres = await prisma.titleGenre.findMany({
       where: { genreId: id },
       include: {
-        title: {
+        Title: {
           select: {
             id: true,
             name: true,
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         },
       },
       orderBy: {
-        title: {
+        Title: {
           voteAverage: "desc", // Ordena por nota (melhores primeiro)
         },
       },
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       take: pageSize,
     });
 
-    const titles = titleGenres.map((tg: any) => tg.title);
+    const titles = titleGenres.map((tg: any) => tg.Title);
 
     return NextResponse.json(titles);
   } catch (error) {

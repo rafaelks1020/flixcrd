@@ -11,13 +11,13 @@ export async function GET() {
       orderBy: { name: "asc" },
       include: {
         _count: {
-          select: { titles: true },
+          select: { TitleGenre: true },
         },
       },
     });
 
     // Só retorna gêneros que têm pelo menos 1 título
-    const filtered = genres.filter((g: any) => g._count.titles > 0);
+    const filtered = genres.filter((g: any) => g._count.TitleGenre > 0);
 
     return NextResponse.json(filtered);
   } catch (error) {
