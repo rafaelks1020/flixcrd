@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth-mobile";
+import { sendMail } from "@/lib/mailjet";
 
 export async function GET(request: NextRequest) {
   try {
@@ -176,6 +177,70 @@ export async function POST(request: NextRequest) {
       where: { id: createdRequest.id },
       data: { followersCount: 1 },
     });
+
+    // Enviar email para o admin notificando sobre a nova solicitação
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (adminEmail) {
+      try {
+        const requestTypeLabel = {
+          MOVIE: "Filme",
+          SERIES: "Série",
+          ANIME: "Anime",
+          DORAMA: "Dorama",
+          OTHER: "Outro",
+        }[requestType] || "Desconhecido";
+
+        await sendMail({
+          to: adminEmail,
+          subject: `🎬 Nova solicitação: ${title}`,
+          fromEmail: "contato@pflix.com.br",
+          fromName: "FlixCRD",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #e50914;">🎬 Nova Solicitação de Conteúdo</h2>
+              <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p><strong>Título:</strong> ${title}</p>
+                <p><strong>Tipo:</strong> ${requestTypeLabel}</p>
+                <p><strong>Usuário:</strong> ${user.name || user.email}</p>
+                ${imdbId ? `<p><strong>IMDB ID:</strong> <a href="https://www.imdb.com/title/${imdbId}">${imdbId}</a></p>` : ""}
+                ${desiredLanguagesValue ? `<p><strong>Idiomas desejados:</strong> ${desiredLanguagesValue}</p>` : ""}
+                ${desiredQualityValue ? `<p><strong>Qualidade desejada:</strong> ${desiredQualityValue}</p>` : ""}
+                ${note ? `<p><strong>Observações:</strong> ${note}</p>` : ""}
+              </div>
+              <p style="text-align: center;">
+                <a href="${new URL(request.url).origin}/admin/solicitacoes" 
+                   style="background-color: #e50914; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                  Ver no Admin
+                </a>
+              </p>
+            </div>
+          `,
+          text: `
+Nova Solicitação de Conteúdo
+
+Título: ${title}
+Tipo: ${requestTypeLabel}
+Usuário: ${user.name || user.email}
+${imdbId ? `IMDB ID: https://www.imdb.com/title/${imdbId}` : ""}
+${desiredLanguagesValue ? `Idiomas desejados: ${desiredLanguagesValue}` : ""}
+${desiredQualityValue ? `Qualidade desejada: ${desiredQualityValue}` : ""}
+${note ? `Observações: ${note}` : ""}
+
+Acesse: ${new URL(request.url).origin}/admin/solicitacoes
+          `,
+        });
+
+        console.log(
+          `[Solicitacoes] Email enviado para admin sobre solicitação #${createdRequest.id}`,
+        );
+      } catch (emailError) {
+        // Não bloqueia a criação da solicitação se o email falhar
+        console.error(
+          "[Solicitacoes] Erro ao enviar email para admin:",
+          emailError,
+        );
+      }
+    }
 
     return NextResponse.json(updatedRequest, { status: 201 });
   } catch (error: any) {

@@ -8,49 +8,403 @@ datasource db {
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
-enum TitleType {
-  MOVIE
-  SERIES
-  ANIME
-  OTHER
+model Cast {
+  id          String   @id
+  titleId     String
+  tmdbId      Int
+  name        String
+  character   String?
+  order       Int
+  profilePath String?
+  createdAt   DateTime @default(now())
+  Title       Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
+
+  @@index([titleId])
 }
 
-enum UserRole {
-  USER
-  ADMIN
+model Crew {
+  id          String   @id
+  titleId     String
+  tmdbId      Int
+  name        String
+  job         String
+  department  String?
+  profilePath String?
+  createdAt   DateTime @default(now())
+  Title       Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
+
+  @@index([titleId])
+}
+
+model CronTask {
+  id              String    @id
+  name            String    @unique
+  description     String?
+  endpoint        String
+  method          String    @default("GET")
+  intervalMinutes Int       @default(60)
+  enabled         Boolean   @default(true)
+  lastRunAt       DateTime?
+  lastSuccessAt   DateTime?
+  lastStatus      Int?
+  lastError       String?
+  lastDurationMs  Int?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime
+}
+
+model Episode {
+  id               String             @id
+  titleId          String
+  seasonId         String
+  tmdbId           Int?
+  seasonNumber     Int
+  episodeNumber    Int
+  name             String
+  overview         String?
+  airDate          DateTime?
+  runtime          Int?
+  stillUrl         String?
+  hlsPath          String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime
+  Season           Season             @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  Title            Title              @relation(fields: [titleId], references: [id], onDelete: Cascade)
+  PlaybackProgress PlaybackProgress[]
+
+  @@unique([titleId, seasonNumber, episodeNumber])
+  @@index([seasonId])
+  @@index([titleId])
+}
+
+model Genre {
+  id         String       @id
+  tmdbId     Int          @unique
+  name       String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime
+  TitleGenre TitleGenre[]
+}
+
+model NotificationPreference {
+  id              String   @id
+  userId          String   @unique
+  newContent      Boolean  @default(true)
+  updates         Boolean  @default(true)
+  recommendations Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime
+  User            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Payment {
+  id             String       @id
+  subscriptionId String
+  asaasPaymentId String       @unique
+  status         String
+  value          Float
+  billingType    String
+  dueDate        DateTime
+  paymentDate    DateTime?
+  invoiceUrl     String?
+  pixQrCode      String?
+  pixCopiaECola  String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime
+  Subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+}
+
+model PlaybackProgress {
+  id              String   @id
+  profileId       String
+  titleId         String
+  episodeId       String?
+  positionSeconds Int
+  durationSeconds Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime
+  Episode         Episode? @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  Profile         Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  Title           Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, episodeId])
+  @@unique([profileId, titleId])
+  @@index([episodeId])
+  @@index([profileId])
+  @@index([titleId])
+}
+
+model Profile {
+  id                 String             @id
+  userId             String
+  name               String
+  avatar             String?
+  isKids             Boolean            @default(false)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime
+  useCloudflareProxy Boolean            @default(false)
+  PlaybackProgress   PlaybackProgress[]
+  User               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  UserFavorite       UserFavorite[]
+
+  @@index([userId])
+}
+
+model PushToken {
+  id         String   @id
+  userId     String
+  token      String   @unique
+  platform   String   @default("unknown")
+  deviceName String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+  User       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+model Request {
+  id               String               @id
+  userId           String
+  imdbId           String?
+  title            String
+  type             RequestType
+  desiredLanguages String?
+  desiredQuality   String?
+  note             String?
+  imdbJson         Json?
+  status           RequestStatus        @default(PENDING)
+  workflowState    RequestWorkflowState @default(NONE)
+  followersCount   Int                  @default(0)
+  priorityScore    Float?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime
+  User             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  RequestFollower  RequestFollower[]
+  RequestHistory   RequestHistory[]
+  RequestUpload    RequestUpload?
+
+  @@index([createdAt])
+  @@index([imdbId])
+  @@index([status])
+  @@index([type])
+}
+
+model RequestFollower {
+  id        String   @id
+  requestId String
+  userId    String
+  createdAt DateTime @default(now())
+  Request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, userId])
+  @@index([requestId])
+  @@index([userId])
+}
+
+model RequestHistory {
+  id        String               @id
+  requestId String
+  action    RequestHistoryAction
+  message   String?
+  adminId   String?
+  createdAt DateTime             @default(now())
+  Request   Request              @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([requestId])
+}
+
+model RequestUpload {
+  id          String    @id
+  requestId   String    @unique
+  titleId     String?
+  completedAt DateTime?
+  Request     Request   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  Title       Title?    @relation(fields: [titleId], references: [id])
+
+  @@index([requestId])
+  @@index([titleId])
+}
+
+model Season {
+  id           String    @id
+  titleId      String
+  seasonNumber Int
+  name         String?
+  overview     String?
+  airDate      DateTime?
+  posterUrl    String?
+  episodeCount Int?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime
+  Episode      Episode[]
+  Title        Title     @relation(fields: [titleId], references: [id], onDelete: Cascade)
+
+  @@unique([titleId, seasonNumber])
+  @@index([titleId])
+}
+
+model ServiceStatusSnapshot {
+  id         String   @id
+  createdAt  DateTime @default(now())
+  healthy    Int
+  total      Int
+  allHealthy Boolean
+  services   Json
+
+  @@index([createdAt])
+}
+
+model Settings {
+  id                         String   @id
+  siteName                   String   @default("Pflix")
+  siteDescription            String   @default("Sua plataforma de streaming")
+  maintenanceMode            Boolean  @default(false)
+  allowRegistration          Boolean  @default(true)
+  maxUploadSize              Int      @default(10)
+  transcoderCrf              Int      @default(20)
+  deleteSourceAfterTranscode Boolean  @default(true)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime
+}
+
+model Subscription {
+  id                  String    @id
+  userId              String    @unique
+  status              String
+  plan                String    @default("BASIC")
+  currentPeriodStart  DateTime?
+  currentPeriodEnd    DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime
+  asaasCustomerId     String?
+  asaasPaymentId      String?
+  asaasSubscriptionId String?
+  price               Float     @default(10.00)
+  Payment             Payment[]
+  User                User      @relation(fields: [userId], references: [id])
+}
+
+model Title {
+  id                  String             @id
+  tmdbId              Int?               @unique
+  type                TitleType
+  slug                String             @unique
+  name                String
+  originalName        String?
+  overview            String?
+  tagline             String?
+  releaseDate         DateTime?
+  posterUrl           String?
+  backdropUrl         String?
+  logoUrl             String?
+  hlsPath             String?
+  runtime             Int?
+  voteAverage         Float?
+  voteCount           Int?
+  popularity          Float?
+  status              String?
+  originalLanguage    String?
+  spokenLanguages     String?
+  productionCountries String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime
+  Cast                Cast[]
+  Crew                Crew[]
+  Episode             Episode[]
+  PlaybackProgress    PlaybackProgress[]
+  RequestUpload       RequestUpload[]
+  Season              Season[]
+  TitleGenre          TitleGenre[]
+  UserFavorite        UserFavorite[]
+  Video               Video[]
+}
+
+model TitleGenre {
+  id        String   @id
+  titleId   String
+  genreId   String
+  createdAt DateTime @default(now())
+  Genre     Genre    @relation(fields: [genreId], references: [id], onDelete: Cascade)
+  Title     Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
+
+  @@unique([titleId, genreId])
+}
+
+model User {
+  id                     String                  @id
+  email                  String                  @unique
+  name                   String?
+  avatar                 String?
+  passwordHash           String
+  role                   UserRole                @default(USER)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime
+  useCloudflareProxy     Boolean                 @default(false)
+  cpfCnpj                String?
+  phone                  String?
+  approvalStatus         ApprovalStatus          @default(PENDING)
+  approvedAt             DateTime?
+  approvedBy             String?
+  rejectionReason        String?
+  NotificationPreference NotificationPreference?
+  PasswordResetToken     PasswordResetToken[]
+  Profile                Profile[]
+  PushToken              PushToken[]
+  Request                Request[]
+  Subscription           Subscription?
+}
+
+model UserFavorite {
+  id        String   @id
+  profileId String
+  titleId   String
+  createdAt DateTime @default(now())
+  Profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  Title     Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, titleId])
+  @@index([profileId])
+  @@index([titleId])
+}
+
+model Video {
+  id          String    @id
+  titleId     String
+  key         String
+  name        String
+  site        String
+  type        String
+  official    Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  Title       Title     @relation(fields: [titleId], references: [id], onDelete: Cascade)
+
+  @@index([titleId])
 }
 
 enum ApprovalStatus {
-  PENDING    // Aguardando aprovação do admin
-  APPROVED   // Aprovado, pode pagar e acessar
-  REJECTED   // Rejeitado pelo admin
-}
-
-enum RequestType {
-  MOVIE
-  SERIES
-  ANIME
-  DORAMA
-  OTHER
-}
-
-enum RequestStatus {
   PENDING
-  UNDER_REVIEW
-  IN_PRODUCTION
-  UPLOADING
-  COMPLETED
+  APPROVED
   REJECTED
-}
-
-enum RequestWorkflowState {
-  NONE
-  TECH_ANALYSIS
-  SOURCE_ACQUISITION
-  ENCODING
-  SUBTITLING
-  UPLOAD_SERVER
-  PUBLISHED
 }
 
 enum RequestHistoryAction {
@@ -65,406 +419,41 @@ enum RequestHistoryAction {
   NOTE_ADDED
 }
 
-model User {
-  id             String         @id @default(cuid())
-  email          String         @unique
-  name           String?
-  cpfCnpj        String?        // CPF ou CNPJ do usuário (para pagamentos)
-  phone          String?        // Telefone do usuário
-  avatar         String?
-  passwordHash   String
-  role           UserRole       @default(USER)
-  approvalStatus ApprovalStatus @default(PENDING) // Status de aprovação pelo admin
-  approvedAt     DateTime?      // Data de aprovação
-  approvedBy     String?        // ID do admin que aprovou
-  rejectionReason String?       // Motivo da rejeição (se rejeitado)
-  useCloudflareProxy Boolean    @default(false)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-
-  subscription   Subscription?
-  profiles       Profile[]
-  pushTokens     PushToken[]
-  notificationPreference NotificationPreference?
-  requests       Request[]
+enum RequestStatus {
+  PENDING
+  UNDER_REVIEW
+  IN_PRODUCTION
+  UPLOADING
+  COMPLETED
+  REJECTED
 }
 
-model Profile {
-  id        String   @id @default(cuid())
-  userId    String
-  name      String
-  avatar    String?  // URL do avatar ou código de ícone
-  isKids    Boolean  @default(false)
-  useCloudflareProxy Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  playbackProgresses PlaybackProgress[]
-  favorites          UserFavorite[]
-
-  @@index([userId])
+enum RequestType {
+  MOVIE
+  SERIES
+  ANIME
+  DORAMA
+  OTHER
 }
 
-model Subscription {
-  id                 String   @id @default(cuid())
-  userId             String   @unique
-  user               User     @relation(fields: [userId], references: [id])
-  status             String   // ACTIVE, PENDING, OVERDUE, CANCELED, EXPIRED
-  plan               String   @default("BASIC") // BASIC = R$10/mês
-  price              Float    @default(10.00)
-  
-  // Asaas integration
-  asaasCustomerId    String?  // ID do cliente no Asaas
-  asaasSubscriptionId String? // ID da assinatura recorrente no Asaas
-  asaasPaymentId     String?  // ID do último pagamento
-  
-  currentPeriodStart DateTime?
-  currentPeriodEnd   DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
-  payments           Payment[]
+enum RequestWorkflowState {
+  NONE
+  TECH_ANALYSIS
+  SOURCE_ACQUISITION
+  ENCODING
+  SUBTITLING
+  UPLOAD_SERVER
+  PUBLISHED
 }
 
-model Payment {
-  id                String   @id @default(cuid())
-  subscriptionId    String
-  subscription      Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  
-  asaasPaymentId    String   @unique // ID do pagamento no Asaas
-  status            String   // PENDING, CONFIRMED, RECEIVED, OVERDUE, REFUNDED, etc
-  value             Float
-  billingType       String   // PIX, BOLETO, CREDIT_CARD
-  dueDate           DateTime
-  paymentDate       DateTime?
-  invoiceUrl        String?  // Link do boleto/fatura
-  pixQrCode         String?  // QR Code PIX (base64)
-  pixCopiaECola     String?  // Código PIX copia e cola
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  @@index([subscriptionId])
+enum TitleType {
+  MOVIE
+  SERIES
+  ANIME
+  OTHER
 }
 
-model Genre {
-  id        String        @id @default(cuid())
-  tmdbId    Int           @unique
-  name      String
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  titles    TitleGenre[]
-}
-
-model Title {
-  id            String        @id @default(cuid())
-  tmdbId        Int?          @unique
-  type          TitleType
-  slug          String        @unique
-  name          String
-  originalName  String?
-  overview      String?
-  tagline       String?
-  releaseDate   DateTime?
-  posterUrl     String?
-  backdropUrl   String?
-  logoUrl       String?
-  hlsPath       String?       // path prefix in Wasabi, e.g. movie-id/
-  runtime       Int?          // em minutos
-  voteAverage   Float?        // rating do TMDB (0-10)
-  voteCount     Int?
-  popularity    Float?
-  status        String?       // Released, Post Production, etc.
-  originalLanguage String?
-  spokenLanguages  String?    // JSON array de idiomas
-  productionCountries String? // JSON array de países
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-
-  genres             TitleGenre[]
-  cast               Cast[]
-  crew               Crew[]
-  videos             Video[]
-  seasons            Season[]
-  episodes           Episode[]
-  playbackProgresses PlaybackProgress[]
-  favorites          UserFavorite[]
-  requestUploads     RequestUpload[]
-}
-
-model TitleGenre {
-  id        String   @id @default(cuid())
-  titleId   String
-  genreId   String
-  title     Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
-  genre     Genre    @relation(fields: [genreId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-
-  @@unique([titleId, genreId])
-}
-
-model Cast {
-  id          String   @id @default(cuid())
-  titleId     String
-  tmdbId      Int      // ID do ator no TMDB
-  name        String
-  character   String?
-  order       Int      // ordem de aparição nos créditos
-  profilePath String?  // URL da foto do ator
-  title       Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-
-  @@index([titleId])
-}
-
-model Crew {
-  id          String   @id @default(cuid())
-  titleId     String
-  tmdbId      Int
-  name        String
-  job         String   // Director, Writer, Producer, etc.
-  department  String?  // Directing, Writing, Production, etc.
-  profilePath String?
-  title       Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-
-  @@index([titleId])
-}
-
-model Video {
-  id          String   @id @default(cuid())
-  titleId     String
-  key         String   // YouTube video ID
-  name        String
-  site        String   // YouTube, Vimeo, etc.
-  type        String   // Trailer, Teaser, Clip, etc.
-  official    Boolean  @default(false)
-  publishedAt DateTime?
-  title       Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-
-  @@index([titleId])
-}
-
-model Season {
-  id            String    @id @default(cuid())
-  titleId       String
-  seasonNumber  Int
-  name          String?
-  overview      String?
-  airDate       DateTime?
-  posterUrl     String?
-  episodeCount  Int?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  title         Title     @relation(fields: [titleId], references: [id], onDelete: Cascade)
-  episodes      Episode[]
-
-  @@unique([titleId, seasonNumber])
-  @@index([titleId])
-}
-
-model Episode {
-  id            String    @id @default(cuid())
-  titleId       String
-  seasonId      String
-  tmdbId        Int?
-  seasonNumber  Int
-  episodeNumber Int
-  name          String
-  overview      String?
-  airDate       DateTime?
-  runtime       Int?
-  stillUrl      String?
-  hlsPath       String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  title         Title     @relation(fields: [titleId], references: [id], onDelete: Cascade)
-  season        Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-
-  playbackProgresses PlaybackProgress[]
-
-  @@unique([titleId, seasonNumber, episodeNumber])
-  @@index([titleId])
-  @@index([seasonId])
-}
-
-model PlaybackProgress {
-  id              String   @id @default(cuid())
-  profileId       String
-  titleId         String
-  episodeId       String?
-  positionSeconds Int
-  durationSeconds Int
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  profile Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  title   Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
-  episode Episode? @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-
-  // Um progresso por título (filmes ou fallback)
-  @@unique([profileId, titleId])
-  // Um progresso por episódio quando episodeId não for nulo
-  @@unique([profileId, episodeId])
-  @@index([profileId])
-  @@index([titleId])
-  @@index([episodeId])
-}
-
-model UserFavorite {
-  id        String   @id @default(cuid())
-  profileId String
-  titleId   String
-  createdAt DateTime @default(now())
-
-  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  title   Title   @relation(fields: [titleId], references: [id], onDelete: Cascade)
-
-  @@unique([profileId, titleId])
-  @@index([profileId])
-  @@index([titleId])
-}
-
-model Request {
-  id              String               @id @default(cuid())
-  userId          String
-  imdbId          String?
-  title           String
-  type            RequestType
-  desiredLanguages String?
-  desiredQuality  String?
-  note            String?
-  imdbJson        Json?
-  status          RequestStatus        @default(PENDING)
-  workflowState   RequestWorkflowState @default(NONE)
-  followersCount  Int                  @default(0)
-  priorityScore   Float?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-
-  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  followers RequestFollower[]
-  history   RequestHistory[]
-  upload    RequestUpload?
-
-  @@index([imdbId])
-  @@index([status])
-  @@index([type])
-  @@index([createdAt])
-}
-
-model RequestFollower {
-  id        String   @id @default(cuid())
-  requestId String
-  userId    String
-  createdAt DateTime @default(now())
-
-  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
-
-  @@unique([requestId, userId])
-  @@index([requestId])
-  @@index([userId])
-}
-
-model RequestHistory {
-  id        String              @id @default(cuid())
-  requestId String
-  action    RequestHistoryAction
-  message   String?
-  adminId   String?
-  createdAt DateTime            @default(now())
-
-  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
-
-  @@index([requestId])
-  @@index([adminId])
-}
-
-model RequestUpload {
-  id          String   @id @default(cuid())
-  requestId   String   @unique
-  titleId     String?
-  completedAt DateTime?
-
-  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  title   Title?  @relation(fields: [titleId], references: [id], onDelete: SetNull)
-
-  @@index([requestId])
-  @@index([titleId])
-}
-
-model Settings {
-  id                       String  @id @default(cuid())
-  siteName                 String  @default("Pflix")
-  siteDescription          String  @default("Sua plataforma de streaming")
-  maintenanceMode          Boolean @default(false)
-  allowRegistration        Boolean @default(true)
-  maxUploadSize            Int     @default(10)  // GB
-  transcoderCrf            Int     @default(20)
-  deleteSourceAfterTranscode Boolean @default(true)
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
-}
-
-// Push Notifications
-model PushToken {
-  id         String   @id @default(cuid())
-  userId     String
-  token      String   @unique
-  platform   String   @default("unknown") // android, ios, web
-  deviceName String?
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([token])
-}
-
-model NotificationPreference {
-  id              String  @id @default(cuid())
-  userId          String  @unique
-  newContent      Boolean @default(true)
-  updates         Boolean @default(true)
-  recommendations Boolean @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-model ServiceStatusSnapshot {
-  id         String   @id @default(cuid())
-  createdAt  DateTime @default(now())
-  healthy    Int
-  total      Int
-  allHealthy Boolean
-  services   Json
-
-  @@index([createdAt])
-}
-
-model CronTask {
-  id             String   @id @default(cuid())
-  name           String   @unique
-  description    String?
-  endpoint       String   // Caminho ou URL absoluta a ser chamada pelo dispatcher
-  method         String   @default("GET")
-  intervalMinutes Int     @default(60)
-  enabled        Boolean  @default(true)
-  lastRunAt      DateTime?
-  lastSuccessAt  DateTime?
-  lastStatus     Int?
-  lastError      String?
-  lastDurationMs Int?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+enum UserRole {
+  USER
+  ADMIN
 }
