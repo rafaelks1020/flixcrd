@@ -194,7 +194,7 @@ export default function SubscriptionModal({
             </button>
           </div>
           <p className="text-xs text-zinc-400 mt-2">
-            Clique para preencher as datas automaticamente. Depois clique em "Salvar".
+            Clique para preencher as datas automaticamente. Depois clique em &quot;Salvar&quot;.
           </p>
         </div>
 

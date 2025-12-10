@@ -99,10 +99,10 @@ export async function POST(_request: NextRequest, context: RouteContext) {
             message: json?.error || `Erro HTTP ${result.status}`,
           });
         }
-      } catch (err: any) {
+      } catch (err) {
         errors.push({
           seasonNumber,
-          message: err?.message || "Erro desconhecido ao importar temporada.",
+          message: err instanceof Error ? err.message : "Erro desconhecido ao importar temporada.",
         });
       }
     }

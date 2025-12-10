@@ -10,7 +10,9 @@ interface NavbarProps {
   onSearch?: (query: string) => void;
 }
 
-export default function Navbar({ isLoggedIn, isAdmin, onSearch }: NavbarProps) {
+export default function Navbar({ isLoggedIn, isAdmin, onSearch: _onSearch }: NavbarProps) {
+  // onSearch disponível como _onSearch se precisar no futuro
+  void _onSearch;
   const [scrolled, setScrolled] = useState(false);
   const [search, setSearch] = useState("");
   const [showSearch, setShowSearch] = useState(false);

@@ -15,6 +15,34 @@ interface RouteContext {
   }>;
 }
 
+interface SubtitleTrack {
+  label: string;
+  language?: string | null;
+  url: string;
+}
+
+function inferSubtitleInfoFromKey(key: string): { label: string; language?: string | null } {
+  const lower = key.toLowerCase();
+
+  if (lower.includes("pt-br") || lower.includes("ptbr") || lower.includes("pt_b")) {
+    return { label: "Português (Brasil)", language: "pt-BR" };
+  }
+
+  if (lower.includes("pt")) {
+    return { label: "Português", language: "pt" };
+  }
+
+  if (lower.includes("en")) {
+    return { label: "Inglês", language: "en" };
+  }
+
+  if (lower.includes("es")) {
+    return { label: "Espanhol", language: "es" };
+  }
+
+  return { label: "Legenda", language: null };
+}
+
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
     const user = await getAuthUser(request);
@@ -59,7 +87,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       const listCmd = new ListObjectsV2Command({
         Bucket: WASABI_BUCKET,
         Prefix: hlsPath,
-        MaxKeys: 10,
+        MaxKeys: 100,
       });
 
       const listed = await wasabiClient.send(listCmd);
@@ -74,6 +102,21 @@ export async function GET(request: NextRequest, context: RouteContext) {
       const videoObject = objects.find((obj) =>
         /\.(mp4|mkv|m4v|mov|webm|avi)$/i.test(obj.Key as string),
       );
+
+      // Procura arquivos de legenda (.vtt)
+      const subtitleObjects = objects.filter((obj) =>
+        (obj.Key as string).toLowerCase().endsWith(".vtt"),
+      );
+
+      const subtitles: SubtitleTrack[] = subtitleObjects.map((obj) => {
+        const key = obj.Key as string;
+        const { label, language } = inferSubtitleInfoFromKey(key);
+        return {
+          label,
+          language,
+          url: `${WASABI_CDN_BASE}${key}`,
+        };
+      });
 
       if (hlsObject) {
         // Tem HLS - tentar usar streaming protegido
@@ -109,7 +152,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
           kind: "hls",
           expiresAt,
           protected: isProtected,
-          subtitles: [],
+          subtitles,
           title: {
             id: title.id,
             name: title.name,
@@ -129,7 +172,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         return NextResponse.json({
           playbackUrl,
           kind: "mp4",
-          subtitles: [],
+          subtitles,
           title: {
             id: title.id,
             name: title.name,

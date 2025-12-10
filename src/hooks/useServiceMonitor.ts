@@ -35,7 +35,7 @@ export function useServiceMonitor() {
         }
 
         previousStatus = currentStatus;
-      } catch (error) {
+      } catch {
         setIsOnline(false);
         setLastCheck(new Date());
 

@@ -56,8 +56,8 @@ export default function AdminUsersPage() {
         throw new Error(data?.error ?? "Erro ao carregar usuários");
       }
       setUsers(data as AdminUser[]);
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao carregar usuários");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao carregar usuários");
     } finally {
       setLoading(false);
     }
@@ -83,14 +83,14 @@ export default function AdminUsersPage() {
       }
       setUsers((prev) => prev.map((u) => (u.id === id ? (data as AdminUser) : u)));
       setInfo("Usuário atualizado com sucesso.");
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao atualizar usuário");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao atualizar usuário");
     } finally {
       setSavingId(null);
     }
   }
 
-  async function handleCreateUser(event: any) {
+  async function handleCreateUser(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
     setInfo(null);
@@ -116,19 +116,19 @@ export default function AdminUsersPage() {
       setNewUserPassword("");
       setNewUserRole("USER");
       setInfo("Usuário criado com sucesso.");
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao criar usuário");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao criar usuário");
     } finally {
       setCreating(false);
     }
   }
 
   async function handleChangePassword(id: string, email: string) {
-    // eslint-disable-next-line no-alert
+     
     const newPassword = window.prompt(`Nova senha para ${email}:`);
     if (!newPassword) return;
     if (newPassword.length < 6) {
-      // eslint-disable-next-line no-alert
+       
       window.alert("A senha deve ter pelo menos 6 caracteres.");
       return;
     }
@@ -147,15 +147,15 @@ export default function AdminUsersPage() {
         throw new Error(data?.error ?? "Erro ao alterar senha");
       }
       setInfo("Senha atualizada com sucesso.");
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao alterar senha");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao alterar senha");
     } finally {
       setSavingId(null);
     }
   }
 
   async function handleDeleteUser(id: string, email: string) {
-    // eslint-disable-next-line no-alert
+     
     const confirmed = window.confirm(`Excluir usuário ${email}? Esta ação não pode ser desfeita.`);
     if (!confirmed) return;
 
@@ -174,8 +174,8 @@ export default function AdminUsersPage() {
       }
       setUsers((prev) => prev.filter((u) => u.id !== id));
       setInfo("Usuário excluído com sucesso.");
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao excluir usuário");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao excluir usuário");
     } finally {
       setDeletingId(null);
     }
@@ -216,8 +216,8 @@ export default function AdminUsersPage() {
       setUsers((prev) => prev.map((u) => (u.id === id ? (data as AdminUser) : u)));
       setInfo("Usuário atualizado com sucesso.");
       setEditingUser(null);
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao editar usuário");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao editar usuário");
     } finally {
       setSavingId(null);
     }

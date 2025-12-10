@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -14,19 +14,27 @@ interface PushTokenRecord {
   updatedAt: Date;
 }
 
-// GET - Lista todos os tokens e estatísticas
-export async function GET() {
+// GET - Lista tokens e estatísticas com paginação
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    
-    if (!session?.user || (session.user as any).role !== "ADMIN") {
+    const user = session?.user as { role?: string } | undefined;
+
+    if (!user || user.role !== "ADMIN") {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
-    // Buscar todos os tokens com informações do usuário
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "1", 10);
+    const limit = parseInt(searchParams.get("limit") || "50", 10);
+    const pageSize = Math.min(Math.max(limit, 1), 200);
+    const skip = (page - 1) * pageSize;
+
+    // Buscar página de tokens com informações do usuário
     const tokens: PushTokenRecord[] = await prisma.pushToken.findMany({
       orderBy: { createdAt: "desc" },
-      take: 100,
+      skip,
+      take: pageSize,
     });
 
     // Buscar informações dos usuários
@@ -36,23 +44,45 @@ export async function GET() {
       select: { id: true, email: true, name: true },
     });
 
-    const userMap = new Map(users.map(u => [u.id, u]));
+    const userMap = new Map(users.map((u) => [u.id, u]));
 
     const tokensWithUsers = tokens.map((token: PushTokenRecord) => ({
       ...token,
       user: userMap.get(token.userId) || null,
     }));
 
-    // Calcular estatísticas
+    // Calcular estatísticas globais (não só da página atual)
+    const [
+      totalTokens,
+      activeTokens,
+      androidTokens,
+      iosTokens,
+      webTokens,
+    ] = await Promise.all([
+      prisma.pushToken.count(),
+      prisma.pushToken.count({ where: { isActive: true } }),
+      prisma.pushToken.count({ where: { platform: { equals: "android", mode: "insensitive" } } }),
+      prisma.pushToken.count({ where: { platform: { equals: "ios", mode: "insensitive" } } }),
+      prisma.pushToken.count({ where: { platform: { equals: "web", mode: "insensitive" } } }),
+    ]);
+
     const stats = {
-      totalTokens: tokens.length,
-      activeTokens: tokens.filter((t: PushTokenRecord) => t.isActive).length,
-      androidTokens: tokens.filter((t: PushTokenRecord) => t.platform.toLowerCase() === "android").length,
-      iosTokens: tokens.filter((t: PushTokenRecord) => t.platform.toLowerCase() === "ios").length,
-      webTokens: tokens.filter((t: PushTokenRecord) => t.platform.toLowerCase() === "web").length,
+      totalTokens,
+      activeTokens,
+      androidTokens,
+      iosTokens,
+      webTokens,
     };
 
-    return NextResponse.json({ tokens: tokensWithUsers, stats });
+    const totalPages = Math.max(1, Math.ceil(totalTokens / pageSize));
+
+    return NextResponse.json({
+      tokens: tokensWithUsers,
+      stats,
+      page,
+      pageSize,
+      totalPages,
+    });
   } catch (error) {
     console.error("Error fetching notifications:", error);
     return NextResponse.json(

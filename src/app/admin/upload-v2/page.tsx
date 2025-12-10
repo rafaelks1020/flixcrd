@@ -41,6 +41,17 @@ interface CreatedTitle {
   type: TitleType;
 }
 
+// Usar multipart para qualquer tamanho de arquivo. Mantido como constante para facilitar ajuste futuro.
+const MULTIPART_THRESHOLD_BYTES = 0;
+const MULTIPART_PART_SIZE_BYTES = 64 * 1024 * 1024;
+const MULTIPART_CONCURRENCY = 6;
+const MULTIPART_MAX_RETRIES = 3;
+
+interface UploadedPartInfo {
+  partNumber: number;
+  eTag: string;
+}
+
 // ============================================================================
 // HELPERS
 // ============================================================================
@@ -243,12 +254,37 @@ function detectEpisodeMeticulous(filename: string): ParseResult {
 }
 
 // Fallback com IA para casos impossíveis
-// IMPORTANTE: chamadas diretas para provedores de IA com API key NUNCA devem ficar no client.
-// Por enquanto, desabilitamos o fallback de IA para não expor segredos.
-// Se quiser reativar no futuro, crie uma rota de API server-side que use variáveis
-// de ambiente (ex.: GROQ_API_KEY) e chame essa rota a partir daqui.
-async function detectEpisodeWithAI(_filename: string): Promise<ParseResult | null> {
-  return null;
+// Chama rota server-side que usa GROQ_API_KEY
+async function detectEpisodeWithAI(filename: string): Promise<ParseResult | null> {
+  try {
+    const res = await fetch("/api/admin/detect-episode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename }),
+    });
+
+    if (!res.ok) {
+      console.error("[IA] Erro na API:", res.status);
+      return null;
+    }
+
+    const data = await res.json();
+
+    if (data.episode !== null && data.episode !== undefined) {
+      return {
+        season: data.season ?? 1,
+        episode: data.episode,
+        type: "IA (Groq)",
+        absolute: false,
+        confidence: data.confidence ?? 85,
+      };
+    }
+
+    return null;
+  } catch (err) {
+    console.error("[IA] Erro ao detectar episódio:", err);
+    return null;
+  }
 }
 
 // Função principal de detecção
@@ -310,6 +346,7 @@ export default function UploadV2Page() {
   // Status
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [aiDetectingId, setAiDetectingId] = useState<string | null>(null);
 
   // Carregar título diretamente quando vier de uma solicitação atendida
   useEffect(() => {
@@ -358,8 +395,8 @@ export default function UploadV2Page() {
         throw new Error(data?.error ?? "Erro ao consultar TMDb");
       }
       setTmdbResults(data.results ?? []);
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao consultar TMDb");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao consultar TMDb");
     } finally {
       setTmdbLoading(false);
     }
@@ -438,8 +475,8 @@ export default function UploadV2Page() {
       if ((data.type === "SERIES" || data.type === "ANIME") && uploadFiles.length > 0) {
         await createEpisodesFromFiles(data.id);
       }
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao criar título");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao criar título");
     } finally {
       setCreatingTitle(false);
     }
@@ -541,16 +578,34 @@ export default function UploadV2Page() {
 
   // Corrigir com IA
   async function fixWithAI(uploadFile: UploadFile) {
+    setAiDetectingId(uploadFile.id);
+    setError(null);
+    setInfo(`🤖 Detectando episódio com IA para "${uploadFile.file.name}"...`);
+
     const result = await detectEpisodeWithAI(uploadFile.file.name);
+
     if (result && result.episode !== null && result.episode !== undefined) {
+      const season = result.season || 1;
+      const episode = result.episode as number;
+
       setUploadFiles((prev) =>
         prev.map((f) =>
           f.id === uploadFile.id
-            ? { ...f, seasonNumber: result.season || 1, episodeNumber: result.episode! }
+            ? { ...f, seasonNumber: season, episodeNumber: episode }
             : f
         )
       );
+
+      setInfo(
+        `✅ IA detectou S${season.toString().padStart(2, "0")}E${episode
+          .toString()
+          .padStart(2, "0")} para "${uploadFile.file.name}"`
+      );
+    } else {
+      setError("IA não conseguiu identificar temporada/episódio para esse arquivo.");
     }
+
+    setAiDetectingId(null);
   }
 
   // ============================================================================
@@ -585,7 +640,6 @@ export default function UploadV2Page() {
 
   async function uploadSingleFile(uploadFile: UploadFile) {
     try {
-      // Update status
       const startTime = Date.now();
       setUploadFiles((prev) =>
         prev.map((f) => (f.id === uploadFile.id ? { ...f, status: "uploading", startTime } : f))
@@ -633,7 +687,18 @@ export default function UploadV2Page() {
         }
       }
 
-      // Get upload URL
+      // Arquivos gigantes: usar upload multipart concorrente
+      if (uploadFile.file.size >= MULTIPART_THRESHOLD_BYTES) {
+        await uploadMultipartFile(uploadFile, createdTitle!.id, episodeId, startTime);
+        setUploadFiles((prev) =>
+          prev.map((f) =>
+            f.id === uploadFile.id ? { ...f, status: "completed", progress: 100 } : f
+          )
+        );
+        return;
+      }
+
+      // Fluxo antigo: upload simples com PUT único
       const res = await fetch("/api/wasabi/upload-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -652,7 +717,6 @@ export default function UploadV2Page() {
 
       const { uploadUrl } = data;
 
-      // Upload file
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("PUT", uploadUrl, true);
@@ -663,20 +727,15 @@ export default function UploadV2Page() {
 
         xhr.upload.onprogress = (event) => {
           if (!event.lengthComputable) return;
-          
+
           const now = Date.now();
-          const timeDiff = (now - lastTime) / 1000; // seconds
+          const timeDiff = (now - lastTime) / 1000;
           const bytesDiff = event.loaded - lastLoaded;
-          
-          // Calculate speed (bytes per second)
           const speed = timeDiff > 0 ? bytesDiff / timeDiff : 0;
-          
-          // Calculate estimated time left
           const remainingBytes = event.total - event.loaded;
           const estimatedTimeLeft = speed > 0 ? remainingBytes / speed : 0;
-          
           const percent = Math.round((event.loaded / event.total) * 100);
-          
+
           setUploadFiles((prev) =>
             prev.map((f) =>
               f.id === uploadFile.id
@@ -690,7 +749,7 @@ export default function UploadV2Page() {
                 : f
             )
           );
-          
+
           lastLoaded = event.loaded;
           lastTime = now;
         };
@@ -711,14 +770,161 @@ export default function UploadV2Page() {
         xhr.onerror = () => reject(new Error("Erro de rede"));
         xhr.send(uploadFile.file);
       });
-    } catch (err: any) {
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Erro no upload";
       setUploadFiles((prev) =>
         prev.map((f) =>
           f.id === uploadFile.id
-            ? { ...f, status: "error", error: err.message }
+            ? { ...f, status: "error", error: errorMsg }
             : f
         )
       );
+    }
+  }
+
+  async function uploadMultipartFile(
+    uploadFile: UploadFile,
+    titleId: string,
+    episodeId: string | undefined,
+    startTime: number,
+  ) {
+    const startRes = await fetch("/api/wasabi/multipart/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        titleId,
+        episodeId,
+        filename: uploadFile.file.name,
+        contentType: uploadFile.file.type,
+      }),
+    });
+
+    const startJson = await startRes.json();
+    if (!startRes.ok) {
+      throw new Error(startJson?.error ?? "Erro ao iniciar upload multipart");
+    }
+
+    const { uploadId, key } = startJson as { uploadId: string; key: string };
+
+    const file = uploadFile.file;
+    const totalSize = file.size;
+    const partCount = Math.ceil(totalSize / MULTIPART_PART_SIZE_BYTES);
+
+    const parts = Array.from({ length: partCount }, (_, index) => {
+      const partNumber = index + 1;
+      const start = index * MULTIPART_PART_SIZE_BYTES;
+      const end = Math.min(totalSize, start + MULTIPART_PART_SIZE_BYTES);
+      return { partNumber, start, end };
+    });
+
+    let uploadedBytes = 0;
+    const completedParts: UploadedPartInfo[] = [];
+    let currentIndex = 0;
+    let caughtError: Error | null = null;
+
+    const worker = async () => {
+      while (true) {
+        const index = currentIndex;
+        if (index >= parts.length || caughtError) break;
+        currentIndex += 1;
+        const part = parts[index];
+
+        try {
+          const blob = file.slice(part.start, part.end);
+
+          let attempt = 0;
+          let success = false;
+          let eTag = "";
+
+          while (attempt < MULTIPART_MAX_RETRIES && !success) {
+            attempt += 1;
+
+            const partRes = await fetch("/api/wasabi/multipart/part-url", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ key, uploadId, partNumber: part.partNumber }),
+            });
+
+            const partJson = await partRes.json();
+            if (!partRes.ok) {
+              if (attempt >= MULTIPART_MAX_RETRIES) {
+                throw new Error(partJson?.error ?? `Erro ao gerar URL da parte ${part.partNumber}`);
+              }
+              continue;
+            }
+
+            const { uploadUrl } = partJson as { uploadUrl: string };
+
+            const putRes = await fetch(uploadUrl, {
+              method: "PUT",
+              body: blob,
+            });
+
+            if (!putRes.ok) {
+              if (attempt >= MULTIPART_MAX_RETRIES) {
+                throw new Error(`Erro ao enviar parte ${part.partNumber}: ${putRes.status}`);
+              }
+              continue;
+            }
+
+            eTag = putRes.headers.get("ETag") || putRes.headers.get("etag") || "";
+            success = true;
+          }
+
+          completedParts.push({ partNumber: part.partNumber, eTag });
+
+          uploadedBytes += blob.size;
+          const elapsed = (Date.now() - startTime) / 1000;
+          const speed = elapsed > 0 ? uploadedBytes / elapsed : 0;
+          const remaining = totalSize - uploadedBytes;
+          const estimatedTimeLeft = speed > 0 ? remaining / speed : 0;
+          const percent = Math.round((uploadedBytes / totalSize) * 100);
+
+          setUploadFiles((prev) =>
+            prev.map((f) =>
+              f.id === uploadFile.id
+                ? {
+                    ...f,
+                    progress: percent,
+                    uploadSpeed: speed,
+                    uploadedBytes,
+                    estimatedTimeLeft,
+                  }
+                : f
+            )
+          );
+        } catch (error) {
+          caughtError = error as Error;
+          break;
+        }
+      }
+    };
+
+    const workerCount = Math.min(MULTIPART_CONCURRENCY, parts.length);
+    const workers: Promise<void>[] = [];
+    for (let i = 0; i < workerCount; i += 1) {
+      workers.push(worker());
+    }
+
+    await Promise.all(workers);
+
+    if (caughtError) {
+      throw caughtError;
+    }
+
+    const completeRes = await fetch("/api/wasabi/multipart/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        key,
+        uploadId,
+        parts: completedParts.sort((a, b) => a.partNumber - b.partNumber),
+      }),
+    });
+
+    const completeJson = await completeRes.json();
+    if (!completeRes.ok) {
+      throw new Error(completeJson?.error ?? "Erro ao finalizar upload multipart");
     }
   }
 
@@ -775,8 +981,8 @@ export default function UploadV2Page() {
 
         setInfo(`✅ Transcodificação iniciada! Job ID: ${data.jobId}`);
       }
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao iniciar transcodificação");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao iniciar transcodificação");
     }
   }
 
@@ -998,9 +1204,10 @@ export default function UploadV2Page() {
                         <>
                           <button
                             onClick={() => fixWithAI(f)}
-                            className="text-purple-400 hover:text-purple-300 underline"
+                            disabled={aiDetectingId === f.id}
+                            className="text-purple-400 hover:text-purple-300 underline disabled:opacity-50"
                           >
-                            🤖 IA
+                            {aiDetectingId === f.id ? "🤖 Detectando..." : "🤖 IA"}
                           </button>
                           <button
                             onClick={() => {

@@ -62,8 +62,8 @@ export default function AdminJobsPage() {
       }
       setJobs(data as TranscodeJob[]);
       setLastUpdate(new Date());
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao listar jobs");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao listar jobs");
     } finally {
       setLoading(false);
     }

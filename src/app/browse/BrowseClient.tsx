@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import PremiumNavbar from "@/components/ui/PremiumNavbar";
 
@@ -20,6 +20,8 @@ interface BrowseClientProps {
   isAdmin: boolean;
 }
 
+const PAGE_SIZE = 48;
+
 export default function BrowseClient({
   initialTitles,
   isLoggedIn,
@@ -31,35 +33,67 @@ export default function BrowseClient({
   const [sortBy, setSortBy] = useState<string>("popularity");
   const [searchQuery, setSearchQuery] = useState("");
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const observerRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    loadTitles();
-  }, [filterType, sortBy, searchQuery]);
-
-  const loadTitles = async () => {
+  const loadTitles = useCallback(async (pageToLoad: number, reset: boolean) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (filterType !== "ALL") params.append("type", filterType);
       if (sortBy) params.append("sort", sortBy);
       if (searchQuery) params.append("q", searchQuery);
+      params.append("page", String(pageToLoad));
+      params.append("limit", String(PAGE_SIZE));
 
       const res = await fetch(`/api/titles?${params.toString()}`);
-      if (res.ok) {
-        const json = await res.json();
-        const list = Array.isArray(json)
-          ? json
-          : Array.isArray(json.data)
-            ? json.data
-            : [];
-        setTitles(list);
-      }
+      if (!res.ok) return;
+
+      const json = await res.json();
+      const list: Title[] = Array.isArray(json)
+        ? json
+        : Array.isArray(json.data)
+          ? json.data
+          : [];
+
+      setTitles((prev) => (reset ? list : [...prev, ...list]));
+      setPage(pageToLoad);
+      setHasMore(list.length === PAGE_SIZE);
     } catch (error) {
       console.error("Erro ao carregar títulos:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterType, sortBy, searchQuery]);
+
+  // Carrega a primeira página sempre que filtros/ordenação/busca mudarem
+  useEffect(() => {
+    loadTitles(1, true);
+  }, [loadTitles]);
+
+  // Observer para infinite scroll
+  useEffect(() => {
+    if (!hasMore || loading) return;
+
+    const node = observerRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loading) {
+          loadTitles(page + 1, false);
+        }
+      },
+      { threshold: 0.2 }
+    );
+
+    observer.observe(node);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasMore, loading, page, loadTitles]);
 
   const selectStyle: React.CSSProperties = {
     background: '#1a1a1a',
@@ -118,14 +152,22 @@ export default function BrowseClient({
 
           {/* Filters */}
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px' }}>
-            <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={selectStyle}>
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              style={selectStyle}
+            >
               <option value="ALL">Todos os Tipos</option>
               <option value="MOVIE">Filmes</option>
               <option value="SERIES">Séries</option>
               <option value="ANIME">Animes</option>
             </select>
 
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={selectStyle}>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              style={selectStyle}
+            >
               <option value="popularity">Mais Populares</option>
               <option value="recent">Mais Recentes</option>
               <option value="rating">Melhor Avaliados</option>
@@ -200,6 +242,11 @@ export default function BrowseClient({
             <h3 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '8px' }}>Nenhum título encontrado</h3>
             <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '14px' }}>Tente ajustar os filtros ou fazer uma nova busca</p>
           </div>
+        )}
+
+        {/* Infinite scroll trigger */}
+        {hasMore && !loading && (
+          <div ref={observerRef} style={{ height: 1 }} />
         )}
       </div>
     </div>

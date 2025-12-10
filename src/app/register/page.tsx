@@ -103,8 +103,8 @@ export default function RegisterPage() {
       router.push("/pending-approval");
       router.refresh();
 
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao registrar");
     } finally {
       setLoading(false);
     }

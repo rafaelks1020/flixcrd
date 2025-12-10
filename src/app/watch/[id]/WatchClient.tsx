@@ -1,6 +1,22 @@
 "use client";
 
 import Hls from "hls.js";
+
+// Tipos para eventos HLS
+interface HlsLevelData {
+  level: number;
+}
+
+interface HlsManifestData {
+  levels: Array<{ height?: number; bitrate?: number }>;
+}
+
+interface HlsErrorData {
+  type: string;
+  details: string;
+  fatal?: boolean;
+  response?: { code?: number };
+}
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type MouseEvent, type SyntheticEvent, useCallback, useEffect, useRef, useState } from "react";
@@ -97,7 +113,9 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const isLoadingPlaybackRef = useRef<boolean>(false); // Evitar chamadas duplicadas
   const isRenewingTokenRef = useRef<boolean>(false); // Evitar renovações duplicadas
   const savedPositionRef = useRef<number>(0); // Salvar posição ao renovar token
+  const currentStreamUrlRef = useRef<string | null>(null); // URL atual do stream (para renovação silenciosa)
   const bufferIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hasRestoredProgressRef = useRef<boolean>(false); // Evitar múltiplas restaurações de progresso
   const router = useRouter();
 
   // Detectar tipo de dispositivo para ajustar buffer
@@ -311,8 +329,8 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
           setIsProtectedStream(true);
           setTokenExpiresAt(playbackData.expiresAt);
         }
-      } catch (err: any) {
-        setError(err.message ?? "Erro ao carregar playback.");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Erro ao carregar playback.");
       } finally {
         setLoading(false);
         // Não resetar isLoadingPlaybackRef aqui para evitar re-chamadas
@@ -321,14 +339,18 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
 
     loadPlayback();
     
-    // Cleanup: resetar flag quando componente desmontar ou deps mudarem
+    // Cleanup: resetar flags quando componente desmontar ou deps mudarem
     return () => {
       isLoadingPlaybackRef.current = false;
+      hasRestoredProgressRef.current = false; // Resetar para permitir nova restauração
     };
   }, [titleId, episodeId, profileId]);
 
-  // Função para renovar token silenciosamente (sem recriar o player)
-  const renewTokenAndUpdatePlayer = useCallback(async () => {
+  // Função para renovar token silenciosamente (SEM recarregar o player)
+  // A nova estratégia: apenas atualizar a referência da URL para uso futuro
+  // O HLS.js continua usando os segmentos já carregados no buffer
+  // Só recarrega se houver erro 403 (token expirado no meio do stream)
+  const renewTokenAndUpdatePlayer = useCallback(async (forceReload = false) => {
     if (isRenewingTokenRef.current) {
       console.log("[WatchClient] Renovação já em andamento, ignorando...");
       return;
@@ -356,33 +378,50 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
       const newData = await res.json();
       
       if (newData.streamUrl && newData.expiresAt) {
-        console.log("[WatchClient] Token renovado com sucesso, novo expira em", 
-          Math.round((newData.expiresAt - Date.now()) / 1000), "segundos");
+        const expiresInMinutes = Math.round((newData.expiresAt - Date.now()) / 1000 / 60);
+        console.log("[WatchClient] Token renovado com sucesso, expira em", expiresInMinutes, "minutos (", Math.round(expiresInMinutes / 60 * 10) / 10, "horas)");
         
         // Atualizar expiração
         setTokenExpiresAt(newData.expiresAt);
         
-        // Atualizar URL no estado (para referência futura)
-        // Mas NÃO recriar o player - o HLS.js vai usar a nova URL nos próximos segmentos
-        // O token está na URL do manifest, então precisamos recarregar o source
-        if (hlsRef.current && videoRef.current) {
-          // Salvar posição atual
+        // Guardar nova URL para referência (usada se precisar recarregar)
+        currentStreamUrlRef.current = newData.streamUrl;
+        
+        // IMPORTANTE: NÃO recarregar o source automaticamente!
+        // O buffer do HLS.js já tem segmentos suficientes para continuar
+        // Só recarrega se forceReload=true (chamado quando dá erro 403)
+        if (forceReload && hlsRef.current && videoRef.current) {
           const currentPos = videoRef.current.currentTime;
+          const wasPlaying = !videoRef.current.paused;
           
           console.log("[WatchClient] Recarregando source com novo token (posição:", currentPos, ")");
+          
+          // Salvar posição para restaurar
+          savedPositionRef.current = currentPos;
           
           // Recarregar source com nova URL
           hlsRef.current.loadSource(newData.streamUrl);
           
-          // Restaurar posição após o manifest ser parseado
-          savedPositionRef.current = currentPos;
-          
           // Atualizar estado
           setData(prev => prev ? { ...prev, playbackUrl: newData.streamUrl } : prev);
+          
+          // Restaurar playback após manifest ser carregado
+          if (wasPlaying) {
+            let restored = false;
+            const onManifestParsed = () => {
+              if (restored) return;
+              restored = true;
+              if (videoRef.current) {
+                videoRef.current.currentTime = savedPositionRef.current;
+                videoRef.current.play().catch(() => {});
+                savedPositionRef.current = 0;
+              }
+            };
+            hlsRef.current.on(Hls.Events.MANIFEST_PARSED, onManifestParsed);
+          }
         } else {
-          // Fallback: atualizar estado (vai recriar o player)
-          savedPositionRef.current = videoRef.current?.currentTime || 0;
-          setData(prev => prev ? { ...prev, playbackUrl: newData.streamUrl } : prev);
+          // Renovação silenciosa: apenas log, sem interromper playback
+          console.log("[WatchClient] Token renovado silenciosamente (sem reload)");
         }
       }
     } catch (err) {
@@ -393,7 +432,8 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   }, [episodeId, titleId]);
 
   // Renovação automática de token para streaming protegido
-  // Estratégia: renovar a cada 3 minutos (token dura 5 min) - sempre antes de expirar
+  // Token agora dura 3 HORAS no Worker, então renovamos a cada 2.5 horas (bem antes de expirar)
+  // Na prática, a maioria dos filmes/episódios termina antes disso
   useEffect(() => {
     if (!isProtectedStream || !data) return;
 
@@ -402,15 +442,17 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
       clearInterval(tokenRenewalTimeoutRef.current);
     }
 
-    // Renovar a cada 3 minutos (180 segundos) - bem antes dos 5 min de expiração
-    const RENEWAL_INTERVAL = 3 * 60 * 1000; // 3 minutos
+    // Token dura 3 horas no Worker, renovar a cada 2.5 horas (150 minutos)
+    // Isso dá 30 minutos de margem antes de expirar
+    const RENEWAL_INTERVAL = 150 * 60 * 1000; // 2.5 horas = 150 minutos
     
-    console.log("[WatchClient] Iniciando renovação automática de token a cada 3 minutos");
+    console.log("[WatchClient] Token válido por 3 horas. Renovação agendada para 2.5 horas (se necessário)");
 
-    // Agendar renovação periódica
+    // Agendar renovação periódica (silenciosa, sem reload)
+    // Na prática, raramente vai executar pois filmes duram menos que 2.5h
     tokenRenewalTimeoutRef.current = setInterval(() => {
-      console.log("[WatchClient] Renovação periódica do token...");
-      renewTokenAndUpdatePlayer();
+      console.log("[WatchClient] Renovação periódica do token (2.5h)...");
+      renewTokenAndUpdatePlayer(false); // false = não forçar reload
     }, RENEWAL_INTERVAL);
 
     return () => {
@@ -429,14 +471,23 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         const res = await fetch(`/api/titles/${titleId}/seasons`);
         if (!res.ok) return;
         
-        const seasons = await res.json();
+        interface EpisodeInfo {
+          id: string;
+          name: string;
+          episodeNumber: number;
+        }
+        interface SeasonInfo {
+          seasonNumber: number;
+          episodes?: EpisodeInfo[];
+        }
+        const seasons: SeasonInfo[] = await res.json();
         
         // Encontrar episódio atual
-        let currentSeason: any = null;
-        let currentEp: any = null;
+        let currentSeason: SeasonInfo | null = null;
+        let currentEp: EpisodeInfo | null = null;
         
         for (const season of seasons) {
-          const ep = season.episodes?.find((e: any) => e.id === episodeId);
+          const ep = season.episodes?.find((e) => e.id === episodeId);
           if (ep) {
             currentSeason = season;
             currentEp = ep;
@@ -448,7 +499,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         
         // Buscar próximo episódio na mesma temporada
         const nextEpInSeason = currentSeason.episodes?.find(
-          (e: any) => e.episodeNumber === currentEp.episodeNumber + 1
+          (e) => e.episodeNumber === currentEp!.episodeNumber + 1
         );
         
         if (nextEpInSeason) {
@@ -463,10 +514,10 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         
         // Se não houver, buscar primeiro episódio da próxima temporada
         const nextSeason = seasons.find(
-          (s: any) => s.seasonNumber === currentSeason.seasonNumber + 1
+          (s) => s.seasonNumber === currentSeason!.seasonNumber + 1
         );
         
-        if (nextSeason && nextSeason.episodes?.length > 0) {
+        if (nextSeason && nextSeason.episodes?.length && nextSeason.episodes.length > 0) {
           const firstEp = nextSeason.episodes[0];
           setNextEpisode({
             id: firstEp.id,
@@ -533,7 +584,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     if (!video) return;
 
     const tracks = Array.from(video.textTracks || []);
-    // eslint-disable-next-line no-console
+     
     console.log("[WatchClient] track load", {
       loadedLabel: event.currentTarget.label,
       loadedSrc: event.currentTarget.src,
@@ -561,7 +612,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     }
 
     tracks.forEach((track, index) => {
-      // eslint-disable-next-line no-param-reassign
+       
       track.mode = defaultIndex !== null && index === defaultIndex ? "showing" : "hidden";
     });
 
@@ -606,7 +657,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     if (kind === "mp4") {
       video.src = src;
       video.addEventListener("loadedmetadata", restorePosition, { once: true });
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+       
       video.play().catch(() => {});
     } else if (Hls.isSupported()) {
       // PRIORIZAR HLS.js para ter controle do buffer
@@ -673,41 +724,70 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         });
 
         const hls = new Hls({
-          // BUFFER GRANDE - carregar muitos segmentos à frente
-          maxBufferLength: 120,          // 2 minutos de buffer mínimo
-          maxMaxBufferLength: 600,       // Até 10 minutos de buffer máximo
-          backBufferLength: 60,          // Manter 1min atrás
-          
-          // Carregar mais rápido
-          maxBufferSize: 120 * 1000 * 1000, // 120MB de buffer
+          // === BUFFER CONFIG ===
+          // Buffer moderado para evitar problemas de memória
+          maxBufferLength: 60,           // 1 minuto de buffer à frente
+          maxMaxBufferLength: 120,       // Máximo 2 minutos
+          backBufferLength: 30,          // Manter 30s atrás
+          maxBufferSize: 60 * 1000 * 1000, // 60MB de buffer
           maxBufferHole: 0.5,
           
-          // Retry configs - mais agressivo
-          fragLoadingMaxRetry: 10,
-          fragLoadingRetryDelay: 200,
-          fragLoadingMaxRetryTimeout: 10000,
-          levelLoadingMaxRetry: 10,
-          manifestLoadingMaxRetry: 10,
+          // === ABR (Adaptive Bitrate) - ESTABILIDADE ===
+          // Configurações conservadoras para evitar trocas frequentes de qualidade
+          abrEwmaDefaultEstimate: 3000000,  // Assumir 3Mbps inicial (conservador)
+          abrBandWidthFactor: 0.7,          // Usar 70% da banda medida (margem de segurança)
+          abrBandWidthUpFactor: 0.5,        // Só sobe de qualidade se tiver 50% de margem
+          abrMaxWithRealBitrate: true,      // Considerar bitrate real do segmento
           
-          // Iniciar do começo
+          // Evitar trocas de qualidade quando buffer está baixo
+          // Só permite trocar se tiver pelo menos 10s de buffer
+          startLevel: -1,                   // Auto-detectar nível inicial
+          
+          // === RETRY CONFIG ===
+          fragLoadingMaxRetry: 6,
+          fragLoadingRetryDelay: 500,
+          fragLoadingMaxRetryTimeout: 8000,
+          levelLoadingMaxRetry: 4,
+          manifestLoadingMaxRetry: 4,
+          
+          // === OUTRAS CONFIGS ===
           startPosition: -1,
-          
-          // Carregar próximo nível mais rápido
-          abrEwmaDefaultEstimate: 5000000, // Assumir 5Mbps inicial
-          abrBandWidthFactor: 0.95,
-          abrBandWidthUpFactor: 0.7,
-          
-          // Não pausar carregamento
-          testBandwidth: true,
+          lowLatencyMode: false,            // Priorizar estabilidade sobre latência
           progressive: true,
+          
+          // Capstone: não abortar carregamento de fragmento ao trocar de nível
+          // Isso evita o "flash" da capa quando troca de qualidade
+          nextLoadLevel: -1,
         });
         hlsRef.current = hls;
         
-        console.log("[HLS] Iniciado com buffer de 60s-600s");
+        console.log("[HLS] Iniciado com ABR conservador (estabilidade > qualidade)");
 
-        hls.on(Hls.Events.MANIFEST_PARSED, (_event, parsedData: any) => {
+        // Log de trocas de qualidade para debug
+        hls.on(Hls.Events.LEVEL_SWITCHING, (_event, data) => {
+          const levelData = data as HlsLevelData;
+          console.log(`%c[HLS] Trocando para nível ${levelData.level}`, 'color: orange; font-weight: bold');
+        });
+
+
+        // Log de buffering (menos verbose)
+        let lastBufferLog = 0;
+        hls.on(Hls.Events.FRAG_BUFFERED, () => {
+          const now = Date.now();
+          if (now - lastBufferLog < 5000) return; // Log a cada 5s no máximo
+          lastBufferLog = now;
+          
+          const buffered = videoRef.current?.buffered;
+          if (buffered && buffered.length > 0) {
+            const ahead = buffered.end(buffered.length - 1) - (videoRef.current?.currentTime || 0);
+            console.log(`[HLS] Buffer: ${ahead.toFixed(0)}s à frente`);
+          }
+        });
+
+        hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
+          const parsedData = data as HlsManifestData;
           const levelsArray = Array.isArray(parsedData?.levels) ? parsedData.levels : [];
-          const mapped: QualityLevelInfo[] = levelsArray.map((level: any, index: number) => ({
+          const mapped: QualityLevelInfo[] = levelsArray.map((level: { height?: number; bitrate?: number }, index: number) => ({
             index,
             height: typeof level?.height === "number" ? level.height : undefined,
             bitrate: typeof level?.bitrate === "number" ? level.bitrate : undefined,
@@ -724,14 +804,17 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
           restorePosition();
         });
 
-        hls.on(Hls.Events.LEVEL_SWITCHED, (_event, switchedData: any) => {
+        hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
+          const switchedData = data as HlsLevelData;
           if (typeof switchedData?.level === "number") {
+            console.log(`%c[HLS] Qualidade alterada para nível ${switchedData.level}`, 'color: green; font-weight: bold');
             setCurrentLevelIndex(switchedData.level);
           }
         });
 
         // Handler de erro para detectar 403 (token expirado) e renovar
-        hls.on(Hls.Events.ERROR, (_event, errorData: any) => {
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          const errorData = data as HlsErrorData;
           console.log("[WatchClient] HLS Error:", errorData.type, errorData.details, errorData.response?.code);
           
           // Verificar se é erro 403 (token expirado)
@@ -739,15 +822,15 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
               (errorData.type === Hls.ErrorTypes.NETWORK_ERROR && 
                errorData.details === Hls.ErrorDetails.FRAG_LOAD_ERROR &&
                errorData.response?.code === 403)) {
-            console.log("[WatchClient] Token expirado detectado (403), renovando...");
+            console.log("[WatchClient] Token expirado detectado (403), renovando COM reload...");
             
             // Salvar posição atual antes de renovar
             if (video.currentTime > 0) {
               savedPositionRef.current = video.currentTime;
             }
             
-            // Renovar token imediatamente
-            renewTokenAndUpdatePlayer();
+            // Renovar token E forçar reload (true) porque o token atual expirou
+            renewTokenAndUpdatePlayer(true);
             return;
           }
           
@@ -835,7 +918,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
       if (key === " " || key === "k" || key === "K") {
         event.preventDefault();
         if (video.paused || video.ended) {
-          // eslint-disable-next-line @typescript-eslint/no-floating-promises
+           
           video.play().catch(() => {});
         } else {
           video.pause();
@@ -936,7 +1019,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     if (!video) return;
 
     if (video.paused || video.ended) {
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+       
       video.play().catch(() => {});
     } else {
       video.pause();
@@ -1122,7 +1205,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
 
             const tracks = Array.from(event.currentTarget.textTracks || []);
             // Debug rápido para garantir que as tracks estão sendo detectadas
-            // eslint-disable-next-line no-console
+             
             console.log("[WatchClient] textTracks", tracks.map((t) => ({
               label: t.label,
               language: t.language,
@@ -1147,7 +1230,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
 
             tracks.forEach((track, index) => {
               // Mantém legendas ocultas por padrão, mas se houver apenas uma faixa, já a exibe.
-              // eslint-disable-next-line no-param-reassign
+               
               track.mode = defaultIndex !== null && index === defaultIndex ? "showing" : "hidden";
             });
             setSubtitleTracks(tracks);
@@ -1155,8 +1238,10 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
 
             // Buscar progresso salvo para Continuar assistindo
             // Primeiro verifica localStorage (mais recente), depois servidor
-            if (profileId) {
-              // eslint-disable-next-line @typescript-eslint/no-floating-promises
+            // IMPORTANTE: Só fazer isso UMA VEZ para evitar loops
+            if (profileId && !hasRestoredProgressRef.current) {
+              hasRestoredProgressRef.current = true; // Marcar como já restaurado
+               
               (async () => {
                 try {
                   let resume = 0;
@@ -1234,7 +1319,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
               now - lastProgressSyncRef.current > 30000
             ) {
               lastProgressSyncRef.current = now;
-              // eslint-disable-next-line @typescript-eslint/no-floating-promises
+               
               fetch(`/api/titles/${titleId}/progress`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -1257,7 +1342,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
             const pos = videoEl.currentTime;
             if (!total || !Number.isFinite(total)) return;
             if (!profileId) return;
-            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+             
             fetch(`/api/titles/${titleId}/progress`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -1277,7 +1362,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
             const total = videoEl.duration || duration;
             if (!total || !Number.isFinite(total)) return;
             if (!profileId) return;
-            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+             
             fetch(`/api/titles/${titleId}/progress`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -1298,7 +1383,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         >
           {data.subtitles?.map((sub, index) => (
             <track
-              // eslint-disable-next-line react/no-array-index-key
+               
               key={`${sub.url}-${index}`}
               kind="subtitles"
               src={sub.url}
@@ -1515,7 +1600,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
                   if (!hls) return;
                   if (value === "auto") {
                     hls.currentLevel = -1;
-                    // eslint-disable-next-line no-param-reassign
+                     
                     hls.autoLevelEnabled = true;
                     setAutoQuality(true);
                     return;
@@ -1523,7 +1608,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
                   const levelIndex = Number(value);
                   if (Number.isNaN(levelIndex)) return;
                   hls.currentLevel = levelIndex;
-                  // eslint-disable-next-line no-param-reassign
+                   
                   hls.autoLevelEnabled = false;
                   setCurrentLevelIndex(levelIndex);
                   setAutoQuality(false);
@@ -1557,7 +1642,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
                   const index = Number(event.target.value);
                   const tracks = subtitleTracks;
                   tracks.forEach((track, i) => {
-                    // eslint-disable-next-line no-param-reassign
+                     
                     track.mode = i === index ? "showing" : "hidden";
                   });
                   setCurrentSubtitleIndex(Number.isNaN(index) || index < 0 ? null : index);
@@ -1568,7 +1653,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
                 {subtitleTracks.map((track, index) => {
                   const label = track.label || track.language || `Legenda ${index + 1}`;
                   return (
-                    // eslint-disable-next-line react/no-array-index-key
+                     
                     <option key={index} value={index}>
                       {label}
                     </option>

@@ -1,7 +1,8 @@
-import { prisma } from './prisma';
-import { getServerSession } from 'next-auth';
-import { authOptions } from './auth';
-import { redirect } from 'next/navigation';
+import { prisma } from "./prisma";
+import { getServerSession } from "next-auth";
+import type { Session } from "next-auth";
+import { authOptions } from "./auth";
+import { redirect } from "next/navigation";
 
 /**
  * Verifica se o usuário tem uma assinatura ativa
@@ -83,7 +84,7 @@ export async function checkExpiredSubscriptions() {
  */
 export async function activateSubscription(
   userId: string,
-  days: number = 30
+  days: number = 30,
 ): Promise<void> {
   const now = new Date();
   const endDate = new Date(now);
@@ -123,19 +124,22 @@ export async function cancelSubscription(userId: string): Promise<void> {
  * Verifica assinatura no server side e redireciona se não tiver
  * Usar em Server Components
  */
+type SessionUser = Session["user"] & { id?: string; role?: string };
+
 export async function requireSubscription(): Promise<{
   hasAccess: boolean;
   isAdmin: boolean;
   userId: string | null;
 }> {
   const session = await getServerSession(authOptions);
-  
+
   if (!session?.user) {
     return { hasAccess: false, isAdmin: false, userId: null };
   }
 
-  const userId = (session.user as any).id;
-  const isAdmin = (session.user as any).role === 'ADMIN';
+  const sessionUser = session.user as SessionUser;
+  const userId = sessionUser.id ?? null;
+  const isAdmin = sessionUser.role === "ADMIN";
 
   // Admin sempre tem acesso
   if (isAdmin) {
@@ -143,7 +147,7 @@ export async function requireSubscription(): Promise<{
   }
 
   // Verificar assinatura
-  const hasAccess = await hasActiveSubscription(userId);
+  const hasAccess = !!(userId && (await hasActiveSubscription(userId)));
   
   return { hasAccess, isAdmin: false, userId };
 }
@@ -154,8 +158,8 @@ export async function requireSubscription(): Promise<{
  */
 export async function requireSubscriptionOrRedirect(): Promise<void> {
   const { hasAccess, isAdmin } = await requireSubscription();
-  
+
   if (!hasAccess && !isAdmin) {
-    redirect('/subscribe');
+    redirect("/subscribe");
   }
 }

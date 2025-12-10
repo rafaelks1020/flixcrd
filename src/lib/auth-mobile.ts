@@ -4,7 +4,13 @@ import jwt from "jsonwebtoken";
 
 import { authOptions } from "./auth";
 
-const JWT_SECRET = process.env.NEXTAUTH_SECRET || "fallback-secret";
+function getJwtSecret(): string {
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret) {
+    throw new Error("NEXTAUTH_SECRET não configurado para autenticação mobile");
+  }
+  return secret;
+}
 
 interface AuthUser {
   id: string;
@@ -23,7 +29,8 @@ export async function getAuthUser(request?: NextRequest): Promise<AuthUser | nul
     if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.substring(7);
       try {
-        const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
+        const secret = getJwtSecret();
+        const decoded = jwt.verify(token, secret) as AuthUser;
         return decoded;
       } catch {
         // Token inválido, continua para tentar session
@@ -33,7 +40,19 @@ export async function getAuthUser(request?: NextRequest): Promise<AuthUser | nul
 
   // Fallback para session do NextAuth (web)
   try {
-    const session: any = await getServerSession(authOptions);
+    type SessionUser = {
+      id: string;
+      email: string;
+      name?: string | null;
+      role?: string;
+    };
+
+    type SessionLike = {
+      user?: SessionUser;
+    } | null;
+
+    const rawSession = await getServerSession(authOptions);
+    const session = rawSession as SessionLike;
     if (session?.user?.id) {
       return {
         id: session.user.id,

@@ -6,11 +6,22 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 
+interface SessionUser {
+  id?: string;
+  email?: string;
+  name?: string | null;
+  role?: string;
+}
+
+interface AdminSession {
+  user?: SessionUser;
+}
+
 export async function GET() {
   try {
-    const session: any = await getServerSession(authOptions as any);
+    const session = await getServerSession(authOptions) as AdminSession | null;
 
-    if (!session || !session.user || (session.user as any).role !== "ADMIN") {
+    if (!session || !session.user || session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Não autorizado." }, { status: 403 });
     }
 
@@ -38,9 +49,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const session: any = await getServerSession(authOptions as any);
+    const session = await getServerSession(authOptions) as AdminSession | null;
 
-    if (!session || !session.user || (session.user as any).role !== "ADMIN") {
+    if (!session || !session.user || session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Não autorizado." }, { status: 403 });
     }
 
@@ -105,9 +116,9 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const session: any = await getServerSession(authOptions as any);
+    const session = await getServerSession(authOptions) as AdminSession | null;
 
-    if (!session || !session.user || (session.user as any).role !== "ADMIN") {
+    if (!session || !session.user || session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Não autorizado." }, { status: 403 });
     }
 
@@ -147,9 +158,9 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const session: any = await getServerSession(authOptions as any);
+    const session = await getServerSession(authOptions) as AdminSession | null;
 
-    if (!session || !session.user || (session.user as any).role !== "ADMIN") {
+    if (!session || !session.user || session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Não autorizado." }, { status: 403 });
     }
 
@@ -174,7 +185,7 @@ export async function DELETE(request: NextRequest) {
     await prisma.user.delete({ where: { id } });
 
     return NextResponse.json({ ok: true });
-  } catch (error: any) {
+  } catch (error) {
     console.error("DELETE /api/admin/users error", error);
     return NextResponse.json(
       { error: "Erro ao excluir usuário." },
@@ -185,9 +196,9 @@ export async function DELETE(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const session: any = await getServerSession(authOptions as any);
+    const session = await getServerSession(authOptions) as AdminSession | null;
 
-    if (!session || !session.user || (session.user as any).role !== "ADMIN") {
+    if (!session || !session.user || session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Não autorizado." }, { status: 403 });
     }
 
@@ -206,7 +217,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const data: any = {};
+    const data: { role?: "ADMIN" | "USER"; name?: string | null; avatar?: string | null } = {};
 
     if (typeof role !== "undefined") {
       if (role !== "ADMIN" && role !== "USER") {
@@ -217,7 +228,7 @@ export async function PATCH(request: NextRequest) {
       }
 
       // Evita que o admin atual remova o próprio acesso admin por engano
-      const currentUserId = (session.user as any).id as string | undefined;
+      const currentUserId = session.user?.id;
       if (currentUserId && currentUserId === id && role !== "ADMIN") {
         return NextResponse.json(
           { error: "Você não pode remover seu próprio acesso de administrador." },

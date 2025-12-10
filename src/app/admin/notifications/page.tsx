@@ -31,6 +31,8 @@ export default function AdminNotificationsPage() {
   const [stats, setStats] = useState<NotificationStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   
   // Form para enviar notificação
   const [title, setTitle] = useState("");
@@ -41,14 +43,18 @@ export default function AdminNotificationsPage() {
   const [filterPlatform, setFilterPlatform] = useState<string>("all");
   const [filterActive, setFilterActive] = useState<string>("all");
 
-  async function loadData() {
+  async function loadData(targetPage = 1) {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/notifications");
+      const params = new URLSearchParams();
+      params.set("page", String(targetPage));
+      const res = await fetch(`/api/admin/notifications?${params.toString()}`);
       if (!res.ok) throw new Error("Erro ao carregar dados");
       const data = await res.json();
       setTokens(data.tokens || []);
       setStats(data.stats || null);
+      setPage(data.page || targetPage);
+      setTotalPages(data.totalPages || 1);
     } catch (error) {
       toast.error("Erro ao carregar notificações");
       console.error(error);
@@ -90,8 +96,9 @@ export default function AdminNotificationsPage() {
       toast.success(`Notificação enviada para ${data.sent} dispositivos!`);
       setTitle("");
       setMessage("");
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao enviar notificação");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao enviar notificação";
+      toast.error(message);
     } finally {
       setSending(false);
     }
@@ -108,8 +115,8 @@ export default function AdminNotificationsPage() {
       if (!res.ok) throw new Error("Erro ao atualizar");
       
       toast.success(isActive ? "Token desativado" : "Token ativado");
-      loadData();
-    } catch (error) {
+      loadData(page);
+    } catch {
       toast.error("Erro ao atualizar token");
     }
   }
@@ -125,8 +132,8 @@ export default function AdminNotificationsPage() {
       if (!res.ok) throw new Error("Erro ao excluir");
       
       toast.success("Token excluído");
-      loadData();
-    } catch (error) {
+      loadData(page);
+    } catch {
       toast.error("Erro ao excluir token");
     }
   }
@@ -159,7 +166,7 @@ export default function AdminNotificationsPage() {
           </p>
         </div>
         <button
-          onClick={loadData}
+          onClick={() => loadData(page)}
           disabled={loading}
           className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition-colors"
         >
@@ -351,6 +358,31 @@ export default function AdminNotificationsPage() {
                 ))}
               </tbody>
             </table>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4 text-xs text-zinc-400">
+                <p>
+                  Página {page} de {totalPages}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={page <= 1 || loading}
+                    onClick={() => loadData(page - 1)}
+                    className="px-3 py-1 rounded bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-700"
+                  >
+                    ◀ Anterior
+                  </button>
+                  <button
+                    type="button"
+                    disabled={page >= totalPages || loading}
+                    onClick={() => loadData(page + 1)}
+                    className="px-3 py-1 rounded bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-700"
+                  >
+                    Próxima ▶
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

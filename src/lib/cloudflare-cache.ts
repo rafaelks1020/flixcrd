@@ -7,11 +7,19 @@
 // CONFIGURAÇÕES
 // ========================================
 const CLOUDFLARE_CONFIG = {
-  zoneId: process.env.CLOUDFLARE_ZONE_ID || "88bf779fc8e2b0dff34261c302b0b121",
-  apiKey: process.env.CLOUDFLARE_API_KEY || "6983f515cbe2b2233123d5212159ffaba2ecb",
+  zoneId: process.env.CLOUDFLARE_ZONE_ID,
+  apiKey: process.env.CLOUDFLARE_API_KEY,
   email: process.env.CLOUDFLARE_EMAIL || "",
   baseUrl: process.env.WASABI_CDN_URL || process.env.HLS_BASE_URL || "https://hlspaelflix.top",
 };
+
+function ensureCloudflareCredentials() {
+  if (!CLOUDFLARE_CONFIG.zoneId || !CLOUDFLARE_CONFIG.apiKey) {
+    throw new Error(
+      "Cloudflare não configurado: defina CLOUDFLARE_ZONE_ID e CLOUDFLARE_API_KEY no ambiente",
+    );
+  }
+}
 
 interface PurgeResponse {
   success: boolean;
@@ -35,13 +43,17 @@ interface CacheWarmResult {
  * Limpa TODO o cache do site
  */
 export async function purgeAllCache(): Promise<PurgeResponse> {
+  ensureCloudflareCredentials();
+  const zoneId = CLOUDFLARE_CONFIG.zoneId as string;
+  const apiKey = CLOUDFLARE_CONFIG.apiKey as string;
+  const email = CLOUDFLARE_CONFIG.email;
   const response = await fetch(
-    `https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_CONFIG.zoneId}/purge_cache`,
+    `https://api.cloudflare.com/client/v4/zones/${zoneId}/purge_cache`,
     {
       method: "POST",
       headers: {
-        "X-Auth-Email": CLOUDFLARE_CONFIG.email,
-        "X-Auth-Key": CLOUDFLARE_CONFIG.apiKey,
+        "X-Auth-Email": email,
+        "X-Auth-Key": apiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ purge_everything: true }),
@@ -60,13 +72,17 @@ export async function purgeUrls(urls: string[]): Promise<PurgeResponse> {
     throw new Error("Máximo de 30 URLs por requisição. Use purgeBatch para mais.");
   }
 
+  ensureCloudflareCredentials();
+  const zoneId = CLOUDFLARE_CONFIG.zoneId as string;
+  const apiKey = CLOUDFLARE_CONFIG.apiKey as string;
+  const email = CLOUDFLARE_CONFIG.email;
   const response = await fetch(
-    `https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_CONFIG.zoneId}/purge_cache`,
+    `https://api.cloudflare.com/client/v4/zones/${zoneId}/purge_cache`,
     {
       method: "POST",
       headers: {
-        "X-Auth-Email": CLOUDFLARE_CONFIG.email,
-        "X-Auth-Key": CLOUDFLARE_CONFIG.apiKey,
+        "X-Auth-Email": email,
+        "X-Auth-Key": apiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ files: urls }),
@@ -101,13 +117,17 @@ export async function purgeBatch(urls: string[]): Promise<PurgeResponse[]> {
  * Limpa cache por prefixo (ex: todos os arquivos de um título)
  */
 export async function purgePrefixes(prefixes: string[]): Promise<PurgeResponse> {
+  ensureCloudflareCredentials();
+  const zoneId = CLOUDFLARE_CONFIG.zoneId as string;
+  const apiKey = CLOUDFLARE_CONFIG.apiKey as string;
+  const email = CLOUDFLARE_CONFIG.email;
   const response = await fetch(
-    `https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_CONFIG.zoneId}/purge_cache`,
+    `https://api.cloudflare.com/client/v4/zones/${zoneId}/purge_cache`,
     {
       method: "POST",
       headers: {
-        "X-Auth-Email": CLOUDFLARE_CONFIG.email,
-        "X-Auth-Key": CLOUDFLARE_CONFIG.apiKey,
+        "X-Auth-Email": email,
+        "X-Auth-Key": apiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ prefixes }),
@@ -140,11 +160,12 @@ export async function warmUrl(url: string): Promise<CacheWarmResult> {
       status: cacheStatus as "hit" | "miss" | "dynamic",
       statusCode: response.status,
     };
-  } catch (error: any) {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erro desconhecido";
     return {
       url,
       status: "error",
-      error: error.message,
+      error: message,
     };
   }
 }

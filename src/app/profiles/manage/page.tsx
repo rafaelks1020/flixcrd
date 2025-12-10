@@ -102,8 +102,8 @@ export default function ManageProfilesPage() {
 
       setShowModal(false);
       await loadProfiles();
-    } catch (err: any) {
-      setError(err.message || "Erro ao salvar perfil");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar perfil");
     }
   }
 
@@ -123,8 +123,8 @@ export default function ManageProfilesPage() {
       }
 
       await loadProfiles();
-    } catch (err: any) {
-      alert(err.message || "Erro ao excluir perfil");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao excluir perfil");
     }
   }
 

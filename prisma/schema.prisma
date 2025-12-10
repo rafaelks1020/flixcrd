@@ -440,3 +440,14 @@ model NotificationPreference {
 
   @@index([userId])
 }
+
+model ServiceStatusSnapshot {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  healthy    Int
+  total      Int
+  allHealthy Boolean
+  services   Json
+
+  @@index([createdAt])
+}

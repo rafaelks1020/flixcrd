@@ -1,8 +1,31 @@
-import type { NextAuthOptions } from "next-auth";
+import type { NextAuthOptions, Session } from "next-auth";
+import type { JWT } from "next-auth/jwt";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 
 import { prisma } from "./prisma";
+
+type ExtendedUser = {
+  id: string;
+  email: string;
+  name?: string | null;
+  role?: string;
+  approvalStatus?: string;
+};
+
+type ExtendedToken = JWT & {
+  id?: string;
+  role?: string;
+  approvalStatus?: string;
+};
+
+type SessionWithExtendedUser = Session & {
+  user: Session["user"] & {
+    id?: string;
+    role?: string;
+    approvalStatus?: string;
+  };
+};
 
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
@@ -25,7 +48,7 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials): Promise<ExtendedUser | null> {
         if (!credentials?.email || !credentials.password) {
           return null;
         }
@@ -51,8 +74,8 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           email: user.email,
           name: user.name ?? undefined,
-          role: (user as any).role ?? "USER",
-          approvalStatus: (user as any).approvalStatus ?? "PENDING",
+          role: user.role ?? "USER",
+          approvalStatus: user.approvalStatus ?? "PENDING",
         };
       },
     }),
@@ -62,20 +85,26 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async jwt({ token, user }) {
+      const extendedToken = token as ExtendedToken;
       if (user) {
-        (token as any).id = (user as any).id;
-        (token as any).role = (user as any).role ?? (token as any).role ?? "USER";
-        (token as any).approvalStatus = (user as any).approvalStatus ?? "PENDING";
+        const typedUser = user as ExtendedUser;
+        extendedToken.id = typedUser.id;
+        extendedToken.role = typedUser.role ?? extendedToken.role ?? "USER";
+        extendedToken.approvalStatus = typedUser.approvalStatus ?? "PENDING";
       }
-      return token;
+      return extendedToken;
     },
     async session({ session, token }) {
-      if (session.user && (token as any).id) {
-        (session.user as any).id = (token as any).id;
-        (session.user as any).role = (token as any).role ?? "USER";
-        (session.user as any).approvalStatus = (token as any).approvalStatus ?? "PENDING";
+      const extendedSession = session as SessionWithExtendedUser;
+      const extendedToken = token as ExtendedToken;
+
+      if (extendedSession.user && extendedToken.id) {
+        extendedSession.user.id = extendedToken.id;
+        extendedSession.user.role = extendedToken.role ?? "USER";
+        extendedSession.user.approvalStatus =
+          extendedToken.approvalStatus ?? "PENDING";
       }
-      return session;
+      return extendedSession;
     },
   },
 };

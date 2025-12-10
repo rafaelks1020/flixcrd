@@ -222,9 +222,9 @@ export default function SolicitacoesClient({ isLoggedIn, isAdmin }: Solicitacoes
       if (mode === "manual") {
         setTitleInput("");
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("Erro ao criar solicitação:", err);
-      setError(err.message || "Erro ao criar solicitação.");
+      setError(err instanceof Error ? err.message : "Erro ao criar solicitação.");
     } finally {
       setSubmitting(false);
     }
@@ -480,7 +480,7 @@ export default function SolicitacoesClient({ isLoggedIn, isAdmin }: Solicitacoes
                               }}
                             >
                               {item.posterUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
+                                 
                                 <img
                                   src={item.posterUrl}
                                   alt={item.name}
@@ -572,7 +572,7 @@ export default function SolicitacoesClient({ isLoggedIn, isAdmin }: Solicitacoes
                         }}
                       >
                         {selectedResult.posterUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
+                           
                           <img
                             src={selectedResult.posterUrl}
                             alt={selectedResult.name}
