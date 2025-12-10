@@ -10,6 +10,20 @@ interface StatusCheck {
   icon: string;
 }
 
+interface CronTask {
+  id: string;
+  name: string;
+  description?: string | null;
+  endpoint: string;
+  intervalMinutes: number;
+  enabled: boolean;
+  lastRunAt?: string | null;
+  lastSuccessAt?: string | null;
+  lastStatus?: number | null;
+  lastError?: string | null;
+  lastDurationMs?: number | null;
+}
+
 export default function SystemStatusPage() {
   const [checks, setChecks] = useState<StatusCheck[]>([
     {
@@ -37,6 +51,8 @@ export default function SystemStatusPage() {
       icon: "🌐",
     },
   ]);
+  const [cronTasks, setCronTasks] = useState<CronTask[]>([]);
+  const [cronLoading, setCronLoading] = useState(true);
 
   const updateCheck = (index: number, updates: Partial<StatusCheck>) => {
     setChecks((prev) =>
@@ -148,6 +164,24 @@ export default function SystemStatusPage() {
     runChecks();
   }, []);
 
+  useEffect(() => {
+    const loadCronTasks = async () => {
+      try {
+        const res = await fetch("/api/admin/cron-tasks");
+        if (res.ok) {
+          const data = await res.json();
+          setCronTasks(data.data || []);
+        }
+      } catch (error) {
+        console.error("Erro ao carregar cron tasks:", error);
+      } finally {
+        setCronLoading(false);
+      }
+    };
+
+    loadCronTasks();
+  }, []);
+
   const allSuccess = checks.every((c) => c.status === "success");
   const anyError = checks.some((c) => c.status === "error");
 
@@ -245,6 +279,86 @@ export default function SystemStatusPage() {
               <p>• Recarregue a página para atualizar os status</p>
               <p>• Timeouts são configurados para 5 segundos</p>
             </div>
+          </div>
+
+          <div className="mt-8 p-6 bg-gray-800 rounded-lg border border-gray-700 shadow-inner">
+            <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+              <div>
+                <h3 className="text-xl font-semibold text-white">⏱️ Cron jobs</h3>
+                <p className="text-sm text-gray-400">
+                  Dispatcher chamado a cada 15 minutos (cron-job.org) e executa apenas tarefas vencidas.
+                </p>
+              </div>
+              <img
+                src="https://api.cron-job.org/jobs/6987011/b23156b1546e0346/status-7.svg"
+                alt="Status do cron-job.org"
+                className="h-10 bg-white rounded p-1"
+              />
+            </div>
+
+            {cronLoading ? (
+              <p className="text-sm text-gray-400">Carregando tarefas de cron...</p>
+            ) : cronTasks.length === 0 ? (
+              <p className="text-sm text-gray-400">Nenhuma tarefa registrada.</p>
+            ) : (
+              <div className="space-y-3">
+                {cronTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="rounded border border-gray-700 bg-gray-900/60 p-4"
+                  >
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{task.name}</p>
+                        <p className="text-xs text-gray-400">{task.description || task.endpoint}</p>
+                      </div>
+                      <span
+                        className={`text-xs font-semibold px-2 py-1 rounded ${
+                          task.enabled ? "bg-emerald-900/40 text-emerald-300" : "bg-gray-800 text-gray-400"
+                        }`}
+                      >
+                        {task.enabled ? "Ativa" : "Pausada"}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-gray-300">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-400">Intervalo:</span>
+                        <span className="font-semibold">{task.intervalMinutes} min</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-400">Última execução:</span>
+                        <span className="font-semibold">
+                          {task.lastRunAt
+                            ? new Date(task.lastRunAt).toLocaleString("pt-BR")
+                            : "Nunca"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-400">Último status:</span>
+                        <span
+                          className={`font-semibold ${
+                            task.lastStatus && task.lastStatus < 400
+                              ? "text-emerald-300"
+                              : "text-red-300"
+                          }`}
+                        >
+                          {task.lastStatus ?? "—"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-400">Duração:</span>
+                        <span className="font-semibold">
+                          {task.lastDurationMs ? `${task.lastDurationMs} ms` : "—"}
+                        </span>
+                      </div>
+                    </div>
+                    {task.lastError && (
+                      <p className="mt-2 text-xs text-red-300">Erro: {task.lastError}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <button
