@@ -12,6 +12,3 @@ jobs:
       - name: Call Vercel endpoint with bypass token
         run: |
           curl -X GET "https://homol.pflix.com.br/?x-vercel-set-bypass-cookie=true&x-vercel-protection-bypass=5e2c1f9c4b9c4d2fb7c3a3f1fdc2e0e1"
-          
-          # Exemplo da API protegida (se quiser ativar)
-          # curl -X GET "https://pflix.com.br/api/rodaCron?x-vercel-set-bypass-cookie=true&x-vercel-protection-bypass=5e2c1f9c4b9c4d2fb7c3a3f1fdc2e0e1"
