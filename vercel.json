@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/admin/uptime/record",
-      "schedule": "0 * * * *"
+      "schedule": "0 8 * * *"
     }
   ]
 }
