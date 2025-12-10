@@ -11,7 +11,6 @@ type CronTaskRecord = {
   intervalMinutes: number;
 };
 
-const DISPATCH_SECRET = process.env.CRON_DISPATCH_SECRET;
 const UPTIME_CRON_SECRET = process.env.UPTIME_CRON_SECRET;
 
 const DEFAULT_TASKS: CronTaskRecord[] = [
@@ -23,16 +22,6 @@ const DEFAULT_TASKS: CronTaskRecord[] = [
     intervalMinutes: 60,
   },
 ];
-
-function isAuthorized(request: NextRequest) {
-  if (!DISPATCH_SECRET) return true;
-
-  const headerSecret =
-    request.headers.get("x-cron-secret") ??
-    request.nextUrl.searchParams.get("secret");
-
-  return headerSecret === DISPATCH_SECRET;
-}
 
 function resolveUrl(endpoint: string, baseUrl: string) {
   if (endpoint.startsWith("http://") || endpoint.startsWith("https://")) {
@@ -125,10 +114,6 @@ async function runTask(task: CronTask, baseUrl: string) {
 }
 
 async function handler(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const baseUrl = new URL(request.url).origin;
 
   await ensureDefaultTasks();
