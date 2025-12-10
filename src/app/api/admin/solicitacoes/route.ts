@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
       orderBy,
       take: 200,
       include: {
-        user: {
+        User: {
           select: {
             id: true,
             email: true,

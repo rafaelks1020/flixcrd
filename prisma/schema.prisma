@@ -9,7 +9,7 @@ datasource db {
 }
 
 model Cast {
-  id          String   @id
+  id          String   @id @default(cuid())
   titleId     String
   tmdbId      Int
   name        String
@@ -23,7 +23,7 @@ model Cast {
 }
 
 model Crew {
-  id          String   @id
+  id          String   @id @default(cuid())
   titleId     String
   tmdbId      Int
   name        String
@@ -37,7 +37,7 @@ model Crew {
 }
 
 model CronTask {
-  id              String    @id
+  id              String    @id @default(cuid())
   name            String    @unique
   description     String?
   endpoint        String
@@ -50,11 +50,11 @@ model CronTask {
   lastError       String?
   lastDurationMs  Int?
   createdAt       DateTime  @default(now())
-  updatedAt       DateTime
+  updatedAt       DateTime @updatedAt
 }
 
 model Episode {
-  id               String             @id
+  id               String             @id @default(cuid())
   titleId          String
   seasonId         String
   tmdbId           Int?
@@ -67,7 +67,7 @@ model Episode {
   stillUrl         String?
   hlsPath          String?
   createdAt        DateTime           @default(now())
-  updatedAt        DateTime
+  updatedAt        DateTime           @updatedAt
   Season           Season             @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   Title            Title              @relation(fields: [titleId], references: [id], onDelete: Cascade)
   PlaybackProgress PlaybackProgress[]
@@ -78,22 +78,22 @@ model Episode {
 }
 
 model Genre {
-  id         String       @id
+  id         String       @id @default(cuid())
   tmdbId     Int          @unique
   name       String
   createdAt  DateTime     @default(now())
-  updatedAt  DateTime
+  updatedAt  DateTime @updatedAt
   TitleGenre TitleGenre[]
 }
 
 model NotificationPreference {
-  id              String   @id
+  id              String   @id @default(cuid())
   userId          String   @unique
   newContent      Boolean  @default(true)
   updates         Boolean  @default(true)
   recommendations Boolean  @default(true)
   createdAt       DateTime @default(now())
-  updatedAt       DateTime
+  updatedAt       DateTime @updatedAt
   User            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -111,7 +111,7 @@ model PasswordResetToken {
 }
 
 model Payment {
-  id             String       @id
+  id             String       @id @default(cuid())
   subscriptionId String
   asaasPaymentId String       @unique
   status         String
@@ -123,21 +123,21 @@ model Payment {
   pixQrCode      String?
   pixCopiaECola  String?
   createdAt      DateTime     @default(now())
-  updatedAt      DateTime
+  updatedAt      DateTime @updatedAt
   Subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
   @@index([subscriptionId])
 }
 
 model PlaybackProgress {
-  id              String   @id
+  id              String   @id @default(cuid())
   profileId       String
   titleId         String
   episodeId       String?
   positionSeconds Int
   durationSeconds Int
   createdAt       DateTime @default(now())
-  updatedAt       DateTime
+  updatedAt       DateTime @updatedAt
   Episode         Episode? @relation(fields: [episodeId], references: [id], onDelete: Cascade)
   Profile         Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
   Title           Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
@@ -150,13 +150,13 @@ model PlaybackProgress {
 }
 
 model Profile {
-  id                 String             @id
+  id                 String             @id @default(cuid())
   userId             String
   name               String
   avatar             String?
   isKids             Boolean            @default(false)
   createdAt          DateTime           @default(now())
-  updatedAt          DateTime
+  updatedAt          DateTime           @updatedAt
   useCloudflareProxy Boolean            @default(false)
   PlaybackProgress   PlaybackProgress[]
   User               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -166,14 +166,14 @@ model Profile {
 }
 
 model PushToken {
-  id         String   @id
+  id         String   @id @default(cuid())
   userId     String
   token      String   @unique
   platform   String   @default("unknown")
   deviceName String?
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
-  updatedAt  DateTime
+  updatedAt  DateTime @updatedAt
   User       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([token])
@@ -181,7 +181,7 @@ model PushToken {
 }
 
 model Request {
-  id               String               @id
+  id               String               @id @default(cuid())
   userId           String
   imdbId           String?
   title            String
@@ -195,7 +195,7 @@ model Request {
   followersCount   Int                  @default(0)
   priorityScore    Float?
   createdAt        DateTime             @default(now())
-  updatedAt        DateTime
+  updatedAt        DateTime @updatedAt
   User             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   RequestFollower  RequestFollower[]
   RequestHistory   RequestHistory[]
@@ -208,7 +208,7 @@ model Request {
 }
 
 model RequestFollower {
-  id        String   @id
+  id        String   @id @default(cuid())
   requestId String
   userId    String
   createdAt DateTime @default(now())
@@ -220,7 +220,7 @@ model RequestFollower {
 }
 
 model RequestHistory {
-  id        String               @id
+  id        String               @id @default(cuid())
   requestId String
   action    RequestHistoryAction
   message   String?
@@ -233,7 +233,7 @@ model RequestHistory {
 }
 
 model RequestUpload {
-  id          String    @id
+  id          String    @id @default(cuid())
   requestId   String    @unique
   titleId     String?
   completedAt DateTime?
@@ -245,7 +245,7 @@ model RequestUpload {
 }
 
 model Season {
-  id           String    @id
+  id           String    @id @default(cuid())
   titleId      String
   seasonNumber Int
   name         String?
@@ -254,7 +254,7 @@ model Season {
   posterUrl    String?
   episodeCount Int?
   createdAt    DateTime  @default(now())
-  updatedAt    DateTime
+  updatedAt    DateTime  @updatedAt
   Episode      Episode[]
   Title        Title     @relation(fields: [titleId], references: [id], onDelete: Cascade)
 
@@ -263,7 +263,7 @@ model Season {
 }
 
 model ServiceStatusSnapshot {
-  id         String   @id
+  id         String   @id @default(cuid())
   createdAt  DateTime @default(now())
   healthy    Int
   total      Int
@@ -274,7 +274,7 @@ model ServiceStatusSnapshot {
 }
 
 model Settings {
-  id                         String   @id
+  id                         String   @id @default(cuid())
   siteName                   String   @default("Pflix")
   siteDescription            String   @default("Sua plataforma de streaming")
   maintenanceMode            Boolean  @default(false)
@@ -283,18 +283,18 @@ model Settings {
   transcoderCrf              Int      @default(20)
   deleteSourceAfterTranscode Boolean  @default(true)
   createdAt                  DateTime @default(now())
-  updatedAt                  DateTime
+  updatedAt                  DateTime @updatedAt
 }
 
 model Subscription {
-  id                  String    @id
+  id                  String    @id @default(cuid())
   userId              String    @unique
   status              String
   plan                String    @default("BASIC")
   currentPeriodStart  DateTime?
   currentPeriodEnd    DateTime?
   createdAt           DateTime  @default(now())
-  updatedAt           DateTime
+  updatedAt           DateTime @updatedAt
   asaasCustomerId     String?
   asaasPaymentId      String?
   asaasSubscriptionId String?
@@ -304,7 +304,7 @@ model Subscription {
 }
 
 model Title {
-  id                  String             @id
+  id                  String             @id @default(cuid())
   tmdbId              Int?               @unique
   type                TitleType
   slug                String             @unique
@@ -326,7 +326,7 @@ model Title {
   spokenLanguages     String?
   productionCountries String?
   createdAt           DateTime           @default(now())
-  updatedAt           DateTime
+  updatedAt           DateTime           @updatedAt
   Cast                Cast[]
   Crew                Crew[]
   Episode             Episode[]
@@ -339,7 +339,7 @@ model Title {
 }
 
 model TitleGenre {
-  id        String   @id
+  id        String   @id @default(cuid())
   titleId   String
   genreId   String
   createdAt DateTime @default(now())
@@ -350,14 +350,14 @@ model TitleGenre {
 }
 
 model User {
-  id                     String                  @id
+  id                     String                  @id @default(cuid())
   email                  String                  @unique
   name                   String?
   avatar                 String?
   passwordHash           String
   role                   UserRole                @default(USER)
   createdAt              DateTime                @default(now())
-  updatedAt              DateTime
+  updatedAt              DateTime                @updatedAt
   useCloudflareProxy     Boolean                 @default(false)
   cpfCnpj                String?
   phone                  String?
@@ -374,7 +374,7 @@ model User {
 }
 
 model UserFavorite {
-  id        String   @id
+  id        String   @id @default(cuid())
   profileId String
   titleId   String
   createdAt DateTime @default(now())
@@ -387,7 +387,7 @@ model UserFavorite {
 }
 
 model Video {
-  id          String    @id
+  id          String    @id @default(cuid())
   titleId     String
   key         String
   name        String

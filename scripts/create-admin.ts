@@ -5,6 +5,7 @@
  */
 
 import { PrismaClient } from "@prisma/client";
+import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -43,10 +44,12 @@ async function createAdmin() {
     if (profileCount === 0) {
       await prisma.profile.create({
         data: {
+          id: randomUUID(),
           userId: existing.id,
           name: "Admin",
           avatar: "👤",
           isKids: false,
+          updatedAt: new Date(),
         },
       });
       console.log("✅ Perfil padrão criado!\n");
@@ -61,20 +64,24 @@ async function createAdmin() {
   // Criar usuário
   const user = await prisma.user.create({
     data: {
+      id: randomUUID(),
       email,
       name,
       passwordHash,
       role: "ADMIN",
+      updatedAt: new Date(),
     },
   });
 
   // Criar perfil padrão
   await prisma.profile.create({
     data: {
+      id: randomUUID(),
       userId: user.id,
       name: "Admin",
       avatar: "👤",
       isKids: false,
+      updatedAt: new Date(),
     },
   });
 

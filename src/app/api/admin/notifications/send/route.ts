@@ -47,9 +47,9 @@ export async function POST(request: NextRequest) {
       where: whereClause,
       select: {
         token: true,
-        user: {
+        User: {
           select: {
-            notificationPreference: true,
+            NotificationPreference: true,
           },
         },
       },

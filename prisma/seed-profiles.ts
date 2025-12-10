@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { randomUUID } from "crypto";
 
 const prisma = new PrismaClient();
 
@@ -7,23 +8,25 @@ async function main() {
 
   const users = await prisma.user.findMany({
     include: {
-      profiles: true,
+      Profile: true,
     },
   });
 
   for (const user of users) {
-    if (user.profiles.length === 0) {
+    if (user.Profile.length === 0) {
       await prisma.profile.create({
         data: {
+          id: randomUUID(),
           userId: user.id,
           name: user.name || "Perfil Principal",
           avatar: "👤",
           isKids: false,
+          updatedAt: new Date(),
         },
       });
       console.log(`✅ Perfil criado para ${user.email}`);
     } else {
-      console.log(`⏭️  ${user.email} já tem ${user.profiles.length} perfil(is)`);
+      console.log(`⏭️  ${user.email} já tem ${user.Profile.length} perfil(is)`);
     }
   }
 

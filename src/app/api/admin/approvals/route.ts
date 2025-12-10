@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
         approvedBy: true,
         rejectionReason: true,
         createdAt: true,
-        subscription: {
+        Subscription: {
           select: {
             status: true,
             plan: true,
