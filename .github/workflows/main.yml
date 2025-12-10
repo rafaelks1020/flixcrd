@@ -2,14 +2,16 @@ name: Cron para Vercel
 
 on:
   schedule:
-    - cron: "*/15 * * * *" # executa a cada 15 minutos
-  workflow_dispatch:  # permite executar manualmente também
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
 
 jobs:
   call-vercel:
     runs-on: ubuntu-latest
     steps:
-      - name: Call Vercel endpoint
+      - name: Call Vercel endpoint with bypass token
         run: |
-          curl -X GET "https://homol.pflix.com.br/"
-          # curl -X GET "https://pflix.com.br/api/rodaCron"
+          curl -X GET "https://homol.pflix.com.br/?x-vercel-set-bypass-cookie=true&x-vercel-protection-bypass=5e2c1f9c4b9c4d2fb7c3a3f1fdc2e0e1"
+          
+          # Exemplo da API protegida (se quiser ativar)
+          # curl -X GET "https://pflix.com.br/api/rodaCron?x-vercel-set-bypass-cookie=true&x-vercel-protection-bypass=5e2c1f9c4b9c4d2fb7c3a3f1fdc2e0e1"
