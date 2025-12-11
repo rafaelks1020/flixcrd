@@ -25,6 +25,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
         RequestHistory: {
           orderBy: { createdAt: "asc" },
         },
+        AssignedAdmin: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
+        },
       },
     });
 

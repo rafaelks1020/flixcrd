@@ -36,6 +36,13 @@ interface RequestDetail {
   createdAt: string;
   updatedAt: string;
   history: HistoryItem[];
+  assignedAdminId?: string | null;
+  AssignedAdmin?: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  assignedAt?: string | null;
 }
 
 interface RequestDetailClientProps {
@@ -115,6 +122,7 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [internalNote, setInternalNote] = useState("");
   const router = useRouter();
 
   useEffect(() => {
@@ -143,7 +151,7 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
         ...json,
         createdAt: json.createdAt,
         updatedAt: json.updatedAt,
-        history: (json.history || []).map((h: HistoryItem) => ({
+        history: (json.RequestHistory || []).map((h: HistoryItem) => ({
           ...h,
           createdAt: h.createdAt,
         })),
@@ -357,6 +365,36 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
                       {actionMessage}
                     </div>
                   )}
+                  <div
+                    style={{
+                      marginBottom: 8,
+                      fontSize: 12,
+                      color: "rgba(148,163,184,0.9)",
+                    }}
+                  >
+                    {data.AssignedAdmin ? (
+                      <>
+                        <span>Responsável: </span>
+                        <strong>
+                          {data.AssignedAdmin.name || data.AssignedAdmin.email}
+                        </strong>
+                        {data.assignedAt && (
+                          <div style={{ fontSize: 11 }}>
+                            Desde{" "}
+                            {new Date(data.assignedAt).toLocaleString("pt-BR", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <span>Sem responsável definido.</span>
+                    )}
+                  </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <button
                       type="button"
@@ -393,6 +431,71 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
                     >
                       Assumir caso
                     </button>
+
+                    <div>
+                      <div style={{ marginTop: 4, marginBottom: 4 }}>Notas internas</div>
+                      <textarea
+                        value={internalNote}
+                        onChange={(e) => setInternalNote(e.target.value)}
+                        rows={2}
+                        placeholder="Anotação interna (visível apenas para administradores)"
+                        style={{
+                          width: "100%",
+                          padding: "6px 8px",
+                          borderRadius: 6,
+                          border: "1px solid #4b5563",
+                          background: "#020617",
+                          color: "#e5e7eb",
+                          fontSize: 12,
+                          marginBottom: 4,
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={actionLoading || !internalNote.trim()}
+                        onClick={async () => {
+                          if (!internalNote.trim()) return;
+                          try {
+                            setActionLoading(true);
+                            setActionMessage(null);
+                            setError(null);
+                            const res = await fetch(
+                              `/api/admin/solicitacoes/${id}/add-note`,
+                              {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ message: internalNote.trim() }),
+                              },
+                            );
+                            if (!res.ok)
+                              throw new Error("Erro ao adicionar nota interna.");
+                            await load();
+                            setActionMessage("Nota interna adicionada.");
+                            setInternalNote("");
+                          } catch (err) {
+                            setError(
+                              err instanceof Error
+                                ? err.message
+                                : "Erro ao adicionar nota interna.",
+                            );
+                          } finally {
+                            setActionLoading(false);
+                          }
+                        }}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 999,
+                          border: "none",
+                          background: "#111827",
+                          color: "#e5e7eb",
+                          cursor: "pointer",
+                          fontSize: 12,
+                          opacity: actionLoading || !internalNote.trim() ? 0.6 : 1,
+                        }}
+                      >
+                        Adicionar nota interna
+                      </button>
+                    </div>
 
                     <button
                       type="button"

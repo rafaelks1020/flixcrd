@@ -14,7 +14,14 @@ interface AdminRequestItem {
   priorityScore: number | null;
   createdAt: string;
   updatedAt: string;
+  assignedAdminId?: string | null;
+  assignedAt?: string | null;
   User: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  AssignedAdmin?: {
     id: string;
     email: string;
     name: string | null;
@@ -61,6 +68,7 @@ export default function AdminSolicitacoesPage() {
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
   const [filterUpload, setFilterUpload] = useState<string>("ALL");
   const [sort, setSort] = useState<string>("priority");
+  const [filterOwner, setFilterOwner] = useState<string>("ALL");
 
   async function loadData() {
     try {
@@ -70,6 +78,8 @@ export default function AdminSolicitacoesPage() {
       if (filterStatus !== "ALL") params.set("status", filterStatus);
       if (filterUpload === "WITH") params.set("upload", "with");
       if (filterUpload === "WITHOUT") params.set("upload", "without");
+      if (filterOwner === "MINE") params.set("assigned", "me");
+      if (filterOwner === "UNASSIGNED") params.set("assigned", "unassigned");
       if (sort) params.set("sort", sort);
 
       const res = await fetch(`/api/admin/solicitacoes?${params.toString()}`);
@@ -89,7 +99,7 @@ export default function AdminSolicitacoesPage() {
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterType, filterStatus, filterUpload, sort]);
+  }, [filterType, filterStatus, filterUpload, filterOwner, sort]);
 
   function formatDate(dateStr: string) {
     const d = new Date(dateStr);
@@ -161,6 +171,18 @@ export default function AdminSolicitacoesPage() {
           </select>
         </div>
         <div className="flex items-center gap-2">
+          <span className="text-zinc-400">Responsável:</span>
+          <select
+            value={filterOwner}
+            onChange={(e) => setFilterOwner(e.target.value)}
+            className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 focus:border-emerald-600 focus:outline-none"
+          >
+            <option value="ALL">Todos</option>
+            <option value="MINE">Minhas</option>
+            <option value="UNASSIGNED">Sem responsável</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
           <span className="text-zinc-400">Status:</span>
           <select
             value={filterStatus}
@@ -220,6 +242,7 @@ export default function AdminSolicitacoesPage() {
                 <tr>
                   <th className="px-3 py-2 text-left">Título</th>
                   <th className="px-3 py-2 text-left">Usuário</th>
+                  <th className="px-3 py-2 text-left">Responsável</th>
                   <th className="px-3 py-2 text-left">Tipo</th>
                   <th className="px-3 py-2 text-left">Status</th>
                   <th className="px-3 py-2 text-left">Workflow</th>
@@ -285,6 +308,23 @@ export default function AdminSolicitacoesPage() {
                             )}
                           </div>
                         </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 align-top text-xs text-zinc-300">
+                      {item.AssignedAdmin ? (
+                        <div>
+                          <div>{item.AssignedAdmin.name || item.AssignedAdmin.email}</div>
+                          <div className="text-[11px] text-zinc-500">
+                            {item.AssignedAdmin.email}
+                          </div>
+                          {item.assignedAt && (
+                            <div className="text-[11px] text-zinc-500">
+                              Desde {formatDate(item.assignedAt)}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-zinc-500">Sem responsável</span>
                       )}
                     </td>
                     <td className="px-3 py-2 align-top text-xs text-zinc-300">
