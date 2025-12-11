@@ -16,6 +16,7 @@ interface Title {
 interface CatalogGridViewProps {
   titles: Title[];
   hlsStatus: Record<string, string>;
+  pendingSummary: Record<string, { total: number; pending: number }>;
   selectedIds: string[];
   onToggleSelect: (id: string) => void;
   onEdit: (title: Title) => void;
@@ -26,6 +27,7 @@ interface CatalogGridViewProps {
 export default function CatalogGridView({
   titles,
   hlsStatus,
+  pendingSummary,
   selectedIds,
   onToggleSelect,
   onEdit,
@@ -110,6 +112,16 @@ export default function CatalogGridView({
                 <span>{title.releaseDate.slice(0, 4)}</span>
               )}
             </div>
+            {(title.type === "SERIES" || title.type === "ANIME") &&
+              pendingSummary[title.id] &&
+              pendingSummary[title.id].pending > 0 && (
+                <div className="text-[10px] text-amber-300">
+                  {pendingSummary[title.id].pending} ep(s) sem upload
+                  {pendingSummary[title.id].total
+                    ? ` / ${pendingSummary[title.id].total}`
+                    : ""}
+                </div>
+              )}
 
             {/* Actions */}
             <div className="flex gap-1 pt-1">

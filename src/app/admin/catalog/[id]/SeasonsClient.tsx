@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type TitleType = "MOVIE" | "SERIES" | "ANIME" | "OTHER";
 
@@ -53,6 +53,10 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
   const [seasonInput, setSeasonInput] = useState(1);
   const [episodeHlsStatus, setEpisodeHlsStatus] = useState<Record<string, EpisodeHlsStatus>>({});
   const [bulkTranscoding, setBulkTranscoding] = useState(false);
+  const [showOnlyNoUpload, setShowOnlyNoUpload] = useState(false);
+  const [episodeUploadTarget, setEpisodeUploadTarget] = useState<EpisodeSummary | null>(null);
+  const [episodeUploadBusy, setEpisodeUploadBusy] = useState(false);
+  const episodeUploadInputRef = useRef<HTMLInputElement | null>(null);
 
   async function loadData() {
     setLoading(true);
@@ -208,8 +212,103 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
   const isSeries = data && (data.type === "SERIES" || data.type === "ANIME");
   const seasons = data?.seasons ?? [];
 
+  const filteredSeasons = seasons
+    .map((season) => {
+      if (!showOnlyNoUpload) return season;
+
+      const filteredEpisodes = season.episodes.filter((ep) => {
+        const status = episodeHlsStatus[ep.id] ?? "none";
+        return status === "none";
+      });
+
+      return {
+        ...season,
+        episodes: filteredEpisodes,
+      };
+    })
+    .filter((season) => {
+      if (!showOnlyNoUpload) return true;
+      return season.episodes.length > 0;
+    });
+
+  function handleEpisodeUploadClick(ep: EpisodeSummary) {
+    if (episodeUploadBusy) return;
+    setEpisodeUploadTarget(ep);
+    if (episodeUploadInputRef.current) {
+      episodeUploadInputRef.current.value = "";
+      episodeUploadInputRef.current.click();
+    }
+  }
+
+  async function handleEpisodeUploadFileChange(
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    if (!data || !episodeUploadTarget) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setEpisodeUploadBusy(true);
+      setError(null);
+      setInfo(null);
+
+      const res = await fetch("/api/wasabi/upload-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          titleId: data.id,
+          episodeId: episodeUploadTarget.id,
+          filename: file.name,
+          contentType: file.type,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json?.error ?? "Erro ao gerar URL de upload");
+      }
+
+      const { uploadUrl } = json as { uploadUrl: string };
+
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        body: file,
+      });
+
+      if (!putRes.ok) {
+        throw new Error(`Upload falhou: ${putRes.status}`);
+      }
+
+      setInfo(
+        `Upload concluído para S${episodeUploadTarget.seasonNumber
+          .toString()
+          .padStart(2, "0")}E${episodeUploadTarget.episodeNumber
+          .toString()
+          .padStart(2, "0")}.`,
+      );
+      await loadData();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Erro ao fazer upload do episódio.",
+      );
+    } finally {
+      setEpisodeUploadBusy(false);
+      setEpisodeUploadTarget(null);
+      if (episodeUploadInputRef.current) {
+        episodeUploadInputRef.current.value = "";
+      }
+    }
+  }
+
   return (
     <div className="space-y-4">
+      <input
+        ref={episodeUploadInputRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={handleEpisodeUploadFileChange}
+      />
       <div className="flex items-center justify-between gap-3">
         <div className="space-y-1">
           <p className="text-xs text-zinc-400">
@@ -273,6 +372,15 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
                 ? "Enfileirando HLS de episódios..."
                 : "Gerar HLS de todos episódios com upload"}
             </button>
+            <label className="mt-1 flex items-center gap-1 text-[11px] text-zinc-300">
+              <input
+                type="checkbox"
+                checked={showOnlyNoUpload}
+                onChange={(e) => setShowOnlyNoUpload(e.target.checked)}
+                className="rounded"
+              />
+              Mostrar apenas episódios sem upload
+            </label>
           </div>
         )}
       </div>
@@ -293,6 +401,13 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
           {info}
         </div>
       )}
+      {episodeUploadBusy && episodeUploadTarget && (
+        <div className="rounded-md border border-emerald-700 bg-emerald-900/30 px-3 py-2 text-xs text-emerald-200">
+          Enviando arquivo para S
+          {episodeUploadTarget.seasonNumber.toString().padStart(2, "0")}E
+          {episodeUploadTarget.episodeNumber.toString().padStart(2, "0")}...
+        </div>
+      )}
 
       {loading && (
         <p className="text-xs text-zinc-500">Carregando temporadas e episódios...</p>
@@ -304,9 +419,9 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
         </p>
       )}
 
-      {data && seasons.length > 0 && (
+      {data && filteredSeasons.length > 0 && (
         <div className="space-y-4 text-xs">
-          {seasons.map((season) => (
+          {filteredSeasons.map((season) => (
             <div
               key={season.id}
               className="space-y-2 rounded-md border border-zinc-800 bg-zinc-950/40 p-3"
@@ -413,6 +528,20 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
                             );
                           })()}
                         </div>
+                        {(() => {
+                          const status = episodeHlsStatus[ep.id] ?? "none";
+                          if (status !== "none") return null;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleEpisodeUploadClick(ep)}
+                              disabled={episodeUploadBusy}
+                              className="mt-1 inline-flex items-center gap-1 rounded-md border border-emerald-700 px-2 py-0.5 text-[11px] text-emerald-200 hover:bg-emerald-900/40 disabled:opacity-60"
+                            >
+                              📤 Upload vídeo
+                            </button>
+                          );
+                        })()}
                         {ep.overview && (
                           <p className="line-clamp-2 text-[11px] text-zinc-300">
                             {ep.overview}

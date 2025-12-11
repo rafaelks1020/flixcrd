@@ -69,6 +69,9 @@ export default function AdminCatalogPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [refreshingTmdb, setRefreshingTmdb] = useState(false);
   const [hlsStatus, setHlsStatus] = useState<Record<string, string>>({});
+  const [pendingEpisodesSummary, setPendingEpisodesSummary] = useState<
+    Record<string, { total: number; pending: number }>
+  >({});
 
   // BUSCA E FILTROS
   const [searchQuery, setSearchQuery] = useState("");
@@ -119,25 +122,49 @@ export default function AdminCatalogPage() {
 
       setTitles(list);
 
-      // Atualiza status de HLS em BATCH (1 request só!)
       const titleIds = list.map((t) => t.id);
       
-      if (titleIds.length > 0) {
-        try {
-          const resStatus = await fetch("/api/admin/titles/hls-status-batch", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ titleIds }),
-          });
-          
-          if (resStatus.ok) {
-            const json = await resStatus.json();
-            setHlsStatus(json.statusMap || {});
-          }
-        } catch {
-          // Se falhar, deixa sem status
+      if (titleIds.length === 0) {
+        setHlsStatus({});
+        setPendingEpisodesSummary({});
+        return;
+      }
+
+      // Atualiza status de HLS em BATCH (1 request só!)
+      try {
+        const resStatus = await fetch("/api/admin/titles/hls-status-batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ titleIds }),
+        });
+
+        if (resStatus.ok) {
+          const jsonStatus = await resStatus.json();
+          setHlsStatus(jsonStatus.statusMap || {});
+        } else {
           setHlsStatus({});
         }
+      } catch {
+        // Se falhar, deixa sem status
+        setHlsStatus({});
+      }
+
+      // Resumo de episódios pendentes por título (usa dados do banco, não do Wasabi)
+      try {
+        const resPending = await fetch("/api/admin/titles/pending-episodes-summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ titleIds }),
+        });
+
+        if (resPending.ok) {
+          const jsonPending = await resPending.json();
+          setPendingEpisodesSummary(jsonPending.summary || {});
+        } else {
+          setPendingEpisodesSummary({});
+        }
+      } catch {
+        setPendingEpisodesSummary({});
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar títulos");
@@ -703,6 +730,7 @@ export default function AdminCatalogPage() {
                     <CatalogGridView
                       titles={paginatedTitles}
                       hlsStatus={hlsStatus}
+                      pendingSummary={pendingEpisodesSummary}
                       selectedIds={selectedIds}
                       onToggleSelect={(id) => {
                         if (selectedIds.includes(id)) {
@@ -809,6 +837,16 @@ export default function AdminCatalogPage() {
                           ⚪ Sem vídeo
                         </span>
                       )}
+                      {(t.type === "SERIES" || t.type === "ANIME") &&
+                        pendingEpisodesSummary[t.id] &&
+                        pendingEpisodesSummary[t.id].pending > 0 && (
+                          <div className="mt-1 text-[10px] text-amber-300">
+                            {pendingEpisodesSummary[t.id].pending} ep(s) sem upload
+                            {pendingEpisodesSummary[t.id].total
+                              ? ` / ${pendingEpisodesSummary[t.id].total}`
+                              : ""}
+                          </div>
+                        )}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <div className="flex items-center justify-end gap-1">

@@ -36,6 +36,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
+    await prisma.request.update({
+      where: { id },
+      data: {
+        assignedAdminId: adminId ?? null,
+        assignedAt: new Date(),
+      },
+    });
+
     await prisma.requestHistory.create({
       data: {
         requestId: id,
