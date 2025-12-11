@@ -43,6 +43,17 @@ interface RequestDetail {
     name: string | null;
   } | null;
   assignedAt?: string | null;
+  RequestUpload?: {
+    id: string;
+    titleId: string | null;
+    completedAt: string | null;
+    Title?: {
+      id: string;
+      name: string;
+      slug: string;
+      type: string | null;
+    } | null;
+  } | null;
 }
 
 interface RequestDetailClientProps {
@@ -338,6 +349,74 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
                   </div>
                 )}
               </div>
+
+              {data.RequestUpload && (
+                <div
+                  style={{
+                    marginTop: 16,
+                    padding: 10,
+                    borderRadius: 8,
+                    border: "1px solid rgba(56,189,248,0.6)",
+                    background: "rgba(8,47,73,0.9)",
+                    fontSize: 12,
+                    color: "rgba(191,219,254,0.9)",
+                  }}
+                >
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>Status de upload</div>
+                  <div style={{ marginBottom: 4 }}>
+                    {data.RequestUpload.completedAt
+                      ? `Upload concluído em ${new Date(
+                          data.RequestUpload.completedAt,
+                        ).toLocaleString("pt-BR")}`
+                      : "Upload em andamento para este pedido."}
+                  </div>
+                  {data.RequestUpload.Title && (
+                    <div
+                      style={{
+                        marginTop: 4,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 4,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "rgba(148,163,184,0.9)",
+                        }}
+                      >
+                        Título no catálogo:
+                        {" "}
+                        <span style={{ fontWeight: 600, color: "#e5e7eb" }}>
+                          {data.RequestUpload.Title.name}
+                        </span>
+                      </div>
+                      {isAdmin && (
+                        <a
+                          href={`/admin/catalog/${data.RequestUpload.Title.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: "4px 8px",
+                            borderRadius: 999,
+                            border: "1px solid rgba(56,189,248,0.8)",
+                            background: "rgba(15,23,42,0.9)",
+                            color: "#e0f2fe",
+                            fontSize: 11,
+                            textDecoration: "none",
+                            marginTop: 2,
+                          }}
+                        >
+                          Ver no painel admin
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Painel de ações do admin */}
               {isAdmin && data.status !== "COMPLETED" && data.status !== "REJECTED" && (

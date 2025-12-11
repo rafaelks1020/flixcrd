@@ -127,6 +127,10 @@ Elementos principais:
   - Marcar como "Concluída" (`COMPLETED`).
   - Marcar como "Recusada" (`REJECTED`).
   - Alterar `workflowState` conforme etapas internas.
+  - Quando houver `RequestUpload` vinculado:
+    - Bloco "Status de upload" exibindo se o upload está em andamento ou concluído.
+    - Se houver `completedAt`, mostra a data/hora da conclusão.
+    - Se houver `Title` vinculado, exibe o nome do título e, para admins, link rápido para `/admin/catalog/[id]`.
 - **Notas internas**:
   - Textarea para digitar uma anotação.
   - Botão "Adicionar nota interna".

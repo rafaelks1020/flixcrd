@@ -32,6 +32,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
             name: true,
           },
         },
+        RequestUpload: {
+          include: {
+            Title: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                type: true,
+              },
+            },
+          },
+        },
       },
     });
 

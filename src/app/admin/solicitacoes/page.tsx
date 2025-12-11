@@ -300,7 +300,7 @@ export default function AdminSolicitacoesPage() {
                             )}
                             {item.RequestUpload.titleId && (
                               <a
-                                href={`/admin/upload-v2?titleId=${item.RequestUpload.titleId}`}
+                                href={`/admin/upload-v2?titleId=${item.RequestUpload.titleId}&requestId=${item.id}`}
                                 className="inline-flex items-center gap-1 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-sky-200 hover:border-sky-500 hover:text-sky-100"
                               >
                                 ⬆️ Abrir Upload V2
