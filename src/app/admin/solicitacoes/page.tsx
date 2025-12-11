@@ -14,7 +14,7 @@ interface AdminRequestItem {
   priorityScore: number | null;
   createdAt: string;
   updatedAt: string;
-  user: {
+  User: {
     id: string;
     email: string;
     name: string | null;
@@ -23,6 +23,17 @@ interface AdminRequestItem {
   ageHours: number;
   slaLevel: "LOW" | "MEDIUM" | "HIGH";
   computedPriorityScore: number;
+  RequestUpload: {
+    id: string;
+    titleId: string | null;
+    completedAt: string | null;
+    Title: {
+      id: string;
+      name: string;
+      slug: string;
+      type: string | null;
+    } | null;
+  } | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -48,6 +59,7 @@ export default function AdminSolicitacoesPage() {
 
   const [filterType, setFilterType] = useState<string>("ALL");
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
+  const [filterUpload, setFilterUpload] = useState<string>("ALL");
   const [sort, setSort] = useState<string>("priority");
 
   async function loadData() {
@@ -56,6 +68,8 @@ export default function AdminSolicitacoesPage() {
       const params = new URLSearchParams();
       if (filterType !== "ALL") params.set("type", filterType);
       if (filterStatus !== "ALL") params.set("status", filterStatus);
+      if (filterUpload === "WITH") params.set("upload", "with");
+      if (filterUpload === "WITHOUT") params.set("upload", "without");
       if (sort) params.set("sort", sort);
 
       const res = await fetch(`/api/admin/solicitacoes?${params.toString()}`);
@@ -64,9 +78,9 @@ export default function AdminSolicitacoesPage() {
       }
       const data = await res.json();
       setItems(data.items || []);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Erro ao carregar solicitações:", err);
-      toast.error(err?.message || "Erro ao carregar solicitações");
+      toast.error(err instanceof Error ? err.message : "Erro ao carregar solicitações");
     } finally {
       setLoading(false);
     }
@@ -75,7 +89,7 @@ export default function AdminSolicitacoesPage() {
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterType, filterStatus, sort]);
+  }, [filterType, filterStatus, filterUpload, sort]);
 
   function formatDate(dateStr: string) {
     const d = new Date(dateStr);
@@ -163,6 +177,18 @@ export default function AdminSolicitacoesPage() {
           </select>
         </div>
         <div className="flex items-center gap-2">
+          <span className="text-zinc-400">Upload:</span>
+          <select
+            value={filterUpload}
+            onChange={(e) => setFilterUpload(e.target.value)}
+            className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-100 focus:border-emerald-600 focus:outline-none"
+          >
+            <option value="ALL">Todos</option>
+            <option value="WITH">Com upload</option>
+            <option value="WITHOUT">Sem upload</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
           <span className="text-zinc-400">Ordenar por:</span>
           <select
             value={sort}
@@ -222,13 +248,51 @@ export default function AdminSolicitacoesPage() {
                           ID externo: {item.imdbId}
                         </div>
                       )}
+                      {item.RequestUpload && (
+                        <div className="mt-2 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 border ${
+                                item.RequestUpload.completedAt
+                                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                                  : "border-yellow-500/40 bg-yellow-500/10 text-yellow-200"
+                              }`}
+                              title={
+                                item.RequestUpload.completedAt
+                                  ? `Concluído em ${new Date(item.RequestUpload.completedAt).toLocaleString("pt-BR")}`
+                                  : "Em progresso / pendente"
+                              }
+                            >
+                              {item.RequestUpload.completedAt ? "Upload concluído" : "Upload pendente"}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-2 text-[11px]">
+                            {item.RequestUpload.Title && (
+                              <a
+                                href={`/admin/catalog/${item.RequestUpload.Title.id}`}
+                                className="inline-flex items-center gap-1 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-emerald-200 hover:border-emerald-500 hover:text-emerald-100"
+                              >
+                                📚 Ver catálogo
+                              </a>
+                            )}
+                            {item.RequestUpload.titleId && (
+                              <a
+                                href={`/admin/upload-v2?titleId=${item.RequestUpload.titleId}`}
+                                className="inline-flex items-center gap-1 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-sky-200 hover:border-sky-500 hover:text-sky-100"
+                              >
+                                ⬆️ Abrir Upload V2
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-2 align-top text-xs text-zinc-300">
-                      {item.user ? (
+                      {item.User ? (
                         <div>
-                          <div>{item.user.name || "Sem nome"}</div>
+                          <div>{item.User.name || "Sem nome"}</div>
                           <div className="text-[11px] text-zinc-500">
-                            {item.user.email}
+                            {item.User.email}
                           </div>
                         </div>
                       ) : (

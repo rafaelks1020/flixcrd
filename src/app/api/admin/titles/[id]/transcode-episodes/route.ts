@@ -60,7 +60,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       select: {
         id: true,
         type: true,
-        episodes: {
+        Episode: {
           select: {
             id: true,
             hlsPath: true,
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const episodesWithPrefix = (title.episodes ?? []).filter(
+    const episodesWithPrefix = (title.Episode ?? []).filter(
       (ep) => ep.hlsPath && ep.hlsPath.trim() !== "",
     );
 
@@ -176,17 +176,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }
 
         queued.push({ episodeId: ep.id, jobId, status });
-      } catch (err: any) {
+      } catch (err) {
         errors.push({
           episodeId: ep.id,
-          message: err?.message || "Erro desconhecido ao enfileirar HLS.",
+          message: err instanceof Error ? err.message : "Erro desconhecido ao enfileirar HLS.",
         });
       }
     }
 
     return NextResponse.json({
       ok: true,
-      totalEpisodes: title.episodes?.length ?? 0,
+      totalEpisodes: title.Episode?.length ?? 0,
       episodesWithPrefix: episodesWithPrefix.length,
       queued,
       skipped,

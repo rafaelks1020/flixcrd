@@ -72,9 +72,10 @@ export async function GET(request: NextRequest) {
         const subtitles = await searchOpenSubtitles(apiKey, tmdbId, type, season, episode, language);
         console.log(`[Subtitles] OpenSubtitles: ${subtitles.length} resultados`);
         allSubtitles.push(...subtitles);
-      } catch (err: any) {
-        console.error("[Subtitles] OpenSubtitles error:", err.message);
-        errors.push(`OpenSubtitles: ${err.message}`);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : "Erro desconhecido";
+        console.error("[Subtitles] OpenSubtitles error:", errMsg);
+        errors.push(`OpenSubtitles: ${errMsg}`);
       }
     } else {
       console.log("[Subtitles] OpenSubtitles: API Key não configurada");

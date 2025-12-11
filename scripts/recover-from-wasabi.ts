@@ -116,7 +116,7 @@ async function scanBucket(): Promise<TitleInfo[]> {
     }
 
     // Limpar o nome do título
-    let name = titlePath
+    const name = titlePath
       .replace(/^titles\//i, "")
       .replace(/-/g, " ")
       .replace(/\b\w/g, (l) => l.toUpperCase());

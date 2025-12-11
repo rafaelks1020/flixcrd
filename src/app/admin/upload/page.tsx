@@ -49,8 +49,8 @@ export default function AdminUploadPage() {
         throw new Error(data?.error ?? "Erro ao carregar títulos");
       }
       setTitles(data);
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao carregar títulos");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao carregar títulos");
     } finally {
       setLoadingTitles(false);
     }
@@ -94,8 +94,8 @@ export default function AdminUploadPage() {
       if (mapped.length > 0) {
         setSelectedSeasonNumber(mapped[0].seasonNumber);
       }
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao carregar temporadas/episódios.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao carregar temporadas/episódios.");
     } finally {
       setLoadingSeasons(false);
     }
@@ -409,8 +409,8 @@ export default function AdminUploadPage() {
         `Upload concluído. Arquivo enviado para o prefixo ${prefix}. O título agora está vinculado a esse caminho HLS.`,
       );
       setFile(null);
-    } catch (err: any) {
-      setError(err.message ?? "Erro no upload para o Wasabi");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro no upload para o Wasabi");
     } finally {
       setUploading(false);
       setUploadProgress(null);

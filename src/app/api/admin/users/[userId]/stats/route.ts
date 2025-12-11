@@ -41,7 +41,7 @@ export async function GET(
         profileId: { in: profileIds },
       },
       include: {
-        title: {
+        Title: {
           select: {
             id: true,
             name: true,
@@ -66,7 +66,7 @@ export async function GET(
       },
       select: {
         updatedAt: true,
-        title: {
+        Title: {
           select: {
             name: true,
           },
@@ -113,11 +113,11 @@ export async function GET(
       totalWatchedSeconds,
       totalWatchedMinutes,
       totalWatchedHours,
-      favorites: favorites.map((f) => f.title),
+      favorites: favorites.map((f) => f.Title),
       lastActivity: lastActivity
         ? {
             date: lastActivity.updatedAt,
-            title: lastActivity.title.name,
+            title: lastActivity.Title.name,
           }
         : null,
       mostWatched: mostWatchedTitles,

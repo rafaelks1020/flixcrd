@@ -22,7 +22,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const requestRecord = await prisma.request.findUnique({
       where: { id },
       include: {
-        history: {
+        RequestHistory: {
           orderBy: { createdAt: "asc" },
         },
       },

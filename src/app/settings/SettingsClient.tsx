@@ -32,8 +32,8 @@ export default function SettingsClient({ initialUseCloudflareProxy }: SettingsCl
       if (!res.ok) {
         throw new Error(json?.error ?? "Erro ao salvar configurações.");
       }
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao salvar configurações.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar configurações.");
       // Reverter visualmente em caso de falha
       setUseCloudflareProxy((prev) => !prev);
     } finally {

@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const favorites = await prisma.userFavorite.findMany({
       where: { profileId },
       include: {
-        title: {
+        Title: {
           select: {
             id: true,
             name: true,
@@ -48,16 +48,16 @@ export async function GET(request: NextRequest) {
     });
 
     const titles = favorites.map((fav: any) => ({
-      id: fav.title.id,
-      name: fav.title.name,
-      slug: fav.title.slug,
-      posterUrl: fav.title.posterUrl,
-      backdropUrl: fav.title.backdropUrl,
-      voteAverage: fav.title.voteAverage,
-      releaseDate: fav.title.releaseDate
-        ? fav.title.releaseDate.toISOString()
+      id: fav.Title.id,
+      name: fav.Title.name,
+      slug: fav.Title.slug,
+      posterUrl: fav.Title.posterUrl,
+      backdropUrl: fav.Title.backdropUrl,
+      voteAverage: fav.Title.voteAverage,
+      releaseDate: fav.Title.releaseDate
+        ? fav.Title.releaseDate.toISOString()
         : null,
-      type: fav.title.type,
+      type: fav.Title.type,
     }));
 
     return NextResponse.json(titles);

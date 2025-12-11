@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sendPushToUsers } from "@/lib/push";
+import { sendMail } from "@/lib/mailjet";
 
 interface RouteContext {
   params: Promise<{
@@ -69,8 +70,61 @@ export async function POST(request: NextRequest, context: RouteContext) {
         message: `A solicitação "${existing.title}" foi concluída e o conteúdo está disponível no catálogo.`,
         data: { requestId: id, type: "REQUEST_COMPLETED" },
       });
+
+      const users = await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { email: true, name: true },
+      });
+
+      const emails = users
+        .map((u) => u.email)
+        .filter((email): email is string => Boolean(email));
+
+      if (emails.length > 0) {
+        const appUrl =
+          process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+
+        await sendMail({
+          to: emails,
+          subject: "Conteúdo disponível no catálogo",
+          fromEmail: "contato@pflix.com.br",
+          fromName: "FlixCRD",
+          meta: {
+            reason: "request-status-changed",
+            userId: existing.userId,
+            requestId: existing.id,
+            extra: {
+              type: "COMPLETED",
+            },
+          },
+          context: {
+            requestId: existing.id,
+            status: "COMPLETED",
+          },
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #e50914;">Conteúdo disponível no catálogo</h2>
+              <p>Olá!</p>
+              <p>A solicitação <strong>${existing.title}</strong> foi concluída e o conteúdo está disponível no catálogo.</p>
+              <p style="text-align: center; margin: 30px 0;">
+                <a href="${appUrl}/browse" 
+                   style="background-color: #e50914; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                  Ver catálogo
+                </a>
+              </p>
+            </div>
+          `,
+          text: `
+Conteúdo disponível no catálogo
+
+Sua solicitação "${existing.title}" foi concluída e o conteúdo está disponível no catálogo.
+
+Acesse: ${appUrl}/browse
+          `,
+        });
+      }
     } catch (notifyError) {
-      // eslint-disable-next-line no-console
+       
       console.error("Failed to send push for request complete:", notifyError);
     }
 

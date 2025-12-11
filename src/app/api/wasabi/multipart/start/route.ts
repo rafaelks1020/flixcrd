@@ -29,17 +29,17 @@ export async function POST(request: NextRequest) {
     if (episodeId) {
       const episode = await prisma.episode.findUnique({
         where: { id: episodeId },
-        include: { title: true },
+        include: { Title: true },
       });
 
-      if (!episode || !episode.title) {
+      if (!episode || !episode.Title) {
         return NextResponse.json(
           { error: "Episódio não encontrado" },
           { status: 404 },
         );
       }
 
-      const title = episode.title as any;
+      const title = episode.Title as any;
       const safeSlug = title.slug || `title-${title.id}`;
 
       let prefix: string;

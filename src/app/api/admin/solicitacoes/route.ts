@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-// Estrutura básica de resposta para cada solicitação no painel admin
 interface AdminRequestItem {
   id: string;
   title: string;
@@ -16,7 +14,7 @@ interface AdminRequestItem {
   priorityScore: number | null;
   createdAt: Date;
   updatedAt: Date;
-  user: {
+  User: {
     id: string;
     email: string;
     name: string | null;
@@ -25,6 +23,17 @@ interface AdminRequestItem {
   ageHours: number;
   slaLevel: "LOW" | "MEDIUM" | "HIGH";
   computedPriorityScore: number;
+  RequestUpload: {
+    id: string;
+    titleId: string | null;
+    completedAt: Date | null;
+    Title: {
+      id: string;
+      name: string;
+      slug: string;
+      type: string | null;
+    } | null;
+  } | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -43,6 +52,7 @@ export async function GET(request: NextRequest) {
     const to = searchParams.get("to");
     const minFollowers = searchParams.get("minFollowers");
     const sort = searchParams.get("sort") || "oldest"; // oldest | newest | priority | followers | sla
+    const linkFilter = searchParams.get("upload"); // with | without
 
     const where: any = {};
 
@@ -87,16 +97,37 @@ export async function GET(request: NextRequest) {
       orderBy = { followersCount: "desc" };
     }
 
+    if (linkFilter === "with") {
+      where.upload = { isNot: null };
+    } else if (linkFilter === "without") {
+      where.upload = { is: null };
+    }
+
     const requests = await prisma.request.findMany({
       where,
       orderBy,
       take: 200,
       include: {
-        user: {
+        User: {
           select: {
             id: true,
             email: true,
             name: true,
+          },
+        },
+        RequestUpload: {
+          select: {
+            id: true,
+            titleId: true,
+            completedAt: true,
+            Title: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                type: true,
+              },
+            },
           },
         },
       },
@@ -104,7 +135,9 @@ export async function GET(request: NextRequest) {
 
     const now = new Date();
 
-    const items: AdminRequestItem[] = requests.map((req) => {
+    type RequestWithRelations = (typeof requests)[number];
+
+    const items: AdminRequestItem[] = requests.map((req: RequestWithRelations) => {
       const ageMs = now.getTime() - req.createdAt.getTime();
       const ageHours = ageMs / (1000 * 60 * 60);
 
@@ -145,17 +178,32 @@ export async function GET(request: NextRequest) {
         priorityScore: req.priorityScore,
         createdAt: req.createdAt,
         updatedAt: req.updatedAt,
-        user: req.user
+        User: req.User
           ? {
-              id: req.user.id,
-              email: req.user.email,
-              name: req.user.name,
+              id: req.User.id,
+              email: req.User.email,
+              name: req.User.name,
             }
           : null,
         imdbRating,
         ageHours,
         slaLevel,
         computedPriorityScore,
+        RequestUpload: req.RequestUpload
+          ? {
+              id: req.RequestUpload.id,
+              titleId: req.RequestUpload.titleId,
+              completedAt: req.RequestUpload.completedAt,
+              Title: req.RequestUpload.Title
+                ? {
+                    id: req.RequestUpload.Title.id,
+                    name: req.RequestUpload.Title.name,
+                    slug: req.RequestUpload.Title.slug,
+                    type: req.RequestUpload.Title.type,
+                  }
+                : null,
+            }
+          : null,
       };
     });
 

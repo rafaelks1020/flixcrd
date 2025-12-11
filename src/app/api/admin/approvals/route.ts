@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sendMail } from "@/lib/mailjet";
 
 // GET - Lista usuários pendentes de aprovação
 export async function GET(request: NextRequest) {
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
         approvedBy: true,
         rejectionReason: true,
         createdAt: true,
-        subscription: {
+        Subscription: {
           select: {
             status: true,
             plan: true,
@@ -111,6 +112,53 @@ export async function POST(request: NextRequest) {
           rejectionReason: null,
         },
       });
+      try {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+        await sendMail({
+          to: user.email,
+          subject: "Cadastro aprovado - FlixCRD",
+          fromEmail: "suporte@pflix.com.br",
+          fromName: "Suporte FlixCRD",
+          meta: {
+            reason: "user-approved",
+            userId: user.id,
+          },
+          context: {
+            approvalStatus: "APPROVED",
+          },
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #e50914;">Cadastro aprovado</h2>
+              <p>Olá, ${user.name || user.email}!</p>
+              <p>Seu cadastro no <strong>FlixCRD</strong> foi aprovado.</p>
+              <p>Agora você já pode acessar a plataforma e gerenciar sua assinatura.</p>
+              <p style="text-align: center; margin: 30px 0;">
+                <a href="${appUrl}" 
+                   style="background-color: #e50914; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                  Acessar FlixCRD
+                </a>
+              </p>
+              <p style="color: #666; font-size: 14px;">
+                Se você não reconhece este cadastro, responda este email ou entre em contato com o suporte.
+              </p>
+            </div>
+          `,
+          text: `
+Cadastro aprovado - FlixCRD
+
+Olá, ${user.name || user.email}!
+
+Seu cadastro no FlixCRD foi aprovado.
+Agora você já pode acessar a plataforma e gerenciar sua assinatura.
+
+Acesse: ${appUrl}
+
+Se você não reconhece este cadastro, entre em contato com o suporte.
+          `,
+        });
+      } catch (emailError) {
+        console.error("[Approvals] Erro ao enviar email de aprovação:", emailError);
+      }
 
       return NextResponse.json({
         success: true,
@@ -124,6 +172,46 @@ export async function POST(request: NextRequest) {
           rejectionReason: rejectionReason || "Cadastro não aprovado",
         },
       });
+      try {
+        await sendMail({
+          to: user.email,
+          subject: "Cadastro não aprovado - FlixCRD",
+          fromEmail: "suporte@pflix.com.br",
+          fromName: "Suporte FlixCRD",
+          meta: {
+            reason: "user-rejected",
+            userId: user.id,
+          },
+          context: {
+            approvalStatus: "REJECTED",
+            rejectionReason: rejectionReason || "Cadastro não aprovado",
+          },
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #e50914;">Cadastro não aprovado</h2>
+              <p>Olá, ${user.name || user.email}.</p>
+              <p>Seu cadastro no <strong>FlixCRD</strong> não foi aprovado neste momento.</p>
+              <p>${rejectionReason || "Cadastro não aprovado"}</p>
+              <p style="color: #666; font-size: 14px;">
+                Em caso de dúvidas, responda este email ou entre em contato com o suporte.
+              </p>
+            </div>
+          `,
+          text: `
+Cadastro não aprovado - FlixCRD
+
+Olá, ${user.name || user.email}.
+
+Seu cadastro no FlixCRD não foi aprovado neste momento.
+
+Motivo: ${rejectionReason || "Cadastro não aprovado"}
+
+Em caso de dúvidas, responda este email ou entre em contato com o suporte.
+          `,
+        });
+      } catch (emailError) {
+        console.error("[Approvals] Erro ao enviar email de rejeição:", emailError);
+      }
 
       return NextResponse.json({
         success: true,

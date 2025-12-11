@@ -32,7 +32,7 @@ export default async function GenreBrowsePage({ params }: PageProps) {
 
   const titles = await prisma.title.findMany({
     where: {
-      genres: {
+      TitleGenre: {
         some: { genreId: genre.id },
       },
     },

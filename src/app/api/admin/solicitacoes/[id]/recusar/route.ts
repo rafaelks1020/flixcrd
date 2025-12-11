@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sendPushToUsers } from "@/lib/push";
+import { sendMail } from "@/lib/mailjet";
 
 interface RouteContext {
   params: Promise<{
@@ -73,8 +74,58 @@ export async function POST(request: NextRequest, context: RouteContext) {
         message: `Sua solicitação "${existing.title}" foi recusada. Motivo: ${reason}.`,
         data: { requestId: id, type: "REQUEST_REJECTED" },
       });
+
+      const users = await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { email: true, name: true },
+      });
+
+      const emails = users
+        .map((u) => u.email)
+        .filter((email): email is string => Boolean(email));
+
+      if (emails.length > 0) {
+        const appUrl =
+          process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+
+        await sendMail({
+          to: emails,
+          subject: "Sua solicitação foi recusada",
+          fromEmail: "contato@pflix.com.br",
+          fromName: "FlixCRD",
+          meta: {
+            reason: "request-status-changed",
+            userId: existing.userId,
+            requestId: existing.id,
+            extra: {
+              type: "REJECTED",
+            },
+          },
+          context: {
+            requestId: existing.id,
+            status: "REJECTED",
+          },
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #e50914;">Sua solicitação foi recusada</h2>
+              <p>Olá!</p>
+              <p>Sua solicitação <strong>${existing.title}</strong> foi recusada.</p>
+              <p><strong>Motivo:</strong> ${reason}</p>
+              <p style="color: #666; font-size: 14px;">Em caso de dúvidas, responda este email ou entre em contato com o suporte.</p>
+            </div>
+          `,
+          text: `
+Sua solicitação foi recusada
+
+Sua solicitação "${existing.title}" foi recusada.
+Motivo: ${reason}
+
+Em caso de dúvidas, responda este email ou entre em contato com o suporte.
+          `,
+        });
+      }
     } catch (notifyError) {
-      // eslint-disable-next-line no-console
+       
       console.error("Failed to send push for request reject:", notifyError);
     }
 

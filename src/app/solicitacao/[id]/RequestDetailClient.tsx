@@ -12,12 +12,21 @@ interface HistoryItem {
   createdAt: string;
 }
 
+interface ImdbMeta {
+  releaseDate?: string;
+  posterUrl?: string;
+  overview?: string;
+  name?: string;
+  tmdbId?: number;
+  type?: string;
+}
+
 interface RequestDetail {
   id: string;
   title: string;
   type: string;
   imdbId?: string | null;
-  imdbJson?: any;
+  imdbJson?: ImdbMeta;
   status: string;
   workflowState: string;
   followersCount: number;
@@ -134,22 +143,22 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
         ...json,
         createdAt: json.createdAt,
         updatedAt: json.updatedAt,
-        history: (json.history || []).map((h: any) => ({
+        history: (json.history || []).map((h: HistoryItem) => ({
           ...h,
           createdAt: h.createdAt,
         })),
       };
       setData(detail);
       setError(null);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Erro ao carregar solicitação:", err);
-      setError(err?.message || "Erro ao carregar solicitação.");
+      setError(err instanceof Error ? err.message : "Erro ao carregar solicitação.");
     } finally {
       setLoading(false);
     }
   }
 
-  const meta = data?.imdbJson as any | undefined;
+  const meta = data?.imdbJson;
   let year: number | null = null;
   if (meta?.releaseDate) {
     const d = new Date(meta.releaseDate);
@@ -199,7 +208,7 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
                 }}
               >
                 {meta?.posterUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
+                   
                   <img
                     src={meta.posterUrl}
                     alt={data.title}
@@ -365,8 +374,8 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
                           if (!res.ok) throw new Error("Erro ao atribuir solicitação.");
                           await load();
                           setActionMessage("Solicitação atribuída ao admin atual.");
-                        } catch (err: any) {
-                          setError(err?.message || "Erro ao atribuir solicitação.");
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : "Erro ao atribuir solicitação.");
                         } finally {
                           setActionLoading(false);
                         }
@@ -401,8 +410,8 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
                           if (!res.ok) throw new Error("Erro ao alterar status.");
                           await load();
                           setActionMessage("Status alterado para Em análise.");
-                        } catch (err: any) {
-                          setError(err?.message || "Erro ao alterar status.");
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : "Erro ao alterar status.");
                         } finally {
                           setActionLoading(false);
                         }
@@ -457,8 +466,8 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
                             await load();
                             setActionMessage("Solicitação recusada.");
                             setRejectReason("");
-                          } catch (err: any) {
-                            setError(err?.message || "Erro ao recusar solicitação.");
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : "Erro ao recusar solicitação.");
                           } finally {
                             setActionLoading(false);
                           }
@@ -494,8 +503,8 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
                           if (!res.ok) throw new Error("Erro ao concluir solicitação.");
                           await load();
                           setActionMessage("Solicitação marcada como concluída.");
-                        } catch (err: any) {
-                          setError(err?.message || "Erro ao concluir solicitação.");
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : "Erro ao concluir solicitação.");
                         } finally {
                           setActionLoading(false);
                         }
@@ -558,7 +567,7 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
 
                             // 2) Vincular solicitação ao título via /api/admin/solicitacoes/[id]/upload (em background)
                             //    Não bloqueia o redirecionamento; se falhar, será apenas logado no servidor.
-                            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+                             
                             fetch(`/api/admin/solicitacoes/${id}/upload`, {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
@@ -567,7 +576,7 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
                                 completedAt: new Date().toISOString(),
                               }),
                             }).catch((err) => {
-                              // eslint-disable-next-line no-console
+                               
                               console.error("Erro ao vincular solicitação ao catálogo:", err);
                             });
 
@@ -582,9 +591,9 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
                               router.push(`/admin/upload-v2?${params.toString()}`);
                             }
                             return;
-                          } catch (err: any) {
+                          } catch (err) {
                             console.error("Erro ao adicionar ao catálogo:", err);
-                            setError(err?.message || "Erro ao adicionar ao catálogo.");
+                            setError(err instanceof Error ? err.message : "Erro ao adicionar ao catálogo.");
                           } finally {
                             setActionLoading(false);
                           }

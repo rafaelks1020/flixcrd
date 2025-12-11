@@ -46,16 +46,28 @@ export default function SubtitlesPage() {
     async function loadTitles() {
       try {
         // Buscar todos os títulos e filtrar séries/animes no cliente
-        const res = await fetch("/api/titles");
+        const res = await fetch("/api/titles?limit=1000");
         if (!res.ok) {
           throw new Error("Erro ao buscar títulos");
         }
-        const data = await res.json();
-        
-        // API retorna array direto, filtrar por tipo
-        const allTitles = Array.isArray(data) ? data : (data.titles || []);
+        const data = (await res.json()) as
+          | Title[]
+          | {
+              data?: Title[];
+              page?: number;
+              limit?: number;
+              total?: number;
+              totalPages?: number;
+            };
+
+        // API retorna objeto paginado ({ data, page, ... }) ou array direto, filtrar por tipo
+        const allTitles: Title[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data.data)
+          ? data.data
+          : [];
         const filtered = allTitles.filter(
-          (t: any) => t.type === "SERIES" || t.type === "ANIME"
+          (t) => t.type === "SERIES" || t.type === "ANIME"
         );
         setTitles(filtered);
       } catch (error) {
@@ -86,7 +98,7 @@ export default function SubtitlesPage() {
               name: ep.name,
               seasonNumber: season.seasonNumber,
               episodeNumber: ep.episodeNumber,
-              hasSubtitle: false, // TODO: verificar se já tem legenda
+              hasSubtitle: Boolean((ep as { hasSubtitle?: boolean }).hasSubtitle), // TODO: verificar se já tem legenda
             });
           }
         }
@@ -133,46 +145,81 @@ export default function SubtitlesPage() {
       } else {
         toast.success(`${data.subtitles.length} legendas encontradas!`);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erro ao buscar legendas:", error);
-      toast.error(error.message || "Erro ao buscar legendas");
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "Erro ao buscar legendas";
+      toast.error(message);
     } finally {
       setSearching(false);
     }
   }
 
-  // Baixar legenda
+  // Baixar legenda automaticamente e salvar no Wasabi
   async function downloadSubtitle(subtitle: Subtitle) {
+    if (!selectedEpisode) {
+      toast.error("Nenhum episódio selecionado");
+      return;
+    }
+
     setDownloading(subtitle.id);
 
     try {
-      // Se for busca externa, abrir URL diretamente
-      if (subtitle.source === "Busca Externa" || subtitle.source === "Subdl") {
+      // Se for busca externa, abrir URL diretamente (não tem como automatizar)
+      if (subtitle.source === "Busca Externa") {
         window.open(subtitle.url, "_blank");
         toast.success(`Abrindo ${subtitle.source}...`);
         setDownloading(null);
         return;
       }
 
-      // OpenSubtitles - usar API de download
-      const res = await fetch("/api/subtitles/download", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileId: subtitle.fileId }),
-      });
+      // OpenSubtitles - baixar automaticamente e salvar no Wasabi
+      if (subtitle.source === "OpenSubtitles" && typeof subtitle.fileId === "number") {
+        const res = await fetch("/api/subtitles/auto-download", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            episodeId: selectedEpisode.id,
+            fileId: subtitle.fileId,
+            language: subtitle.language || "pt-BR",
+          }),
+        });
 
-      const data = await res.json();
+        const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.error || "Erro ao baixar legenda");
+        if (!res.ok) {
+          throw new Error(data.error || "Erro ao baixar legenda");
+        }
+
+        toast.success(`✅ Legenda salva automaticamente!`);
+
+        // Atualizar o badge do episódio para mostrar que agora tem legenda
+        setEpisodes((prev) =>
+          prev.map((ep) =>
+            ep.id === selectedEpisode.id ? { ...ep, hasSubtitle: true } : ep
+          )
+        );
+
+        // Atualizar o episódio selecionado também
+        setSelectedEpisode((prev) =>
+          prev ? { ...prev, hasSubtitle: true } : prev
+        );
+
+        return;
       }
 
-      // Abrir link de download em nova aba
-      window.open(data.downloadUrl, "_blank");
-      toast.success(`Legenda baixada: ${subtitle.fileName}`);
-    } catch (error: any) {
+      // Subdl ou outros - abrir URL
+      window.open(subtitle.url, "_blank");
+      toast.success(`Abrindo ${subtitle.source}...`);
+    } catch (error: unknown) {
       console.error("Erro ao baixar legenda:", error);
-      toast.error(error.message || "Erro ao baixar legenda");
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "Erro ao baixar legenda";
+      toast.error(message);
     } finally {
       setDownloading(null);
     }
@@ -304,6 +351,17 @@ export default function SubtitlesPage() {
                       {episode.episodeNumber.toString().padStart(2, "0")}
                     </span>
                     <span className="ml-2 text-sm">{episode.name}</span>
+                    <div className="mt-1 text-[10px]">
+                      {episode.hasSubtitle ? (
+                        <span className="inline-flex items-center rounded-full border border-emerald-700 bg-emerald-900/40 px-2 py-0.5 text-emerald-300">
+                          🟢 Com legenda
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full border border-zinc-700 bg-zinc-900/60 px-2 py-0.5 text-zinc-400">
+                          ⚪ Sem legenda
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <button
                     onClick={() => searchSubtitles(episode)}
@@ -363,9 +421,17 @@ export default function SubtitlesPage() {
                 <button
                   onClick={() => downloadSubtitle(subtitle)}
                   disabled={downloading === subtitle.id}
-                  className="rounded-md bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className={`rounded-md px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 ${
+                    subtitle.source === "OpenSubtitles"
+                      ? "bg-emerald-600 hover:bg-emerald-700"
+                      : "bg-zinc-600 hover:bg-zinc-500"
+                  }`}
                 >
-                  {downloading === subtitle.id ? "Abrindo..." : subtitle.source === "Busca Externa" ? "🔗 Abrir Site" : subtitle.source === "OpenSubtitles" ? "⬇️ Baixar" : "🔗 Abrir"}
+                  {downloading === subtitle.id
+                    ? "⏳ Salvando..."
+                    : subtitle.source === "OpenSubtitles"
+                    ? "⬇️ Baixar e Salvar"
+                    : "🔗 Abrir Site"}
                 </button>
               </div>
             ))}

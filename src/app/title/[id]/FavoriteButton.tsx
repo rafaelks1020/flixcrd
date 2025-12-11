@@ -68,8 +68,8 @@ export default function FavoriteButton({
 
       setIsFavorite(!isFavorite);
       router.refresh();
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao atualizar Minha lista.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao atualizar Minha lista.");
     } finally {
       setLoading(false);
     }

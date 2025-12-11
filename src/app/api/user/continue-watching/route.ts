@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
         durationSeconds: { gt: 0 },
       },
       include: {
-        title: {
+        Title: {
           select: {
             id: true,
             name: true,
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
             type: true,
           },
         },
-        episode: {
+        Episode: {
           select: {
             id: true,
             seasonNumber: true,
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     });
 
     const titles = items
-      .filter((item: any) => item.title)
+      .filter((item: any) => item.Title)
       .map((item: any) => {
         const percent = item.durationSeconds
           ? Math.max(
@@ -74,8 +74,8 @@ export async function GET(request: NextRequest) {
             )
           : 0;
 
-        const t = item.title!;
-        const ep = item.episode;
+        const t = item.Title!;
+        const ep = item.Episode;
 
         return {
           id: t.id,

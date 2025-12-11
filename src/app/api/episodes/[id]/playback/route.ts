@@ -1,15 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth-mobile";
 import { generateStreamToken, isProtectedStreamingEnabled } from "@/lib/stream-token";
+import { wasabiClient } from "@/lib/wasabi";
 
 const WASABI_CDN_BASE = process.env.WASABI_CDN_URL;
+const WASABI_BUCKET = process.env.WASABI_BUCKET_NAME;
 
 interface RouteContext {
   params: Promise<{
     id: string;
   }>;
+}
+
+interface SubtitleTrack {
+  label: string;
+  language?: string | null;
+  url: string;
+}
+
+function inferSubtitleInfoFromKey(key: string): { label: string; language?: string | null } {
+  const lower = key.toLowerCase();
+
+  if (lower.includes("pt-br") || lower.includes("ptbr") || lower.includes("pt_b")) {
+    return { label: "Português (Brasil)", language: "pt-BR" };
+  }
+
+  if (lower.includes("pt")) {
+    return { label: "Português", language: "pt" };
+  }
+
+  if (lower.includes("en")) {
+    return { label: "Inglês", language: "en" };
+  }
+
+  if (lower.includes("es")) {
+    return { label: "Espanhol", language: "es" };
+  }
+
+  return { label: "Legenda", language: null };
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -35,11 +66,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const episode = await prisma.episode.findUnique({
       where: { id },
       include: {
-        title: true,
+        Title: true,
       },
     });
 
-    if (!episode || !episode.title) {
+    if (!episode || !episode.Title) {
       return NextResponse.json(
         { error: "Episódio não encontrado." },
         { status: 404 },
@@ -53,7 +84,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const hlsPath = episode.hlsPath?.endsWith("/") ? episode.hlsPath : `${episode.hlsPath}/`;
     const kind = "hls";
     const sourceParam = request.nextUrl.searchParams.get("source");
 
@@ -86,9 +116,38 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     // Legendas
-    const subtitles: any[] = []; // TODO: implementar busca de .vtt se necessário
+    let subtitles: SubtitleTrack[] = [];
 
-    const title = episode.title as any;
+    if (WASABI_BUCKET && episode.hlsPath) {
+      try {
+        const prefix = episode.hlsPath.endsWith("/") ? episode.hlsPath : `${episode.hlsPath}/`;
+        const listCmd = new ListObjectsV2Command({
+          Bucket: WASABI_BUCKET,
+          Prefix: prefix,
+          MaxKeys: 50,
+        });
+
+        const listed = await wasabiClient.send(listCmd);
+        const contents = listed.Contents ?? [];
+        const subtitleObjects = contents.filter((obj) =>
+          (obj.Key as string).toLowerCase().endsWith(".vtt"),
+        );
+
+        subtitles = subtitleObjects.map((obj) => {
+          const key = obj.Key as string;
+          const { label, language } = inferSubtitleInfoFromKey(key);
+          return {
+            label,
+            language,
+            url: `${WASABI_CDN_BASE}${key}`,
+          };
+        });
+      } catch (subErr) {
+        console.error("Erro ao listar legendas para episódio", episode.id, subErr);
+      }
+    }
+
+    const title = episode.Title;
 
     return NextResponse.json({
       playbackUrl,

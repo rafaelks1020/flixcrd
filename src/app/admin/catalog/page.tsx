@@ -103,7 +103,10 @@ export default function AdminCatalogPage() {
     setError(null);
     setInfo(null);
     try {
-      const res = await fetch("/api/titles");
+      // Importante: a API /api/titles devolve, por padrão, apenas 24 itens.
+      // Para o admin, queremos enxergar TODO o catálogo (filmes + séries/animes),
+      // então pedimos um limite alto aqui e fazemos a paginação apenas no cliente.
+      const res = await fetch("/api/titles?limit=1000");
       if (!res.ok) {
         throw new Error("Erro ao carregar títulos");
       }
@@ -136,8 +139,8 @@ export default function AdminCatalogPage() {
           setHlsStatus({});
         }
       }
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao carregar títulos");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao carregar títulos");
     } finally {
       setLoading(false);
     }
@@ -168,8 +171,8 @@ export default function AdminCatalogPage() {
         `Atualização TMDb concluída: ${data.updated} de ${data.total} títulos atualizados.`,
       );
       await loadTitles();
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao atualizar títulos a partir do TMDB");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao atualizar títulos a partir do TMDB");
     } finally {
       setRefreshingTmdb(false);
     }
@@ -193,8 +196,8 @@ export default function AdminCatalogPage() {
 
       setInfo("Legenda baixada e salva no Wasabi com sucesso.");
       await loadTitles();
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao baixar legenda automática");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao baixar legenda automática");
     } finally {
       setSubtitleLoadingId(null);
     }
@@ -300,8 +303,8 @@ export default function AdminCatalogPage() {
             }
 
             return true;
-          } catch (err: any) {
-            setError(err.message ?? "Erro ao consultar status do job");
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "Erro ao consultar status do job");
             setTranscodingId(null);
             setTranscodingProgress(null);
             setTranscodingStatus(null);
@@ -310,7 +313,7 @@ export default function AdminCatalogPage() {
         };
 
         // Primeiro poll imediato
-        let keepPolling = await poll();
+        const keepPolling = await poll();
         if (keepPolling) {
           const interval = setInterval(async () => {
             const cont = await poll();
@@ -320,8 +323,8 @@ export default function AdminCatalogPage() {
           }, 5000);
         }
       }
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao iniciar transcodificação HLS");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao iniciar transcodificação HLS");
     } finally {
       // o estado é finalizado no próprio polling
     }
@@ -379,8 +382,8 @@ export default function AdminCatalogPage() {
         throw new Error(data?.error ?? "Erro ao consultar TMDb");
       }
       setTmdbResults(data.results ?? []);
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao consultar TMDb");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao consultar TMDb");
     } finally {
       setTmdbLoading(false);
     }
@@ -393,7 +396,7 @@ export default function AdminCatalogPage() {
     setInfo(null);
 
     try {
-      let payload: any;
+      let payload: Record<string, unknown>;
 
       if (editingId) {
         // Editando: manda todos os campos manualmente
@@ -437,8 +440,8 @@ export default function AdminCatalogPage() {
       setInfo(editingId ? "Título atualizado com sucesso!" : "Título adicionado com todos os metadados do TMDB!");
       await loadTitles();
       resetForm();
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao salvar título");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar título");
     } finally {
       setSaving(false);
     }
@@ -475,8 +478,8 @@ export default function AdminCatalogPage() {
       if (editingId === id) {
         resetForm();
       }
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao excluir título");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao excluir título");
     }
   }
 

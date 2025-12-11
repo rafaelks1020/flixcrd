@@ -8,12 +8,25 @@ export default function QuickActionsPage() {
 
   async function clearCache() {
     setLoading(true);
+    const toastId = toast.loading("Limpando cache no Cloudflare...");
     try {
-      // Simular limpeza de cache
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      toast.success("Cache limpo com sucesso!");
-    } catch (err) {
-      toast.error("Erro ao limpar cache");
+      const res = await fetch("/api/admin/cache", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "purge_all" }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        const message = data.error || data.message || "Erro ao limpar cache";
+        toast.error(message, { id: toastId });
+        return;
+      }
+
+      toast.success(data.message || "Cache limpo com sucesso!", { id: toastId });
+    } catch {
+      toast.error("Erro ao limpar cache", { id: toastId });
     } finally {
       setLoading(false);
     }
@@ -30,7 +43,7 @@ export default function QuickActionsPage() {
       } else {
         toast.error(`❌ Erro: ${data.error || "Falha na conexão com storage"}`);
       }
-    } catch (err) {
+    } catch {
       toast.error("❌ Erro ao testar conexão com storage");
     } finally {
       setLoading(false);
@@ -48,7 +61,7 @@ export default function QuickActionsPage() {
       } else {
         toast.error("❌ Transcoder offline ou com erro");
       }
-    } catch (err) {
+    } catch {
       toast.error("❌ Erro ao verificar transcoder");
     } finally {
       setLoading(false);
@@ -66,7 +79,7 @@ export default function QuickActionsPage() {
       } else {
         toast.error(`❌ ${data.error || "Cloudflare proxy com erro"}`);
       }
-    } catch (err) {
+    } catch {
       toast.error("❌ Erro ao verificar Cloudflare");
     } finally {
       setLoading(false);
@@ -85,7 +98,7 @@ export default function QuickActionsPage() {
       } else {
         toast.error(`❌ ${data.error || "Erro ao atualizar"}`, { id: toastId });
       }
-    } catch (err) {
+    } catch {
       toast.error("❌ Erro ao reimportar dados do TMDB", { id: toastId });
     } finally {
       setLoading(false);

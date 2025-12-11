@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     const userId = authUser.id;
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { subscription: true },
+      include: { Subscription: true },
     });
 
     if (!user) {
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     // Verificar se pode assistir (admin ou assinatura ativa)
     const isAdmin = user.role === "ADMIN";
-    const hasActiveSubscription = user.subscription?.status === "active";
+    const hasActiveSubscription = user.Subscription?.status === "active";
     
     if (!isAdmin && !hasActiveSubscription) {
       return NextResponse.json(
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     } else if (contentType === "episode") {
       const episode = await prisma.episode.findUnique({
         where: { id: contentId },
-        include: { title: true },
+        include: { Title: true },
       });
       if (!episode) {
         return NextResponse.json(
@@ -90,9 +90,9 @@ export async function POST(request: NextRequest) {
       }
       hlsPath = episode.hlsPath;
       titleInfo = {
-        id: episode.title?.id,
-        name: episode.title?.name,
-        type: episode.title?.type,
+        id: episode.Title?.id,
+        name: episode.Title?.name,
+        type: episode.Title?.type,
         seasonNumber: episode.seasonNumber,
         episodeNumber: episode.episodeNumber,
         episodeName: episode.name,

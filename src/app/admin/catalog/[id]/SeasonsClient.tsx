@@ -64,8 +64,8 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
         throw new Error(json?.error ?? "Erro ao carregar temporadas/episódios.");
       }
       setData(json as TitleSeasonsResponse);
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao carregar temporadas/episódios.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao carregar temporadas/episódios.");
     } finally {
       setLoading(false);
     }
@@ -101,8 +101,8 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
 
       setInfo(parts.join(" "));
       await loadData();
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao enfileirar HLS para episódios.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao enfileirar HLS para episódios.");
     } finally {
       setBulkTranscoding(false);
     }
@@ -148,7 +148,7 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
       }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+     
     loadEpisodeHlsStatus();
   }, [data]);
 
@@ -173,8 +173,8 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
         `Importação concluída: ${imported} temporada(s) importada(s) de ${json.seasonsFound ?? imported}.`,
       );
       await loadData();
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao importar todas as temporadas.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao importar todas as temporadas.");
     } finally {
       setImportingAll(false);
     }
@@ -198,14 +198,15 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
       const total = json?.episodes?.total ?? 0;
       setInfo(`Temporada ${seasonNumber} importada com ${total} episódio(s).`);
       await loadData();
-    } catch (err: any) {
-      setError(err.message ?? "Erro ao importar temporada.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao importar temporada.");
     } finally {
       setImportingSeason(null);
     }
   }
 
   const isSeries = data && (data.type === "SERIES" || data.type === "ANIME");
+  const seasons = data?.seasons ?? [];
 
   return (
     <div className="space-y-4">
@@ -297,15 +298,15 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
         <p className="text-xs text-zinc-500">Carregando temporadas e episódios...</p>
       )}
 
-      {data && data.seasons.length === 0 && !loading && isSeries && (
+      {data && seasons.length === 0 && !loading && isSeries && (
         <p className="text-xs text-zinc-500">
           Nenhuma temporada importada ainda. Use os botões acima para importar a partir do TMDb.
         </p>
       )}
 
-      {data && data.seasons.length > 0 && (
+      {data && seasons.length > 0 && (
         <div className="space-y-4 text-xs">
-          {data.seasons.map((season) => (
+          {seasons.map((season) => (
             <div
               key={season.id}
               className="space-y-2 rounded-md border border-zinc-800 bg-zinc-950/40 p-3"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 
 interface VideoPlayerProps {
   url: string;
@@ -16,12 +16,14 @@ interface VideoPlayerProps {
 
 export default function VideoPlayerNative({
   url,
-  titleName,
+  titleName: _titleName,
   onEnded,
   onProgress,
   initialTime = 0,
   nextEpisode,
 }: VideoPlayerProps) {
+  // titleName disponível como _titleName se precisar no futuro
+  void _titleName;
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
   const [volume, setVolume] = useState(1);
@@ -37,8 +39,62 @@ export default function VideoPlayerNative({
   const containerRef = useRef<HTMLDivElement>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const togglePlay = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.paused) {
+      video.play();
+      setPlaying(true);
+    } else {
+      video.pause();
+      setPlaying(false);
+    }
+  }, []);
+
+  const seekTo = useCallback((time: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.currentTime = time;
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen();
+      setFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setFullscreen(false);
+    }
+  }, []);
+
+  const handleVolumeChange = useCallback((newVolume: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.volume = newVolume;
+    setVolume(newVolume);
+  }, []);
+
+  const handlePlaybackRateChange = useCallback((rate: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.playbackRate = rate;
+    setPlaybackRate(rate);
+  }, []);
+
+  const formatTime = useCallback((seconds: number) => {
+    if (Number.isNaN(seconds)) return "0:00";
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) {
+      return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+    }
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  }, []);
+
   // Auto-hide controls
-  const resetControlsTimeout = () => {
+  const resetControlsTimeout = useCallback(() => {
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
     }
@@ -48,11 +104,27 @@ export default function VideoPlayerNative({
         setShowControls(false);
       }, 3000);
     }
-  };
+  }, [playing]);
 
+  // Sincroniza o timeout de controles quando playing muda
   useEffect(() => {
-    resetControlsTimeout();
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+
+    // Agenda mostrar controles via timeout para evitar setState síncrono
+    const showTimeout = setTimeout(() => {
+      setShowControls(true);
+    }, 0);
+
+    if (playing) {
+      controlsTimeoutRef.current = setTimeout(() => {
+        setShowControls(false);
+      }, 3000);
+    }
+
     return () => {
+      clearTimeout(showTimeout);
       if (controlsTimeoutRef.current) {
         clearTimeout(controlsTimeoutRef.current);
       }
@@ -163,61 +235,7 @@ export default function VideoPlayerNative({
 
     window.addEventListener("keydown", handleKeyPress);
     return () => window.removeEventListener("keydown", handleKeyPress);
-  }, []);
-
-  const togglePlay = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (video.paused) {
-      video.play();
-      setPlaying(true);
-    } else {
-      video.pause();
-      setPlaying(false);
-    }
-  };
-
-  const seekTo = (time: number) => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.currentTime = time;
-  };
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen();
-      setFullscreen(true);
-    } else {
-      document.exitFullscreen();
-      setFullscreen(false);
-    }
-  };
-
-  const handleVolumeChange = (newVolume: number) => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.volume = newVolume;
-    setVolume(newVolume);
-  };
-
-  const handlePlaybackRateChange = (rate: number) => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.playbackRate = rate;
-    setPlaybackRate(rate);
-  };
-
-  const formatTime = (seconds: number) => {
-    if (isNaN(seconds)) return "0:00";
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    if (h > 0) {
-      return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-    }
-    return `${m}:${s.toString().padStart(2, "0")}`;
-  };
+  }, [toggleFullscreen, togglePlay]);
 
   return (
     <div

@@ -5,12 +5,24 @@ import bcrypt from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
+import { sendMail } from "@/lib/mailjet";
+
+interface SessionUser {
+  id?: string;
+  email?: string;
+  name?: string | null;
+  role?: string;
+}
+
+interface AdminSession {
+  user?: SessionUser;
+}
 
 export async function GET() {
   try {
-    const session: any = await getServerSession(authOptions as any);
+    const session = await getServerSession(authOptions) as AdminSession | null;
 
-    if (!session || !session.user || (session.user as any).role !== "ADMIN") {
+    if (!session || !session.user || session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Não autorizado." }, { status: 403 });
     }
 
@@ -38,9 +50,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const session: any = await getServerSession(authOptions as any);
+    const session = await getServerSession(authOptions) as AdminSession | null;
 
-    if (!session || !session.user || (session.user as any).role !== "ADMIN") {
+    if (!session || !session.user || session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Não autorizado." }, { status: 403 });
     }
 
@@ -93,6 +105,58 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    try {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+      await sendMail({
+        to: created.email,
+        subject: "Sua conta FlixCRD foi criada",
+        fromEmail: "suporte@pflix.com.br",
+        fromName: "Suporte FlixCRD",
+        meta: {
+          reason: "admin-user-created",
+          userId: created.id,
+          extra: {
+            createdBy: (session.user as any).id,
+          },
+        },
+        context: {
+          userId: created.id,
+          email: created.email,
+        },
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #e50914;">Conta criada no FlixCRD</h2>
+            <p>Olá, ${created.name || created.email}!</p>
+            <p>Um administrador criou uma conta para você no <strong>FlixCRD</strong>.</p>
+            <p>Para acessar com segurança, utilize a opção "Esqueci minha senha" na tela de login e defina uma nova senha.</p>
+            <p style="text-align: center; margin: 30px 0;">
+              <a href="${appUrl}/login" 
+                 style="background-color: #e50914; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                Ir para o login
+              </a>
+            </p>
+            <p style="color: #666; font-size: 14px;">
+              Se você não reconhece esta criação de conta, responda este email ou entre em contato com o suporte.
+            </p>
+          </div>
+        `,
+        text: `
+Conta criada no FlixCRD
+
+Olá, ${created.name || created.email}!
+
+Um administrador criou uma conta para você no FlixCRD.
+Para acessar com segurança, utilize a opção "Esqueci minha senha" na tela de login e defina uma nova senha.
+
+Acesse: ${appUrl}/login
+
+Se você não reconhece esta criação de conta, entre em contato com o suporte.
+        `,
+      });
+    } catch (emailError) {
+      console.error("[AdminUsers] Erro ao enviar email de criação de usuário:", emailError);
+    }
+
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
     console.error("POST /api/admin/users error", error);
@@ -105,9 +169,9 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const session: any = await getServerSession(authOptions as any);
+    const session = await getServerSession(authOptions) as AdminSession | null;
 
-    if (!session || !session.user || (session.user as any).role !== "ADMIN") {
+    if (!session || !session.user || session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Não autorizado." }, { status: 403 });
     }
 
@@ -135,6 +199,65 @@ export async function PUT(request: NextRequest) {
       data: { passwordHash },
     });
 
+    let targetUser: { id: string; email: string; name: string | null } | null = null;
+    try {
+      targetUser = await prisma.user.findUnique({
+        where: { id },
+        select: { id: true, email: true, name: true },
+      });
+    } catch {
+      targetUser = null;
+    }
+
+    if (targetUser?.email) {
+      try {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+        await sendMail({
+          to: targetUser.email,
+          subject: "Sua senha foi redefinida - FlixCRD",
+          fromEmail: "suporte@pflix.com.br",
+          fromName: "Suporte FlixCRD",
+          meta: {
+            reason: "admin-password-reset",
+            userId: targetUser.id,
+            extra: {
+              changedBy: (session.user as any).id,
+            },
+          },
+          context: {
+            userId: targetUser.id,
+          },
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #e50914;">Senha redefinida</h2>
+              <p>Olá, ${targetUser.name || targetUser.email}!</p>
+              <p>A senha da sua conta no <strong>FlixCRD</strong> foi redefinida por um administrador.</p>
+              <p>Se não foi você que solicitou essa alteração, recomendamos que acesse a plataforma e redefina sua senha novamente usando a opção "Esqueci minha senha".</p>
+              <p style="text-align: center; margin: 30px 0;">
+                <a href="${appUrl}/login" 
+                   style="background-color: #e50914; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                  Ir para o login
+                </a>
+              </p>
+            </div>
+          `,
+          text: `
+Senha redefinida - FlixCRD
+
+Olá, ${targetUser.name || targetUser.email}!
+
+A senha da sua conta no FlixCRD foi redefinida por um administrador.
+
+Se não foi você que solicitou essa alteração, acesse a plataforma e redefina sua senha novamente usando a opção "Esqueci minha senha".
+
+Acesse: ${appUrl}/login
+          `,
+        });
+      } catch (emailError) {
+        console.error("[AdminUsers] Erro ao enviar email de redefinição de senha:", emailError);
+      }
+    }
+
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("PUT /api/admin/users error", error);
@@ -147,9 +270,9 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const session: any = await getServerSession(authOptions as any);
+    const session = await getServerSession(authOptions) as AdminSession | null;
 
-    if (!session || !session.user || (session.user as any).role !== "ADMIN") {
+    if (!session || !session.user || session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Não autorizado." }, { status: 403 });
     }
 
@@ -174,7 +297,7 @@ export async function DELETE(request: NextRequest) {
     await prisma.user.delete({ where: { id } });
 
     return NextResponse.json({ ok: true });
-  } catch (error: any) {
+  } catch (error) {
     console.error("DELETE /api/admin/users error", error);
     return NextResponse.json(
       { error: "Erro ao excluir usuário." },
@@ -185,9 +308,9 @@ export async function DELETE(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const session: any = await getServerSession(authOptions as any);
+    const session = await getServerSession(authOptions) as AdminSession | null;
 
-    if (!session || !session.user || (session.user as any).role !== "ADMIN") {
+    if (!session || !session.user || session.user.role !== "ADMIN") {
       return NextResponse.json({ error: "Não autorizado." }, { status: 403 });
     }
 
@@ -206,7 +329,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const data: any = {};
+    const data: { role?: "ADMIN" | "USER"; name?: string | null; avatar?: string | null } = {};
 
     if (typeof role !== "undefined") {
       if (role !== "ADMIN" && role !== "USER") {
@@ -217,7 +340,7 @@ export async function PATCH(request: NextRequest) {
       }
 
       // Evita que o admin atual remova o próprio acesso admin por engano
-      const currentUserId = (session.user as any).id as string | undefined;
+      const currentUserId = session.user?.id;
       if (currentUserId && currentUserId === id && role !== "ADMIN") {
         return NextResponse.json(
           { error: "Você não pode remover seu próprio acesso de administrador." },
