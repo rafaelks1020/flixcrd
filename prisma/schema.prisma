@@ -402,35 +402,22 @@ model Video {
 }
 
 model EmailLog {
-  id                String      @id @default(cuid())
-  status            EmailStatus
-  provider          String      @default("mailjet")
-  providerMessageId String?
-  template          String?
-  to                String
-  subject           String
-  fromEmail         String?
-  fromName          String?
-  reason            String?
-  tags              String[]    @default([])
-  userId            String?
-  profileId         String?
-  requestId         String?
-  subscriptionId    String?
-  paymentId         String?
-  metadata          Json?
-  context           Json?
-  payload           Json?
-  providerResponse  Json?
-  errorMessage      String?
-  errorCode         String?
-  createdAt         DateTime    @default(now())
+  id               String      @id
+  status           EmailStatus
+  to               String
+  subject          String
+  fromEmail        String?
+  fromName         String?
+  reason           String?
+  context          Json?
+  providerResponse Json?
+  errorMessage     String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime
 
-  @@index([status, createdAt])
-  @@index([provider, createdAt])
+  @@index([createdAt])
   @@index([reason])
-  @@index([userId])
-  @@index([requestId])
+  @@index([status])
 }
 
 enum ApprovalStatus {
