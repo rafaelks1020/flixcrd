@@ -196,6 +196,17 @@ export async function POST(request: NextRequest) {
           subject: `🎬 Nova solicitação: ${title}`,
           fromEmail: "contato@pflix.com.br",
           fromName: "FlixCRD",
+          meta: {
+            reason: "request-created",
+            userId: user.id,
+            requestId: createdRequest.id,
+          },
+          context: {
+            type: requestTypeLabel,
+            imdbId,
+            desiredLanguages: desiredLanguagesValue,
+            desiredQuality: desiredQualityValue,
+          },
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #e50914;">🎬 Nova Solicitação de Conteúdo</h2>

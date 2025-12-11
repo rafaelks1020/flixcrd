@@ -1,4 +1,7 @@
+import { EmailStatus } from "@/types/email";
 import Mailjet from "node-mailjet";
+
+import { recordEmailLog, type EmailLogMeta } from "@/lib/email-log";
 
 type Recipient =
   | string
@@ -14,6 +17,8 @@ export type SendMailArgs = {
   html?: string;
   fromEmail?: string;
   fromName?: string;
+  meta?: EmailLogMeta;
+  context?: unknown;
 };
 
 const MAILJET_API_KEY = process.env.MAILJET_API_KEY;
@@ -49,6 +54,8 @@ export async function sendMail({
   html,
   fromEmail,
   fromName,
+  meta,
+  context,
 }: SendMailArgs) {
   const client = getClient();
 
@@ -80,7 +87,45 @@ export async function sendMail({
     ],
   };
 
-  const res = await client.post("send", { version: "v3.1" }).request(payload);
-  return res.body;
+  const toList = recipients.map((r) => r.Email).join(", ");
+
+  try {
+    const res = await client.post("send", { version: "v3.1" }).request(payload);
+
+    // Registro de sucesso (não bloqueante)
+    void recordEmailLog({
+      status: EmailStatus.SUCCESS,
+      to: toList,
+      subject,
+      fromEmail: senderEmail,
+      fromName: senderName,
+      meta,
+      context,
+      providerResponse: res.body,
+    });
+
+    return res.body;
+  } catch (err: any) {
+    const errorMessage =
+      err instanceof Error ? err.message : String(err ?? "Erro desconhecido");
+    const providerResponse = err?.response?.body ?? err;
+
+    // Registro de erro (tentativa melhor-esforço)
+    await recordEmailLog({
+      status: EmailStatus.ERROR,
+      to: toList,
+      subject,
+      fromEmail: senderEmail,
+      fromName: senderName,
+      meta,
+      context,
+      providerResponse,
+      errorMessage,
+    }).catch((logErr) => {
+      console.error("[EmailLog] Falha ao registrar erro de email:", logErr);
+    });
+
+    throw err;
+  }
 }
 

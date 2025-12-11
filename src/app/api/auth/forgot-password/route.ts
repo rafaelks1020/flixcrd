@@ -57,6 +57,13 @@ export async function POST(request: NextRequest) {
         subject: "Recuperação de senha - FlixCRD",
         fromEmail: "suporte@pflix.com.br",
         fromName: "Suporte FlixCRD",
+        meta: {
+          reason: "forgot-password",
+          userId: user.id,
+        },
+        context: {
+          resetLink,
+        },
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #333;">Recuperação de senha</h2>

@@ -131,6 +131,18 @@ export async function POST(request: NextRequest) {
               subject: `✅ Pagamento Confirmado - ${planName}`,
               fromEmail: "financeiro@pflix.com.br",
               fromName: "Financeiro FlixCRD",
+              meta: {
+                reason: "payment-webhook",
+                userId: dbPayment.Subscription.userId,
+                subscriptionId: dbPayment.subscriptionId,
+                paymentId: payment.id,
+                event,
+              },
+              context: {
+                value: payment.value,
+                dueDate: payment.dueDate,
+                status: payment.status,
+              },
               html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                   <h2 style="color: #00cc00;">✅ Pagamento Confirmado!</h2>
@@ -193,6 +205,18 @@ Aproveite todo o conteúdo disponível na plataforma!
               subject: `⚠️ Pagamento Vencido - ${planName}`,
               fromEmail: "financeiro@pflix.com.br",
               fromName: "Financeiro FlixCRD",
+              meta: {
+                reason: "payment-webhook",
+                userId: dbPayment.Subscription.userId,
+                subscriptionId: dbPayment.subscriptionId,
+                paymentId: payment.id,
+                event,
+              },
+              context: {
+                value: payment.value,
+                dueDate: payment.dueDate,
+                status: payment.status,
+              },
               html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                   <h2 style="color: #ff9900;">⚠️ Pagamento Vencido</h2>

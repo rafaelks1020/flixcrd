@@ -193,6 +193,20 @@ export async function POST(request: NextRequest) {
           subject: `Pagamento PIX - ${planName}`,
           fromEmail: "financeiro@pflix.com.br",
           fromName: "Financeiro FlixCRD",
+          meta: {
+            reason: "payment-created",
+            userId: user.id,
+            subscriptionId: subscription.id,
+            paymentId: payment.id,
+            extra: {
+              billingType,
+              plan: planName,
+            },
+          },
+          context: {
+            value: pricing.totalPrice,
+            dueDate,
+          },
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #e50914;">🎬 FlixCRD - Assinatura ${planName}</h2>
@@ -237,6 +251,21 @@ Após o pagamento, sua assinatura será ativada automaticamente em alguns minuto
           subject: `Boleto de Pagamento - ${planName}`,
           fromEmail: "financeiro@pflix.com.br",
           fromName: "Financeiro FlixCRD",
+          meta: {
+            reason: "payment-created",
+            userId: user.id,
+            subscriptionId: subscription.id,
+            paymentId: payment.id,
+            extra: {
+              billingType,
+              plan: planName,
+            },
+          },
+          context: {
+            value: pricing.totalPrice,
+            dueDate,
+            boletoUrl: payment.bankSlipUrl,
+          },
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #e50914;">🎬 FlixCRD - Assinatura ${planName}</h2>
@@ -281,6 +310,20 @@ Após a confirmação do pagamento (até 3 dias úteis), sua assinatura será at
           subject: `Pagamento Aprovado - ${planName}`,
           fromEmail: "financeiro@pflix.com.br",
           fromName: "Financeiro FlixCRD",
+          meta: {
+            reason: "payment-approved",
+            userId: user.id,
+            subscriptionId: subscription.id,
+            paymentId: payment.id,
+            extra: {
+              billingType,
+              plan: planName,
+            },
+          },
+          context: {
+            value: pricing.totalPrice,
+            periodEnd: calculatePeriodEnd(now),
+          },
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #e50914;">✅ Pagamento Aprovado!</h2>

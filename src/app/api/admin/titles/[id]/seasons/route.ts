@@ -104,7 +104,35 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       );
     }
 
-    return NextResponse.json(title);
+    const seasons = (title.Season ?? []).map((season) => ({
+      id: season.id,
+      seasonNumber: season.seasonNumber,
+      name: season.name,
+      overview: season.overview,
+      airDate: season.airDate,
+      posterUrl: season.posterUrl,
+      episodeCount: season.episodeCount,
+      episodes: (season.Episode ?? []).map((ep) => ({
+        id: ep.id,
+        seasonNumber: ep.seasonNumber,
+        episodeNumber: ep.episodeNumber,
+        name: ep.name,
+        overview: ep.overview,
+        airDate: ep.airDate,
+        runtime: ep.runtime,
+        stillUrl: ep.stillUrl,
+        hlsPath: ep.hlsPath,
+      })),
+    }));
+
+    return NextResponse.json({
+      id: title.id,
+      name: title.name,
+      type: title.type,
+      slug: title.slug,
+      tmdbId: title.tmdbId,
+      seasons,
+    });
   } catch (error) {
     console.error("GET /api/admin/titles/[id]/seasons error", error);
     return NextResponse.json(

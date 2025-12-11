@@ -50,7 +50,7 @@ model CronTask {
   lastError       String?
   lastDurationMs  Int?
   createdAt       DateTime  @default(now())
-  updatedAt       DateTime @updatedAt
+  updatedAt       DateTime  @updatedAt
 }
 
 model Episode {
@@ -82,7 +82,7 @@ model Genre {
   tmdbId     Int          @unique
   name       String
   createdAt  DateTime     @default(now())
-  updatedAt  DateTime @updatedAt
+  updatedAt  DateTime     @updatedAt
   TitleGenre TitleGenre[]
 }
 
@@ -123,7 +123,7 @@ model Payment {
   pixQrCode      String?
   pixCopiaECola  String?
   createdAt      DateTime     @default(now())
-  updatedAt      DateTime @updatedAt
+  updatedAt      DateTime     @updatedAt
   Subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
   @@index([subscriptionId])
@@ -195,7 +195,7 @@ model Request {
   followersCount   Int                  @default(0)
   priorityScore    Float?
   createdAt        DateTime             @default(now())
-  updatedAt        DateTime @updatedAt
+  updatedAt        DateTime             @updatedAt
   User             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   RequestFollower  RequestFollower[]
   RequestHistory   RequestHistory[]
@@ -294,7 +294,7 @@ model Subscription {
   currentPeriodStart  DateTime?
   currentPeriodEnd    DateTime?
   createdAt           DateTime  @default(now())
-  updatedAt           DateTime @updatedAt
+  updatedAt           DateTime  @updatedAt
   asaasCustomerId     String?
   asaasPaymentId      String?
   asaasSubscriptionId String?
@@ -401,6 +401,38 @@ model Video {
   @@index([titleId])
 }
 
+model EmailLog {
+  id                String      @id @default(cuid())
+  status            EmailStatus
+  provider          String      @default("mailjet")
+  providerMessageId String?
+  template          String?
+  to                String
+  subject           String
+  fromEmail         String?
+  fromName          String?
+  reason            String?
+  tags              String[]    @default([])
+  userId            String?
+  profileId         String?
+  requestId         String?
+  subscriptionId    String?
+  paymentId         String?
+  metadata          Json?
+  context           Json?
+  payload           Json?
+  providerResponse  Json?
+  errorMessage      String?
+  errorCode         String?
+  createdAt         DateTime    @default(now())
+
+  @@index([status, createdAt])
+  @@index([provider, createdAt])
+  @@index([reason])
+  @@index([userId])
+  @@index([requestId])
+}
+
 enum ApprovalStatus {
   PENDING
   APPROVED
@@ -456,4 +488,9 @@ enum TitleType {
 enum UserRole {
   USER
   ADMIN
+}
+
+enum EmailStatus {
+  SUCCESS
+  ERROR
 }

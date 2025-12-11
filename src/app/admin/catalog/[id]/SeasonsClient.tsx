@@ -206,6 +206,7 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
   }
 
   const isSeries = data && (data.type === "SERIES" || data.type === "ANIME");
+  const seasons = data?.seasons ?? [];
 
   return (
     <div className="space-y-4">
@@ -297,15 +298,15 @@ export default function SeasonsClient({ titleId }: SeasonsClientProps) {
         <p className="text-xs text-zinc-500">Carregando temporadas e episódios...</p>
       )}
 
-      {data && data.seasons.length === 0 && !loading && isSeries && (
+      {data && seasons.length === 0 && !loading && isSeries && (
         <p className="text-xs text-zinc-500">
           Nenhuma temporada importada ainda. Use os botões acima para importar a partir do TMDb.
         </p>
       )}
 
-      {data && data.seasons.length > 0 && (
+      {data && seasons.length > 0 && (
         <div className="space-y-4 text-xs">
-          {data.seasons.map((season) => (
+          {seasons.map((season) => (
             <div
               key={season.id}
               className="space-y-2 rounded-md border border-zinc-800 bg-zinc-950/40 p-3"
