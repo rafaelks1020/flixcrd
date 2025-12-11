@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { getOrCreateCustomer } from '@/lib/asaas';
+import { sendMail } from '@/lib/mailjet';
 
 const db = prisma as any;
 
@@ -92,7 +93,6 @@ export async function POST(request: NextRequest) {
       console.error('[Register] Erro ao criar cliente no Asaas:', asaasError);
     }
 
-    // Criar perfil padrão
     await prisma.profile.create({
       data: {
         userId: user.id,
@@ -100,6 +100,60 @@ export async function POST(request: NextRequest) {
         isKids: false,
       },
     });
+
+    // Enviar email de boas-vindas (não bloqueia o fluxo em caso de erro)
+    try {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+
+      await sendMail({
+        to: user.email,
+        subject: 'Bem-vindo ao FlixCRD',
+        fromEmail: 'suporte@pflix.com.br',
+        fromName: 'Suporte FlixCRD',
+        meta: {
+          reason: 'user-registered',
+          userId: user.id,
+          extra: {
+            source: 'auth-register',
+          },
+        },
+        context: {
+          userId: user.id,
+          email: user.email,
+        },
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #e50914;">Bem-vindo ao FlixCRD!</h2>
+            <p>Olá, ${user.name || user.email}!</p>
+            <p>Sua conta foi criada com sucesso.</p>
+            <p>Agora é só ativar ou renovar sua assinatura para começar a assistir.</p>
+            <p style="text-align: center; margin: 30px 0;">
+              <a href="${appUrl}" 
+                 style="background-color: #e50914; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                Acessar FlixCRD
+              </a>
+            </p>
+            <p style="color: #666; font-size: 14px;">
+              Se você não reconhece este cadastro, responda este email ou entre em contato com o suporte.
+            </p>
+          </div>
+        `,
+        text: `
+Bem-vindo ao FlixCRD!
+
+Olá, ${user.name || user.email}!
+
+Sua conta foi criada com sucesso.
+Agora é só ativar ou renovar sua assinatura para começar a assistir.
+
+Acesse: ${appUrl}
+
+Se você não reconhece este cadastro, entre em contato com o suporte.
+        `,
+      });
+    } catch (emailError) {
+      console.error('[Register] Erro ao enviar email de boas-vindas:', emailError);
+    }
 
     return NextResponse.json({
       success: true,

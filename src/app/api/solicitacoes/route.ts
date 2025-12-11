@@ -253,6 +253,57 @@ Acesse: ${new URL(request.url).origin}/admin/solicitacoes
         );
       }
     }
+    try {
+      if (user.email) {
+        const appUrl =
+          process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+
+        await sendMail({
+          to: user.email,
+          subject: `Recebemos sua solicitação: ${title}`,
+          fromEmail: "contato@pflix.com.br",
+          fromName: "FlixCRD",
+          meta: {
+            reason: "request-confirmation",
+            userId: user.id,
+            requestId: createdRequest.id,
+          },
+          context: {
+            requestId: createdRequest.id,
+            title,
+          },
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #e50914;">Recebemos sua solicitação</h2>
+              <p>Olá, ${user.name || user.email}!</p>
+              <p>Sua solicitação de conteúdo <strong>${title}</strong> foi registrada com sucesso.</p>
+              <p>Você será avisado quando houver atualizações no status dessa solicitação.</p>
+              <p style="text-align: center; margin: 30px 0;">
+                <a href="${appUrl}/solicitacoes" 
+                   style="background-color: #e50914; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                  Ver minhas solicitações
+                </a>
+              </p>
+            </div>
+          `,
+          text: `
+Recebemos sua solicitação
+
+Olá, ${user.name || user.email}!
+
+Sua solicitação de conteúdo "${title}" foi registrada com sucesso.
+Você será avisado quando houver atualizações no status dessa solicitação.
+
+Acesse: ${appUrl}/solicitacoes
+          `,
+        });
+      }
+    } catch (emailError) {
+      console.error(
+        "[Solicitacoes] Erro ao enviar email de confirmação:",
+        emailError,
+      );
+    }
 
     return NextResponse.json(updatedRequest, { status: 201 });
   } catch (error: any) {
