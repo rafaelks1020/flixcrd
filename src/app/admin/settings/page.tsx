@@ -13,6 +13,16 @@ interface SettingsState {
   deleteSourceAfterTranscode: boolean;
 }
 
+interface VersionInfo {
+  name?: string;
+  version?: string;
+  commitSha?: string | null;
+  commitRef?: string | null;
+  deploymentId?: string | null;
+  region?: string | null;
+  serverTime?: string;
+}
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<SettingsState>({
     siteName: "Pflix",
@@ -26,6 +36,9 @@ export default function SettingsPage() {
 
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
+  const [versionError, setVersionError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadSettings() {
@@ -57,7 +70,23 @@ export default function SettingsPage() {
       }
     }
 
+    async function loadVersion() {
+      try {
+        setVersionError(null);
+        const res = await fetch("/api/version", { cache: "no-store" });
+        if (!res.ok) {
+          throw new Error("Erro ao carregar versão");
+        }
+        const data = await res.json();
+        setVersionInfo(data);
+      } catch (error) {
+        console.error("Erro ao carregar versão", error);
+        setVersionError("Erro ao carregar versão");
+      }
+    }
+
     loadSettings();
+    loadVersion();
   }, []);
 
   async function handleSave() {
@@ -199,6 +228,30 @@ export default function SettingsPage() {
           />
           <label className="text-sm text-zinc-300">Deletar arquivo original após transcodificação</label>
         </div>
+      </div>
+
+      {/* Versão */}
+      <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 space-y-3">
+        <h3 className="text-sm font-semibold">🏷️ Versão do Sistema</h3>
+
+        {versionError ? (
+          <div className="text-sm text-zinc-400">{versionError}</div>
+        ) : !versionInfo ? (
+          <div className="text-sm text-zinc-400">Carregando versão...</div>
+        ) : (
+          <div className="space-y-1 text-sm text-zinc-300">
+            <div>
+              <span className="text-zinc-400">Versão:</span> {versionInfo.version || "-"}
+            </div>
+            <div>
+              <span className="text-zinc-400">Commit:</span> {versionInfo.commitSha ? versionInfo.commitSha.slice(0, 7) : "-"}
+            </div>
+            <div className="text-xs text-zinc-500">
+              {versionInfo.deploymentId ? `deploy: ${versionInfo.deploymentId}` : ""}
+              {versionInfo.region ? `${versionInfo.deploymentId ? " • " : ""}region: ${versionInfo.region}` : ""}
+            </div>
+          </div>
+        )}
       </div>
 
       <button
