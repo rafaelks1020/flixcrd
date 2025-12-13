@@ -294,13 +294,33 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    await prisma.user.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.request.updateMany({
+        where: { assignedAdminId: id },
+        data: {
+          assignedAdminId: null,
+          assignedAt: null,
+        },
+      });
+
+      await tx.subscription.deleteMany({ where: { userId: id } });
+
+      await tx.user.delete({ where: { id } });
+    });
 
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("DELETE /api/admin/users error", error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : "Erro desconhecido";
+
     return NextResponse.json(
-      { error: "Erro ao excluir usuário." },
+      { error: message || "Erro ao excluir usuário." },
       { status: 500 },
     );
   }
