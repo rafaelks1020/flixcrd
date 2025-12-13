@@ -1,9 +1,6 @@
-name: Deploy Production (Vercel)
+name: Redeploy Production (Vercel Hook)
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
