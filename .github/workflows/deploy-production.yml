@@ -9,13 +9,13 @@ on:
 jobs:
   deploy-production:
     runs-on: ubuntu-latest
+    env:
+      VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
     steps:
       - name: Trigger Vercel Deploy Hook
-        if: ${{ secrets.VERCEL_DEPLOY_HOOK_URL != '' }}
         run: |
-          curl -fSL -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_URL }}"
-
-      - name: Deploy hook not configured
-        if: ${{ secrets.VERCEL_DEPLOY_HOOK_URL == '' }}
-        run: |
-          echo "VERCEL_DEPLOY_HOOK_URL secret is not set. Configure a Vercel Deploy Hook URL in GitHub Actions secrets to enable production deploys."
+          if [ -z "$VERCEL_DEPLOY_HOOK_URL" ]; then
+            echo "VERCEL_DEPLOY_HOOK_URL secret is not set. Configure a Vercel Deploy Hook URL in GitHub Actions secrets to enable production deploys." >&2
+            exit 1
+          fi
+          curl -fSL -X POST "$VERCEL_DEPLOY_HOOK_URL"
