@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 interface HeroTitle {
@@ -20,6 +21,24 @@ interface PremiumHeroProps {
 export default function PremiumHero({ title, isLoggedIn }: PremiumHeroProps) {
   if (!title) return null;
 
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const mq = window.matchMedia("(max-width: 768px)");
+    const update = () => setIsMobile(Boolean(mq.matches));
+    update();
+
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", update);
+      return () => mq.removeEventListener("change", update);
+    }
+
+    mq.addListener(update);
+    return () => mq.removeListener(update);
+  }, []);
+
   const year = title.releaseDate ? new Date(title.releaseDate).getFullYear() : null;
   const rating = title.voteAverage ? title.voteAverage.toFixed(1) : null;
 
@@ -27,8 +46,8 @@ export default function PremiumHero({ title, isLoggedIn }: PremiumHeroProps) {
     <section
       style={{
         position: 'relative',
-        height: '90vh',
-        minHeight: '600px',
+        height: isMobile ? '72vh' : '90vh',
+        minHeight: isMobile ? '460px' : '600px',
         width: '100%',
         overflow: 'hidden',
       }}
@@ -71,15 +90,15 @@ export default function PremiumHero({ title, isLoggedIn }: PremiumHeroProps) {
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          padding: '0 4%',
-          paddingTop: '68px',
-          maxWidth: '650px',
+          padding: isMobile ? '0 16px' : '0 4%',
+          paddingTop: isMobile ? '56px' : '68px',
+          maxWidth: isMobile ? '100%' : '650px',
         }}
       >
         {/* Title */}
         <h1
           style={{
-            fontSize: 'clamp(2.5rem, 5vw, 4rem)',
+            fontSize: isMobile ? 'clamp(2rem, 7vw, 3rem)' : 'clamp(2.5rem, 5vw, 4rem)',
             fontWeight: 800,
             color: '#fff',
             lineHeight: 1.1,
@@ -144,9 +163,9 @@ export default function PremiumHero({ title, isLoggedIn }: PremiumHeroProps) {
           <p
             style={{
               color: 'rgba(255,255,255,0.85)',
-              fontSize: '16px',
+              fontSize: isMobile ? '14px' : '16px',
               lineHeight: 1.6,
-              marginBottom: '28px',
+              marginBottom: isMobile ? '18px' : '28px',
               display: '-webkit-box',
               WebkitLineClamp: 3,
               WebkitBoxOrient: 'vertical',
@@ -167,11 +186,11 @@ export default function PremiumHero({ title, isLoggedIn }: PremiumHeroProps) {
               display: 'inline-flex',
               alignItems: 'center',
               gap: '10px',
-              padding: '14px 32px',
+              padding: isMobile ? '12px 18px' : '14px 32px',
               background: '#fff',
               borderRadius: '4px',
               color: '#000',
-              fontSize: '16px',
+              fontSize: isMobile ? '15px' : '16px',
               fontWeight: 700,
               textDecoration: 'none',
               transition: 'all 0.2s ease',
@@ -198,11 +217,11 @@ export default function PremiumHero({ title, isLoggedIn }: PremiumHeroProps) {
               display: 'inline-flex',
               alignItems: 'center',
               gap: '10px',
-              padding: '14px 28px',
+              padding: isMobile ? '12px 16px' : '14px 28px',
               background: 'rgba(109, 109, 110, 0.7)',
               borderRadius: '4px',
               color: '#fff',
-              fontSize: '16px',
+              fontSize: isMobile ? '15px' : '16px',
               fontWeight: 600,
               textDecoration: 'none',
               transition: 'all 0.2s ease',

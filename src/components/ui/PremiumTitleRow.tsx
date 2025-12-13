@@ -26,6 +26,20 @@ export default function PremiumTitleRow({ title, titles, showNewBadge }: Premium
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   const [isScrolling, setIsScrolling] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 768px)");
+    const update = () => setIsMobile(Boolean(mq.matches));
+    update();
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", update);
+      return () => mq.removeEventListener("change", update);
+    }
+    mq.addListener(update);
+    return () => mq.removeListener(update);
+  }, []);
 
   const checkScroll = () => {
     if (scrollRef.current) {
@@ -56,9 +70,9 @@ export default function PremiumTitleRow({ title, titles, showNewBadge }: Premium
   if (!titles || titles.length === 0) return null;
 
   return (
-    <div style={{ marginBottom: '3rem', position: 'relative' }}>
+    <div style={{ marginBottom: isMobile ? '2rem' : '3rem', position: 'relative' }}>
       {/* Title with Accent */}
-      <div style={{ paddingLeft: '3%', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ paddingLeft: isMobile ? '16px' : '3%', marginBottom: isMobile ? '14px' : '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
         <div
           style={{
             width: '4px',
@@ -69,7 +83,7 @@ export default function PremiumTitleRow({ title, titles, showNewBadge }: Premium
         />
         <h2
           style={{
-            fontSize: '24px',
+            fontSize: isMobile ? '18px' : '24px',
             fontWeight: 'bold',
             color: 'white',
             letterSpacing: '-0.5px',
@@ -81,9 +95,9 @@ export default function PremiumTitleRow({ title, titles, showNewBadge }: Premium
       </div>
 
       {/* Scroll Container Wrapper */}
-      <div style={{ position: 'relative', paddingLeft: '3%', paddingRight: '3%' }}>
+      <div style={{ position: 'relative', paddingLeft: isMobile ? '16px' : '3%', paddingRight: isMobile ? '16px' : '3%' }}>
         {/* Left Arrow */}
-        {canScrollLeft && (
+        {!isMobile && canScrollLeft && (
           <button
             onClick={() => scroll('left')}
             style={{
@@ -145,13 +159,13 @@ export default function PremiumTitleRow({ title, titles, showNewBadge }: Premium
           ref={scrollRef}
           style={{
             display: 'flex',
-            gap: '16px',
+            gap: isMobile ? '10px' : '16px',
             overflowX: 'auto',
             scrollbarWidth: 'none',
             msOverflowStyle: 'none',
             WebkitOverflowScrolling: 'touch',
             paddingTop: '10px',
-            paddingBottom: '20px',
+            paddingBottom: isMobile ? '14px' : '20px',
           }}
         >
           {titles.map((item) => (
@@ -172,7 +186,7 @@ export default function PremiumTitleRow({ title, titles, showNewBadge }: Premium
         </div>
 
         {/* Right Arrow */}
-        {canScrollRight && (
+        {!isMobile && canScrollRight && (
           <button
             onClick={() => scroll('right')}
             style={{

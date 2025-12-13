@@ -5,11 +5,15 @@
 /* Base Styles */
 html {
   scroll-behavior: smooth;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 body {
   background-color: #000;
   color: #fff;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 /* Scrollbar hide utility */

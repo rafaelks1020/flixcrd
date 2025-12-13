@@ -40,6 +40,8 @@ export default function SolicitacoesClient({ isLoggedIn, isAdmin }: Solicitacoes
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
 
+  const [isMobile, setIsMobile] = useState(false);
+
   const [mode, setMode] = useState<"tmdb" | "manual">("tmdb");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
@@ -60,6 +62,21 @@ export default function SolicitacoesClient({ isLoggedIn, isAdmin }: Solicitacoes
     if (!isLoggedIn) return;
     loadRequests();
   }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 768px)");
+    const update = () => setIsMobile(Boolean(mq.matches));
+    update();
+
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", update);
+      return () => mq.removeEventListener("change", update);
+    }
+
+    mq.addListener(update);
+    return () => mq.removeListener(update);
+  }, []);
 
   useEffect(() => {
     if (!error && !success) return;
@@ -275,7 +292,7 @@ export default function SolicitacoesClient({ isLoggedIn, isAdmin }: Solicitacoes
     <div style={{ minHeight: "100vh", background: "#000", color: "#fff" }}>
       <PremiumNavbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
 
-      <div style={{ maxWidth: "1360px", margin: "0 auto", padding: "100px 4% 60px" }}>
+      <div style={{ maxWidth: "1360px", margin: "0 auto", padding: isMobile ? "78px 16px 44px" : "100px 4% 60px" }}>
         <h1 style={{ fontSize: "clamp(2rem, 4vw, 3rem)", fontWeight: 700, marginBottom: 24 }}>
           Solicitações de Conteúdo
         </h1>
@@ -289,8 +306,9 @@ export default function SolicitacoesClient({ isLoggedIn, isAdmin }: Solicitacoes
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)",
-            columnGap: 40,
+            gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 3fr) minmax(0, 2fr)",
+            columnGap: isMobile ? 0 : 40,
+            rowGap: isMobile ? 24 : 0,
             alignItems: "flex-start",
           }}
         >

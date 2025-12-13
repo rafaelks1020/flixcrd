@@ -134,6 +134,7 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [internalNote, setInternalNote] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -141,6 +142,21 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isLoggedIn]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 768px)");
+    const update = () => setIsMobile(Boolean(mq.matches));
+    update();
+
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", update);
+      return () => mq.removeEventListener("change", update);
+    }
+
+    mq.addListener(update);
+    return () => mq.removeListener(update);
+  }, []);
 
   async function load() {
     try {
@@ -188,7 +204,7 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
     <div style={{ minHeight: "100vh", background: "#000", color: "#fff" }}>
       <PremiumNavbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
 
-      <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "100px 4% 60px" }}>
+      <div style={{ maxWidth: "1100px", margin: "0 auto", padding: isMobile ? "78px 16px 44px" : "100px 4% 60px" }}>
         <button
           type="button"
           onClick={() => router.back()}
@@ -213,7 +229,7 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
             Solicitação não encontrada.
           </p>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "260px 1fr", gap: isMobile ? 16 : 24 }}>
             {/* Coluna esquerda: poster + dados principais */}
             <div>
               <div

@@ -14,6 +14,8 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -21,6 +23,32 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const mq = window.matchMedia("(max-width: 768px)");
+
+    const update = () => {
+      setIsMobile(Boolean(mq.matches));
+    };
+
+    update();
+
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", update);
+      return () => mq.removeEventListener("change", update);
+    }
+
+    mq.addListener(update);
+    return () => mq.removeListener(update);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileMenuOpen(false);
+    }
+  }, [isMobile]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,8 +67,8 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
         left: 0,
         right: 0,
         zIndex: 1000,
-        padding: '0 4%',
-        height: '68px',
+        padding: isMobile ? '0 16px' : '0 4%',
+        height: isMobile ? '56px' : '68px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -52,12 +80,40 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
       }}
     >
       {/* Left Section: Logo + Navigation */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '40px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '14px' : '40px' }}>
+        {isLoggedIn && isMobile && (
+          <button
+            type="button"
+            onClick={() => {
+              setMobileMenuOpen((prev) => !prev);
+              setSearchOpen(false);
+              setProfileMenuOpen(false);
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '8px',
+              marginLeft: '-8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+            }}
+            aria-label="Abrir menu"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+        )}
         {/* Logo */}
         <Link href="/" style={{ textDecoration: 'none' }}>
           <span
             style={{
-              fontSize: '28px',
+              fontSize: isMobile ? '22px' : '28px',
               fontWeight: 800,
               background: 'linear-gradient(135deg, #e50914 0%, #b81d24 100%)',
               WebkitBackgroundClip: 'text',
@@ -70,7 +126,7 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
         </Link>
 
         {/* Navigation Links */}
-        {isLoggedIn && (
+        {isLoggedIn && !isMobile && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
             {[
               { href: '/', label: 'Início' },
@@ -99,11 +155,11 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
       </div>
 
       {/* Right Section: Search + Admin + Profile */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '20px' }}>
         {/* Search */}
         {isLoggedIn && (
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-            {searchOpen ? (
+            {searchOpen && !isMobile ? (
               <form onSubmit={handleSearch} style={{ display: 'flex', alignItems: 'center' }}>
                 <input
                   type="text"
@@ -157,7 +213,15 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
               </form>
             ) : (
               <button
-                onClick={() => setSearchOpen(true)}
+                onClick={() => {
+                  if (isMobile) {
+                    setMobileMenuOpen((prev) => !prev);
+                    setProfileMenuOpen(false);
+                    setSearchOpen(false);
+                    return;
+                  }
+                  setSearchOpen(true);
+                }}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -182,7 +246,7 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
         )}
 
         {/* Admin Badge */}
-        {isAdmin && (
+        {isAdmin && !isMobile && (
           <Link
             href="/admin"
             style={{
@@ -340,6 +404,125 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
           </Link>
         )}
       </div>
+
+      {isLoggedIn && isMobile && mobileMenuOpen && (
+        <>
+          <div
+            style={{
+              position: 'fixed',
+              left: 0,
+              right: 0,
+              top: '56px',
+              bottom: 0,
+              background: 'rgba(0,0,0,0.55)',
+              zIndex: 900,
+            }}
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <div
+            style={{
+              position: 'fixed',
+              left: 0,
+              right: 0,
+              top: '56px',
+              background: 'rgba(0,0,0,0.97)',
+              borderTop: '1px solid rgba(255,255,255,0.12)',
+              padding: '14px 16px 18px',
+              zIndex: 901,
+            }}
+          >
+            <form
+              onSubmit={(e) => {
+                handleSearch(e);
+                setMobileMenuOpen(false);
+              }}
+              style={{ position: 'relative', marginBottom: '14px' }}
+            >
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar..."
+                style={{
+                  width: '100%',
+                  padding: '12px 14px',
+                  paddingLeft: '40px',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.16)',
+                  borderRadius: '10px',
+                  color: '#fff',
+                  fontSize: '15px',
+                  outline: 'none',
+                }}
+              />
+              <svg
+                style={{
+                  position: 'absolute',
+                  left: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: '18px',
+                  height: '18px',
+                  color: 'rgba(255,255,255,0.7)',
+                }}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </form>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[
+                { href: '/', label: 'Início' },
+                { href: '/browse', label: 'Catálogo' },
+                { href: '/solicitacoes', label: 'Solicitações' },
+                { href: '/profiles', label: 'Perfis' },
+                { href: '/subscribe', label: 'Minha Assinatura' },
+                { href: '/payments', label: 'Pagamentos' },
+                { href: '/settings', label: 'Configurações' },
+              ].map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  style={{
+                    color: 'rgba(255,255,255,0.9)',
+                    fontSize: '15px',
+                    fontWeight: 600,
+                    textDecoration: 'none',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.10)',
+                  }}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {item.label}
+                </Link>
+              ))}
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  style={{
+                    color: 'rgba(255,255,255,0.95)',
+                    fontSize: '15px',
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    background: 'rgba(229, 9, 20, 0.14)',
+                    border: '1px solid rgba(229, 9, 20, 0.35)',
+                  }}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Admin
+                </Link>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </nav>
   );
 }

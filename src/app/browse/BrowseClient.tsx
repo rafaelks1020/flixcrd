@@ -35,7 +35,21 @@ export default function BrowseClient({
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
   const observerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 768px)");
+    const update = () => setIsMobile(Boolean(mq.matches));
+    update();
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", update);
+      return () => mq.removeEventListener("change", update);
+    }
+    mq.addListener(update);
+    return () => mq.removeListener(update);
+  }, []);
 
   const loadTitles = useCallback(async (pageToLoad: number, reset: boolean) => {
     setLoading(true);
@@ -110,9 +124,9 @@ export default function BrowseClient({
     <div style={{ minHeight: '100vh', background: '#000', color: '#fff' }}>
       <PremiumNavbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
 
-      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '100px 4% 60px' }}>
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: isMobile ? '78px 16px 44px' : '100px 4% 60px' }}>
         {/* Header */}
-        <div style={{ marginBottom: '40px' }}>
+        <div style={{ marginBottom: isMobile ? '24px' : '40px' }}>
           <h1 style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', fontWeight: 700, marginBottom: '24px' }}>
             Catálogo
           </h1>
@@ -174,7 +188,7 @@ export default function BrowseClient({
               <option value="name">Nome (A-Z)</option>
             </select>
 
-            <span style={{ marginLeft: 'auto', fontSize: '14px', color: 'rgba(255,255,255,0.5)' }}>
+            <span style={{ marginLeft: isMobile ? 0 : 'auto', width: isMobile ? '100%' : undefined, fontSize: '14px', color: 'rgba(255,255,255,0.5)' }}>
               {titles.length} título{titles.length !== 1 ? "s" : ""}
             </span>
           </div>
@@ -182,13 +196,13 @@ export default function BrowseClient({
 
         {/* Grid */}
         {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(140px, 1fr))' : 'repeat(auto-fill, minmax(180px, 1fr))', gap: isMobile ? '14px' : '20px' }}>
             {[...Array(18)].map((_, i) => (
               <div key={i} style={{ aspectRatio: '2/3', background: '#1a1a1a', borderRadius: '4px', animation: 'pulse 2s infinite' }} />
             ))}
           </div>
         ) : titles.length > 0 ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(140px, 1fr))' : 'repeat(auto-fill, minmax(180px, 1fr))', gap: isMobile ? '14px' : '20px' }}>
             {titles.map((title) => (
               <Link
                 key={title.id}
@@ -203,7 +217,7 @@ export default function BrowseClient({
                   textDecoration: 'none',
                   color: '#fff',
                   transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-                  transform: hoveredId === title.id ? 'scale(1.05)' : 'scale(1)',
+                  transform: !isMobile && hoveredId === title.id ? 'scale(1.05)' : 'scale(1)',
                   boxShadow: hoveredId === title.id ? '0 10px 30px rgba(0,0,0,0.5)' : 'none',
                 }}
               >

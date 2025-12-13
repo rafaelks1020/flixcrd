@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 interface PremiumTitleCardProps {
@@ -32,6 +32,38 @@ export default function PremiumTitleCard({
   void _backdropUrl;
   const [isHovered, setIsHovered] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [isTouch, setIsTouch] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const mqTouch = window.matchMedia("(hover: none), (pointer: coarse)");
+    const mqMobile = window.matchMedia("(max-width: 768px)");
+
+    const update = () => {
+      setIsTouch(Boolean(mqTouch.matches));
+      setIsMobile(Boolean(mqMobile.matches));
+    };
+
+    update();
+
+    if (typeof mqTouch.addEventListener === "function") {
+      mqTouch.addEventListener("change", update);
+      mqMobile.addEventListener("change", update);
+      return () => {
+        mqTouch.removeEventListener("change", update);
+        mqMobile.removeEventListener("change", update);
+      };
+    }
+
+    mqTouch.addListener(update);
+    mqMobile.addListener(update);
+    return () => {
+      mqTouch.removeListener(update);
+      mqMobile.removeListener(update);
+    };
+  }, []);
 
   const quality = rating && rating > 8 ? "4K" : rating && rating > 6 ? "HD" : "SD";
   const isNew = showNewBadge || (year && year >= new Date().getFullYear() - 1);
@@ -42,11 +74,11 @@ export default function PremiumTitleCard({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       style={{
-        minWidth: '220px',
-        width: '220px',
+        minWidth: isMobile ? '150px' : '220px',
+        width: isMobile ? '150px' : '220px',
         transition: 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
-        transform: isHovered ? 'scale(1.15)' : 'scale(1)',
-        zIndex: isHovered ? 50 : 1,
+        transform: !isTouch && isHovered ? 'scale(1.15)' : 'scale(1)',
+        zIndex: !isTouch && isHovered ? 50 : 1,
         position: 'relative',
       }}
     >
@@ -78,7 +110,7 @@ export default function PremiumTitleCard({
                   height: '100%',
                   objectFit: 'cover',
                   transition: 'transform 0.4s ease',
-                  transform: isHovered ? 'scale(1.1)' : 'scale(1)',
+                  transform: !isTouch && isHovered ? 'scale(1.1)' : 'scale(1)',
                 }}
               />
             ) : (
@@ -174,10 +206,10 @@ export default function PremiumTitleCard({
                 right: 0,
                 background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 70%, transparent 100%)',
                 padding: '20px 12px 12px 12px',
-                transform: isHovered ? 'translateY(0)' : 'translateY(100%)',
-                opacity: isHovered ? 1 : 0,
+                transform: !isTouch && isHovered ? 'translateY(0)' : 'translateY(100%)',
+                opacity: !isTouch && isHovered ? 1 : 0,
                 transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                pointerEvents: isHovered ? 'auto' : 'none',
+                pointerEvents: !isTouch && isHovered ? 'auto' : 'none',
               }}
             >
               {/* Title */}

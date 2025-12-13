@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import Link from "next/link";
 import PremiumNavbar from "@/components/ui/PremiumNavbar";
 
@@ -91,6 +91,7 @@ export default function TitleDetailClient({
 }: TitleDetailClientProps) {
   const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
   const [selectedSeason, setSelectedSeason] = useState(seasons[0]?.seasonNumber || 1);
+  const [isMobile, setIsMobile] = useState(false);
 
   const castRowRef = useRef<HTMLDivElement | null>(null);
   const similarRowRef = useRef<HTMLDivElement | null>(null);
@@ -114,6 +115,21 @@ export default function TitleDetailClient({
     // Toggle favorite logic here
     setIsFavorite(!isFavorite);
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 768px)");
+    const update = () => setIsMobile(Boolean(mq.matches));
+    update();
+
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", update);
+      return () => mq.removeEventListener("change", update);
+    }
+
+    mq.addListener(update);
+    return () => mq.removeListener(update);
+  }, []);
 
   return (
     <div style={{ minHeight: '100vh', background: '#000', color: '#fff' }}>
@@ -139,7 +155,7 @@ export default function TitleDetailClient({
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #000 0%, transparent 50%)' }} />
 
         {/* Content */}
-        <div style={{ position: 'relative', zIndex: 10, display: 'flex', alignItems: 'flex-end', minHeight: '70vh', padding: '0 4%', paddingBottom: '60px', paddingTop: '100px', gap: '40px' }}>
+        <div style={{ position: 'relative', zIndex: 10, display: 'flex', alignItems: 'flex-end', minHeight: '70vh', padding: isMobile ? '0 16px' : '0 4%', paddingBottom: isMobile ? '32px' : '60px', paddingTop: isMobile ? '78px' : '100px', gap: isMobile ? '20px' : '40px' }}>
           {/* Poster */}
           <div style={{ flexShrink: 0, width: '280px', display: 'none' }} className="md-show">
             {title.posterUrl ? (
@@ -230,16 +246,16 @@ export default function TitleDetailClient({
       </div>
 
       {/* Content Sections */}
-      <div style={{ padding: '40px 4%' }}>
+      <div style={{ padding: isMobile ? '28px 16px' : '40px 4%' }}>
         {/* Episodes */}
         {isSeries && seasons.length > 0 && (
           <section style={{ marginBottom: '60px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '12px' : '20px', marginBottom: isMobile ? '16px' : '24px' }}>
               <h2 style={{ fontSize: '24px', fontWeight: 700 }}>Episódios</h2>
               <select
                 value={selectedSeason}
                 onChange={(e) => setSelectedSeason(Number(e.target.value))}
-                style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', padding: '8px 16px', color: '#fff', fontSize: '14px', cursor: 'pointer' }}
+                style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', padding: '8px 16px', color: '#fff', fontSize: '14px', cursor: 'pointer', width: isMobile ? '100%' : undefined }}
               >
                 {seasons.map((s) => (
                   <option key={s.seasonNumber} value={s.seasonNumber}>Temporada {s.seasonNumber}</option>
@@ -252,11 +268,11 @@ export default function TitleDetailClient({
                 <Link
                   key={ep.id}
                   href={`/watch/${title.id}?episodeId=${ep.id}`}
-                  style={{ display: 'flex', gap: '16px', background: '#141414', borderRadius: '4px', overflow: 'hidden', textDecoration: 'none', color: '#fff', transition: 'background 0.2s' }}
+                  style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 0 : '16px', background: '#141414', borderRadius: '4px', overflow: 'hidden', textDecoration: 'none', color: '#fff', transition: 'background 0.2s' }}
                   onMouseOver={(e) => e.currentTarget.style.background = '#1a1a1a'}
                   onMouseOut={(e) => e.currentTarget.style.background = '#141414'}
                 >
-                  <div style={{ width: '180px', flexShrink: 0, position: 'relative' }}>
+                  <div style={{ width: isMobile ? '100%' : '180px', flexShrink: 0, position: 'relative' }}>
                     <div style={{ paddingBottom: '56.25%', background: '#0a0a0a' }}>
                       {ep.stillPath && (
                         <img src={ep.stillPath} alt={ep.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -268,7 +284,7 @@ export default function TitleDetailClient({
                       </div>
                     </div>
                   </div>
-                  <div style={{ padding: '16px', flex: 1 }}>
+                  <div style={{ padding: isMobile ? '12px' : '16px', flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
                       <span style={{ fontWeight: 600 }}>{ep.episodeNumber}. {ep.name}</span>
                       {ep.runtime && <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px' }}>{ep.runtime}min</span>}
