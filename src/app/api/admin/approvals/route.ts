@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || "PENDING";
 
-    const users = await prisma.user.findMany({
+    const usersRaw = await prisma.user.findMany({
       where: {
         approvalStatus: status as any,
         role: "USER", // Não listar admins
@@ -42,24 +42,42 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    const users = usersRaw.map((u: any) => {
+      const { Subscription, ...rest } = u;
+      return {
+        ...rest,
+        subscription: Subscription ?? null,
+      };
+    });
+
     // Contar por status
     const counts = await prisma.user.groupBy({
       by: ["approvalStatus"],
       where: { role: "USER" },
-      _count: true,
+      _count: {
+        _all: true,
+      },
     });
 
     const stats = {
-      pending: counts.find((c) => c.approvalStatus === "PENDING")?._count || 0,
-      approved: counts.find((c) => c.approvalStatus === "APPROVED")?._count || 0,
-      rejected: counts.find((c) => c.approvalStatus === "REJECTED")?._count || 0,
+      pending: counts.find((c) => c.approvalStatus === "PENDING")?._count?._all || 0,
+      approved: counts.find((c) => c.approvalStatus === "APPROVED")?._count?._all || 0,
+      rejected: counts.find((c) => c.approvalStatus === "REJECTED")?._count?._all || 0,
     };
 
     return NextResponse.json({ users, stats });
   } catch (error) {
     console.error("Error fetching approvals:", error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : "Erro ao carregar aprovações";
+
     return NextResponse.json(
-      { error: "Erro ao carregar aprovações" },
+      { error: message || "Erro ao carregar aprovações" },
       { status: 500 }
     );
   }
@@ -220,8 +238,16 @@ Em caso de dúvidas, responda este email ou entre em contato com o suporte.
     }
   } catch (error) {
     console.error("Error processing approval:", error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : "Erro ao processar aprovação";
+
     return NextResponse.json(
-      { error: "Erro ao processar aprovação" },
+      { error: message || "Erro ao processar aprovação" },
       { status: 500 }
     );
   }
