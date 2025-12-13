@@ -37,7 +37,7 @@ interface SubscriptionData {
   };
 }
 
-type BillingType = 'PIX' | 'CREDIT_CARD';
+type BillingType = 'PIX' | 'BOLETO' | 'CREDIT_CARD';
 type PlanKey = 'BASIC' | 'DUO';
 
 export default function SubscribePage() {
@@ -67,14 +67,17 @@ export default function SubscribePage() {
   // Preços calculados por plano (mantidos em sync com lib/asaas.ts)
   const planPrices: Record<PlanKey, {
     PIX: { base: number; fee: number; total: number };
+    BOLETO: { base: number; fee: number; total: number };
     CREDIT_CARD: { base: number; fee: number; total: number };
   }> = {
     BASIC: {
       PIX: { base: 10.00, fee: 0.99, total: 10.99 },
+      BOLETO: { base: 10.00, fee: 1.99, total: 11.99 },
       CREDIT_CARD: { base: 10.00, fee: 0.86, total: 10.86 },
     },
     DUO: {
       PIX: { base: 14.99, fee: 0.99, total: 15.98 },
+      BOLETO: { base: 14.99, fee: 1.99, total: 16.98 },
       CREDIT_CARD: { base: 14.99, fee: 1.05, total: 16.04 },
     },
   };
@@ -372,6 +375,64 @@ export default function SubscribePage() {
     );
   }
 
+  // Se já gerou um pagamento BOLETO pendente
+  if (paymentData?.billingType === 'BOLETO' && paymentData.status === 'PENDING' && paymentData.invoiceUrl) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-black to-gray-900 py-12 px-4">
+        <div className="max-w-lg mx-auto">
+          <div className="bg-gray-800/50 backdrop-blur rounded-2xl p-8 border border-gray-700">
+            <div className="text-center mb-6">
+              <h1 className="text-2xl font-bold text-white mb-2">Pagamento via Boleto</h1>
+              <p className="text-gray-400">Abra o boleto para pagamento</p>
+            </div>
+
+            <div className="text-center mb-4">
+              <div className="text-gray-400 text-sm mb-1">Valor total:</div>
+              <span className="text-4xl font-bold text-white">
+                R$ {paymentData.value.toFixed(2).replace('.', ',')}
+              </span>
+              <div className="text-gray-500 text-xs mt-1">
+                Vencimento: {new Date(paymentData.dueDate).toLocaleDateString('pt-BR')}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <a
+                href={paymentData.invoiceUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full py-3 text-center bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
+              >
+                📄 Abrir Boleto
+              </a>
+              <button
+                onClick={fetchSubscription}
+                className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors"
+              >
+                Verificar Pagamento
+              </button>
+              <button
+                onClick={() => {
+                  setPaymentData(null);
+                  setPricingInfo(null);
+                }}
+                className="w-full py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium rounded-lg transition-colors"
+              >
+                Voltar
+              </button>
+            </div>
+
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mt-6">
+              <p className="text-yellow-500 text-sm text-center">
+                ⏰ Após a confirmação do pagamento (até 3 dias úteis), sua assinatura será ativada automaticamente.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Tela de escolha de pagamento
   return (
     <div className="min-h-screen bg-gradient-to-b from-zinc-950 via-black to-zinc-950 py-16 px-4">
@@ -521,59 +582,77 @@ export default function SubscribePage() {
         <div className="bg-zinc-900/80 backdrop-blur rounded-2xl p-6 border border-zinc-800 mb-6">
           <h3 className="text-lg font-semibold text-white mb-4">Forma de Pagamento</h3>
           
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <button
-              onClick={() => setBillingType('PIX')}
-              className={`p-5 rounded-xl border-2 transition-all duration-300 ${
-                billingType === 'PIX'
-                  ? 'border-green-500 bg-green-500/10 shadow-lg shadow-green-500/10'
-                  : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'
-              }`}
-            >
-              <div className="text-3xl mb-2">💠</div>
-              <div className="text-white font-semibold text-lg">PIX</div>
-              <div className="text-green-400 text-xl font-bold mt-1">
-                R$ {currentPrices.PIX.total.toFixed(2).replace('.', ',')}
-              </div>
-              <div className="text-zinc-500 text-xs mt-1">
-                Taxa: R$ {currentPrices.PIX.fee.toFixed(2).replace('.', ',')}
-              </div>
-            </button>
-            
-            <button
-              onClick={() => setBillingType('CREDIT_CARD')}
-              className={`p-5 rounded-xl border-2 transition-all duration-300 ${
-                billingType === 'CREDIT_CARD'
-                  ? 'border-blue-500 bg-blue-500/10 shadow-lg shadow-blue-500/10'
-                  : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'
-              }`}
-            >
-              <div className="text-3xl mb-2">💳</div>
-              <div className="text-white font-semibold text-lg">Cartão</div>
-              <div className="text-blue-400 text-xl font-bold mt-1">
-                R$ {currentPrices.CREDIT_CARD.total.toFixed(2).replace('.', ',')}
-              </div>
-              <div className="text-zinc-500 text-xs mt-1">
-                Taxa: R$ {currentPrices.CREDIT_CARD.fee.toFixed(2).replace('.', ',')}
-              </div>
-            </button>
-          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <button
+            onClick={() => setBillingType('PIX')}
+            className={`p-5 rounded-xl border-2 transition-all duration-300 ${
+              billingType === 'PIX'
+                ? 'border-green-500 bg-green-500/10 shadow-lg shadow-green-500/10'
+                : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'
+            }`}
+          >
+            <div className="text-3xl mb-2">💠</div>
+            <div className="text-white font-semibold text-lg">PIX</div>
+            <div className="text-green-400 text-xl font-bold mt-1">
+              R$ {currentPrices.PIX.total.toFixed(2).replace('.', ',')}
+            </div>
+            <div className="text-zinc-500 text-xs mt-1">
+              Taxa: R$ {currentPrices.PIX.fee.toFixed(2).replace('.', ',')}
+            </div>
+          </button>
+
+          <button
+            onClick={() => setBillingType('BOLETO')}
+            className={`p-5 rounded-xl border-2 transition-all duration-300 ${
+              billingType === 'BOLETO'
+                ? 'border-amber-500 bg-amber-500/10 shadow-lg shadow-amber-500/10'
+                : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'
+            }`}
+          >
+            <div className="text-3xl mb-2">📄</div>
+            <div className="text-white font-semibold text-lg">Boleto</div>
+            <div className="text-amber-400 text-xl font-bold mt-1">
+              R$ {currentPrices.BOLETO.total.toFixed(2).replace('.', ',')}
+            </div>
+            <div className="text-zinc-500 text-xs mt-1">
+              Taxa: R$ {currentPrices.BOLETO.fee.toFixed(2).replace('.', ',')}
+            </div>
+          </button>
+          
+          <button
+            onClick={() => setBillingType('CREDIT_CARD')}
+            className={`p-5 rounded-xl border-2 transition-all duration-300 ${
+              billingType === 'CREDIT_CARD'
+                ? 'border-blue-500 bg-blue-500/10 shadow-lg shadow-blue-500/10'
+                : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'
+            }`}
+          >
+            <div className="text-3xl mb-2">💳</div>
+            <div className="text-white font-semibold text-lg">Cartão</div>
+            <div className="text-blue-400 text-xl font-bold mt-1">
+              R$ {currentPrices.CREDIT_CARD.total.toFixed(2).replace('.', ',')}
+            </div>
+            <div className="text-zinc-500 text-xs mt-1">
+              Taxa: R$ {currentPrices.CREDIT_CARD.fee.toFixed(2).replace('.', ',')}
+            </div>
+          </button>
+        </div>
 
           {/* Formulário PIX */}
-          {billingType === 'PIX' && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-zinc-400 mb-2 block">CPF (opcional)</label>
-                <input
-                  type="text"
-                  value={cpf}
-                  onChange={(e) => setCpf(formatCpf(e.target.value))}
-                  placeholder="000.000.000-00"
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/50 transition-all"
-                />
-              </div>
+          {(billingType === 'PIX' || billingType === 'BOLETO') && (
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm text-zinc-400 mb-2 block">CPF (opcional)</label>
+              <input
+                type="text"
+                value={cpf}
+                onChange={(e) => setCpf(formatCpf(e.target.value))}
+                placeholder="000.000.000-00"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/50 transition-all"
+              />
             </div>
-          )}
+          </div>
+        )}
 
           {/* Formulário Cartão */}
           {billingType === 'CREDIT_CARD' && (
@@ -684,7 +763,7 @@ export default function SubscribePage() {
                 R$ {currentPrices[billingType].total.toFixed(2).replace('.', ',')}
               </div>
               <div className="text-zinc-500 text-xs mt-1">
-                {currentPlanLabel} + taxa {billingType === 'PIX' ? 'PIX' : 'cartão'}
+                {currentPlanLabel} + taxa {billingType === 'PIX' ? 'PIX' : billingType === 'BOLETO' ? 'boleto' : 'cartão'}
               </div>
             </div>
             <div className="text-right text-sm text-zinc-400">

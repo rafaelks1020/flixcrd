@@ -3,11 +3,27 @@
  * API Docs: https://docs.asaas.com/
  */
 
-const ASAAS_API_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://api.asaas.com/v3'
-  : 'https://sandbox.asaas.com/api/v3';
+const ASAAS_API_KEY =
+  process.env.ASAAS_API_KEY ||
+  (process.env.NODE_ENV === 'production'
+    ? process.env.ASAAS_KEY_PRODUCTION || process.env.ASAAS_KEY_PROD
+    : process.env.ASAAS_KEY_SANDBOX);
 
-const ASAAS_API_KEY = process.env.ASAAS_KEY_SANDBOX;
+const DEFAULT_ASAAS_API_URL =
+  process.env.NODE_ENV === 'production'
+    ? 'https://api.asaas.com/v3'
+    : 'https://sandbox.asaas.com/api/v3';
+
+function inferAsaasApiUrlFromKey(key: string | undefined): string | null {
+  if (!key) return null;
+  const k = key.toLowerCase();
+  if (k.includes('_hmlg_') || k.includes('hmlg')) return 'https://sandbox.asaas.com/api/v3';
+  if (k.includes('_prod_') || k.includes('prod')) return 'https://api.asaas.com/v3';
+  return null;
+}
+
+const ASAAS_API_URL =
+  process.env.ASAAS_API_URL || inferAsaasApiUrlFromKey(ASAAS_API_KEY) || DEFAULT_ASAAS_API_URL;
 
 interface AsaasCustomer {
   id: string;
@@ -91,7 +107,7 @@ async function asaasRequest<T>(
   options: RequestInit = {}
 ): Promise<T> {
   if (!ASAAS_API_KEY) {
-    throw new Error('ASAAS_KEY_SANDBOX não configurada');
+    throw new Error('Chave do Asaas não configurada (ASAAS_API_KEY/ASAAS_KEY_PROD/ASAAS_KEY_SANDBOX)');
   }
 
   const response = await fetch(`${ASAAS_API_URL}${endpoint}`, {

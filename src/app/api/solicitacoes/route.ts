@@ -12,11 +12,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
+    const scope = request.nextUrl.searchParams.get("scope");
+    const where =
+      scope === "all"
+        ? {
+            OR: [
+              { userId: user.id },
+              {
+                RequestFollower: {
+                  some: {
+                    userId: user.id,
+                  },
+                },
+              },
+            ],
+          }
+        : { userId: user.id };
+
     const requests = await prisma.request.findMany({
-      where: { userId: user.id },
+      where,
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
+        userId: true,
         title: true,
         type: true,
         imdbId: true,

@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Criar registro de pagamento
-    await prisma.payment.create({
+    const dbPayment = await prisma.payment.create({
       data: {
         subscriptionId: subscription.id,
         asaasPaymentId: payment.id,
@@ -175,11 +175,17 @@ export async function POST(request: NextRequest) {
         billingType,
         dueDate: new Date(dueDate),
         paymentDate: isCardApproved ? now : null,
-        invoiceUrl: payment.invoiceUrl || payment.bankSlipUrl,
+        invoiceUrl:
+          billingType === 'BOLETO'
+            ? (payment.bankSlipUrl || payment.invoiceUrl)
+            : null,
         pixQrCode: pixData?.encodedImage,
         pixCopiaECola: pixData?.payload,
       },
     });
+
+    const origin = new URL(request.url).origin;
+    const invoiceProxyUrl = `${origin}/api/payments/${dbPayment.id}/invoice`;
 
     // Enviar email de confirmação para o usuário
     try {
@@ -264,7 +270,7 @@ Após o pagamento, sua assinatura será ativada automaticamente em alguns minuto
           context: {
             value: pricing.totalPrice,
             dueDate,
-            boletoUrl: payment.bankSlipUrl,
+            boletoUrl: invoiceProxyUrl,
           },
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -277,7 +283,7 @@ Após o pagamento, sua assinatura será ativada automaticamente em alguns minuto
                 <p><strong>Vencimento:</strong> ${new Date(dueDate).toLocaleDateString('pt-BR')}</p>
               </div>
               <p style="text-align: center;">
-                <a href="${payment.bankSlipUrl}" 
+                <a href="${invoiceProxyUrl}" 
                    style="background-color: #e50914; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
                   📄 Visualizar Boleto
                 </a>
@@ -298,7 +304,7 @@ Pagamento via Boleto
 Valor: ${planPrice}
 Vencimento: ${new Date(dueDate).toLocaleDateString('pt-BR')}
 
-Acesse o boleto: ${payment.bankSlipUrl}
+Acesse o boleto: ${invoiceProxyUrl}
 
 Após a confirmação do pagamento (até 3 dias úteis), sua assinatura será ativada automaticamente.
           `,
@@ -379,12 +385,12 @@ Aproveite todo o conteúdo disponível na plataforma!
         feeDescription: pricing.feeDescription,
       },
       payment: {
-        id: payment.id,
+        id: dbPayment.id,
         status: payment.status,
         value: payment.value,
         dueDate: payment.dueDate,
         billingType,
-        invoiceUrl: payment.invoiceUrl || payment.bankSlipUrl,
+        invoiceUrl: dbPayment.invoiceUrl ? `/api/payments/${dbPayment.id}/invoice` : null,
         pix: pixData ? {
           qrCode: pixData.encodedImage,
           copiaECola: pixData.payload,
@@ -437,11 +443,17 @@ export async function GET() {
       subscription.currentPeriodEnd && 
       subscription.currentPeriodEnd > now;
 
+    const payments = ((subscription as any).Payment ?? []).map((p: any) => ({
+      ...p,
+      invoiceUrl: p.invoiceUrl ? `/api/payments/${p.id}/invoice` : null,
+    }));
+
     return NextResponse.json({
       hasSubscription: true,
       isActive,
       subscription: {
         ...subscription,
+        payments,
         daysRemaining: isActive && subscription.currentPeriodEnd
           ? Math.ceil((subscription.currentPeriodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
           : 0,

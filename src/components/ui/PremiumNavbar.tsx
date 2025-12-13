@@ -279,6 +279,7 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
                     { href: '/profiles', label: 'Trocar Perfil' },
                     { href: '/settings', label: 'Configurações' },
                     { href: '/subscribe', label: '💳 Minha Assinatura' },
+                    { href: '/payments', label: '🧾 Pagamentos' },
                   ].map((item) => (
                     <Link
                       key={item.href}

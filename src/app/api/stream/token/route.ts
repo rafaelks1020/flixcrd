@@ -39,7 +39,13 @@ export async function POST(request: NextRequest) {
 
     // Verificar se pode assistir (admin ou assinatura ativa)
     const isAdmin = user.role === "ADMIN";
-    const hasActiveSubscription = user.Subscription?.status === "active";
+    const now = new Date();
+    const hasActiveSubscription = Boolean(
+      user.Subscription &&
+        user.Subscription.status === "ACTIVE" &&
+        user.Subscription.currentPeriodEnd &&
+        user.Subscription.currentPeriodEnd > now,
+    );
     
     if (!isAdmin && !hasActiveSubscription) {
       return NextResponse.json(
