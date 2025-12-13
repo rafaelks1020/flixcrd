@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 
 import { prisma } from "@/lib/prisma";
 
-const JWT_SECRET = process.env.NEXTAUTH_SECRET || "fallback-secret";
+const JWT_SECRET = process.env.NEXTAUTH_SECRET;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,6 +18,13 @@ export async function OPTIONS() {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!JWT_SECRET) {
+      return NextResponse.json(
+        { error: "NEXTAUTH_SECRET não configurado" },
+        { status: 500, headers: corsHeaders },
+      );
+    }
+
     const { email, password } = await request.json();
 
     if (!email || !password) {

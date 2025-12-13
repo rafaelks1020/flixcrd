@@ -179,6 +179,13 @@ export default function Navbar({ isLoggedIn, isAdmin, onSearch: _onSearch }: Nav
                         >
                           💳 Minha Assinatura
                         </Link>
+                        <Link
+                          href="/payments"
+                          className="block rounded-md px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+                          onClick={() => setShowProfileMenu(false)}
+                        >
+                          🧾 Pagamentos
+                        </Link>
                         <hr className="my-1 border-zinc-800" />
                         <Link
                           href="/api/auth/signout"

@@ -9,6 +9,166 @@ Regras de uso:
 
 ---
 
+## 2025-12-12 – /subscribe quebrando build TypeScript (JSX dentro de useEffect)
+
+- **Sintoma**  
+  `next build` falhava com erro de TypeScript informando que o callback do `useEffect` estava retornando `JSX.Element`.
+
+- **Causa raiz**  
+  Um bloco de UI (tela de boleto pendente) foi inserido por engano dentro do `useEffect`, gerando `return (<div ... />)` no callback do hook.
+
+- **Correção aplicada**  
+  Removemos o bloco de renderização do `useEffect` e mantivemos a tela de boleto pendente apenas na seção normal de render (condicional antes do `return` principal).
+
+- **Arquivos envolvidos**  
+  - `src/app/subscribe/page.tsx`
+
+- **Status**: Resolvido.
+
+---
+
+## 2025-12-12 – App mobile: erro de tipagem ao navegar para tela de Pagamentos
+
+- **Sintoma**  
+  TypeScript acusava erro ao chamar `router.push('/payments')` (tipagem `Href<...>`), impedindo build/typecheck.
+
+- **Causa raiz**  
+  Tipagem de rotas do Expo Router não estava aceitando a string literal de navegação naquele ponto do código.
+
+- **Correção aplicada**  
+  Ajustamos a navegação no item “Assinatura” do perfil para abrir a rota de Pagamentos usando cast compatível.
+
+- **Arquivos envolvidos**  
+  - `flixcrd-app/app/(tabs)/profile.tsx`
+
+- **Status**: Resolvido.
+
+---
+
+## 2025-12-12 – App mobile: `tsc` falhando (router.push em rotas dinâmicas + style inválido)
+
+- **Sintoma**  
+  `npx tsc -p tsconfig.json --noEmit` falhava com erros de tipagem ao navegar com `router.push("/watch/..." )` e em um `style={[..., error && ...]}`.
+
+- **Causa raiz**  
+  - Tipagem do Expo Router não aceitou template strings em algumas chamadas de `router.push`.
+  - `error && styles.inputError` podia retornar `""` (string vazia) e isso não é um `ViewStyle` válido.
+
+- **Correção aplicada**  
+  - Ajustamos as chamadas para `router.push(... as any)` onde necessário.
+  - Ajustamos o style para `error ? styles.inputError : undefined`.
+
+- **Arquivos envolvidos**  
+  - `flixcrd-app/app/(tabs)/home.tsx`
+  - `flixcrd-app/app/title/[id].tsx`
+  - `flixcrd-app/src/contexts/NotificationContext.tsx`
+  - `flixcrd-app/src/components/ui/Input.tsx`
+
+- **Status**: Resolvido.
+
+---
+
+## 2025-12-12 – Admin: histórico de pagamentos (sem entrar na conta do usuário)
+
+- **Contexto**  
+  Necessidade de consultar pagamentos de qualquer usuário pelo painel admin, sem depender de login na conta do cliente.
+
+- **Mudança aplicada**  
+  - Criada rota `GET /api/admin/payments` (somente ADMIN) com busca e filtros (q/email/nome/asaasPaymentId/userId/status/billingType/período) e paginação.
+  - Criada página `/admin/payments` com tabela de pagamentos, links de boleto/fatura, copiar PIX e copiar `asaasPaymentId`.
+  - Adicionado item “Pagamentos” no menu lateral do Admin.
+  - Ajustado filtro Prisma para relações usando `is` (evita erro em runtime ao filtrar por `Subscription`/`User`).
+
+- **Arquivos envolvidos**  
+  - `src/app/api/admin/payments/route.ts`
+  - `src/app/admin/payments/page.tsx`
+  - `src/app/admin/layout.tsx`
+
+- **Status**: Resolvido.
+
+---
+
+## 2025-12-12 – Pagamentos white label: boleto/fatura via proxy no domínio
+
+- **Objetivo**  
+  Evitar exposição direta do Asaas na experiência do usuário (links e labels), servindo boleto/fatura por endpoint próprio e padronizando URLs.
+
+- **Mudança aplicada**  
+  - Criado endpoint `GET /api/payments/[paymentId]/invoice` que valida permissões (dono ou ADMIN) e faz proxy do boleto/fatura pelo domínio do app.
+  - `POST /api/subscription/create` passou a:
+    - Persistir o `Payment` no banco em variável (`dbPayment`).
+    - Retornar `payment.id` como **ID interno** (Prisma) para o frontend.
+    - Retornar `invoiceUrl` como `/api/payments/{paymentId}/invoice`.
+    - Enviar email de boleto usando o link do próprio domínio.
+  - `GET /api/payments` e `/payments` passaram a expor `invoiceUrl` apontando para o proxy.
+  - UI `/payments` deixou de exibir explicitamente "Asaas: {id}".
+
+- **Arquivos envolvidos**  
+  - `src/app/api/payments/[paymentId]/invoice/route.ts`
+  - `src/app/api/subscription/create/route.ts`
+  - `src/app/api/payments/route.ts`
+  - `src/app/payments/page.tsx`
+  - `src/app/payments/PaymentsClient.tsx`
+
+- **Status**: Parcial (white label total ainda depende de como o PDF do boleto é gerado pelo gateway).
+
+---
+
+## 2025-12-12 – App mobile: Solicitações (criar/seguir) + gating do player + stream token (POST)
+
+- **Contexto**  
+  Completar o módulo de Solicitações no app (criar + acompanhar) e evitar playback sem assinatura/perfil selecionado.
+
+- **Causa raiz**  
+  - O app não tinha UI para criar Solicitações nem ação de seguir/acompanhar.
+  - O app tinha chamada `getStreamToken()` como GET/sem body, porém o backend exige `POST` com `contentType` e `contentId`.
+  - Era possível tentar chegar em playback sem ter perfil selecionado e sem assinatura ativa (UX ruim). Além disso, as rotas de playback de `titles/episodes` não faziam o mesmo gating de assinatura da rota `/api/stream/token`.
+
+- **Correção aplicada**  
+  - App:
+    - Criada tela `requests/create` para enviar uma solicitação.
+    - Implementada ação de seguir/acompanhar solicitação no detalhe.
+    - Lista de solicitações passou a incluir também solicitações seguidas usando `GET /api/solicitacoes?scope=all`.
+    - Player passou a bloquear antes de carregar o vídeo se não houver perfil selecionado e se a assinatura não estiver ativa (`/api/subscription/check`).
+    - `getStreamToken` foi ajustado para `POST` com body e tipagem compatível com a resposta do backend.
+  - Backend:
+    - `GET /api/solicitacoes` passou a aceitar `scope=all` (minhas + seguidas).
+    - Rotas `/api/titles/[id]/playback` e `/api/episodes/[id]/playback` passaram a exigir assinatura ativa (ou ADMIN), evitando bypass.
+
+- **Arquivos envolvidos**  
+  - `flixcrd-app/src/services/api.ts`
+  - `flixcrd-app/src/types/index.ts`
+  - `flixcrd-app/app/(tabs)/requests.tsx`
+  - `flixcrd-app/app/requests/create.tsx`
+  - `flixcrd-app/app/requests/[id].tsx`
+  - `flixcrd-app/app/watch/[id].tsx`
+  - `src/app/api/solicitacoes/route.ts`
+  - `src/app/api/titles/[id]/playback/route.ts`
+  - `src/app/api/episodes/[id]/playback/route.ts`
+
+- **Status**: Resolvido.
+
+---
+
+## 2025-12-12 – Proxy de boleto/PIX em localhost retornava HTML do gateway (erro de domínio/site key)
+
+- **Sintoma**  
+  Ao abrir o link white-label `/api/payments/{paymentId}/invoice` em ambiente local (ex.: `http://localhost:3001/...`), a tela exibia mensagem do gateway indicando que o host local não era permitido para a “site key/domínio”.
+
+- **Causa raiz**  
+  O proxy acabava repassando **páginas HTML do gateway** (ex.: `invoiceUrl`) em vez de servir o **PDF do boleto** (`bankSlipUrl`) ou uma UI própria. Essas páginas podem depender de validações de domínio e quebram em `localhost`.
+
+- **Correção aplicada**  
+  - Para **BOLETO**, o proxy passou a priorizar/servir somente o **PDF** (`bankSlipUrl`).
+  - Para **PIX**, o proxy passou a retornar uma **página HTML própria** (no domínio do app) com QR Code e Pix Copia e Cola.
+  - Na criação do pagamento, o campo `invoiceUrl` passou a preferir `bankSlipUrl` no caso de boleto e não salvar `invoiceUrl` do gateway para PIX/cartão.
+
+- **Arquivos envolvidos**  
+  - `src/app/api/payments/[paymentId]/invoice/route.ts`
+  - `src/app/api/subscription/create/route.ts`
+
+- **Status**: Resolvido.
+
 ## 2025-12-09 – Admin Catálogo não listava séries/animes corretamente
 
 - **Sintoma**  

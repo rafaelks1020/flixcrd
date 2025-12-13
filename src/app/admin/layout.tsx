@@ -54,6 +54,7 @@ const navSections: NavSection[] = [
     icon: "👥",
     items: [
       { href: "/admin/users", label: "Gerenciar", icon: "👤" },
+      { href: "/admin/payments", label: "Pagamentos", icon: "🧾" },
       { href: "/admin/approvals", label: "Aprovações", icon: "✅" },
       { href: "/admin/notifications", label: "Notificações", icon: "🔔" },
     ],

@@ -38,6 +38,28 @@ interface AsaasWebhookPayload {
 
 export async function POST(request: NextRequest) {
   try {
+    const expectedToken =
+      process.env.ASAAS_WEBHOOK_TOKEN || process.env.ASAAS_WEBHOOK_ACCESS_TOKEN;
+    const receivedToken = request.headers.get("asaas-access-token");
+
+    const mustValidate = process.env.NODE_ENV === "production" || Boolean(expectedToken);
+
+    if (mustValidate) {
+      if (!expectedToken) {
+        return NextResponse.json(
+          { error: "ASAAS_WEBHOOK_TOKEN não configurado" },
+          { status: 500 },
+        );
+      }
+
+      if (!receivedToken || receivedToken !== expectedToken) {
+        return NextResponse.json(
+          { error: "Webhook não autorizado" },
+          { status: 401 },
+        );
+      }
+    }
+
     const payload: AsaasWebhookPayload = await request.json();
     
     console.log('[Webhook Asaas]', JSON.stringify(payload, null, 2));
