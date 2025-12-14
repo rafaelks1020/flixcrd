@@ -53,6 +53,7 @@ export async function GET(request: NextRequest) {
       type: true,
       originalName: true,
       overview: true,
+      tagline: true,
       hlsPath: true,
     },
   });

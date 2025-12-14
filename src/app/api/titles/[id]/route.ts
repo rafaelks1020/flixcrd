@@ -37,6 +37,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       name,
       originalName,
       overview,
+      tagline,
       releaseDate,
       posterUrl,
       backdropUrl,
@@ -51,6 +52,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (name !== undefined) data.name = name;
     if (originalName !== undefined) data.originalName = originalName;
     if (overview !== undefined) data.overview = overview;
+    if (tagline !== undefined) data.tagline = tagline;
     if (releaseDate !== undefined)
       data.releaseDate = releaseDate ? new Date(releaseDate) : null;
     if (posterUrl !== undefined) data.posterUrl = posterUrl;

@@ -15,6 +15,7 @@ interface Title {
   name: string;
   originalName: string | null;
   overview: string | null;
+  tagline: string | null;
   releaseDate: string | null;
   posterUrl: string | null;
   backdropUrl: string | null;
@@ -53,12 +54,14 @@ export default function AdminCatalogPage() {
   const [transcodingStatus, setTranscodingStatus] = useState<string | null>(null);
 
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiGeneratingTagline, setAiGeneratingTagline] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiSuggestion, setAiSuggestion] = useState<{
     overview?: string;
     tagline?: string | null;
     tags?: string[];
     model?: string;
+    task?: string;
   } | null>(null);
 
   const [showTitleModal, setShowTitleModal] = useState(false);
@@ -104,6 +107,7 @@ export default function AdminCatalogPage() {
     slug: "",
     originalName: "",
     overview: "",
+    tagline: "",
     releaseDate: "",
     posterUrl: "",
     backdropUrl: "",
@@ -381,6 +385,7 @@ export default function AdminCatalogPage() {
       slug: "",
       originalName: "",
       overview: "",
+      tagline: "",
       releaseDate: "",
       posterUrl: "",
       backdropUrl: "",
@@ -445,6 +450,7 @@ export default function AdminCatalogPage() {
           name: form.name,
           originalName: form.originalName || null,
           overview: form.overview || null,
+          tagline: form.tagline || null,
           releaseDate: form.releaseDate || null,
           posterUrl: form.posterUrl || null,
           backdropUrl: form.backdropUrl || null,
@@ -496,6 +502,7 @@ export default function AdminCatalogPage() {
       slug: title.slug,
       originalName: title.originalName ?? "",
       overview: title.overview ?? "",
+      tagline: title.tagline ?? "",
       releaseDate: title.releaseDate ? title.releaseDate.slice(0, 10) : "",
       posterUrl: title.posterUrl ?? "",
       backdropUrl: title.backdropUrl ?? "",
@@ -524,6 +531,7 @@ export default function AdminCatalogPage() {
           tmdbId: form.tmdbId ? Number(form.tmdbId) : null,
           overview: form.overview || null,
           language: "pt-BR",
+          task: "catalog",
         }),
       });
 
@@ -538,11 +546,58 @@ export default function AdminCatalogPage() {
       if (data?.overview && typeof data.overview === "string") {
         setForm((prev) => ({ ...prev, overview: data.overview }));
       }
+      if (data?.tagline && typeof data.tagline === "string") {
+        setForm((prev) => ({ ...prev, tagline: data.tagline }));
+      }
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "Erro ao gerar conteúdo com IA");
       setAiSuggestion(null);
     } finally {
       setAiGenerating(false);
+    }
+  }
+
+  async function handleGenerateAiTagline() {
+    if (!form.name?.trim()) {
+      setAiError("Informe o nome do título antes de gerar a tagline.");
+      return;
+    }
+
+    setAiGeneratingTagline(true);
+    setAiError(null);
+
+    try {
+      const res = await fetch("/api/admin/ai/catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          originalName: form.originalName || null,
+          type: form.type,
+          releaseDate: form.releaseDate || null,
+          tmdbId: form.tmdbId ? Number(form.tmdbId) : null,
+          overview: form.overview || null,
+          language: "pt-BR",
+          task: "tagline",
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const baseMessage = data?.error || data?.upstreamError || "Erro ao gerar conteúdo com IA";
+        const modelTried = data?.modelTried ? ` (model: ${data.modelTried})` : "";
+        throw new Error(`${baseMessage}${modelTried}`);
+      }
+
+      setAiSuggestion(data);
+      if (data?.tagline && typeof data.tagline === "string") {
+        setForm((prev) => ({ ...prev, tagline: data.tagline }));
+      }
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "Erro ao gerar conteúdo com IA");
+      setAiSuggestion(null);
+    } finally {
+      setAiGeneratingTagline(false);
     }
   }
 
@@ -1266,6 +1321,26 @@ export default function AdminCatalogPage() {
                     )}
                   </div>
                 )}
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="block text-zinc-300">Tagline</label>
+                  <button
+                    type="button"
+                    onClick={handleGenerateAiTagline}
+                    disabled={aiGeneratingTagline || !form.name.trim()}
+                    className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] font-semibold text-zinc-100 hover:bg-zinc-800 disabled:opacity-60"
+                  >
+                    {aiGeneratingTagline ? "Gerando..." : "✨ Gerar Tagline"}
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={form.tagline}
+                  onChange={(e) => setForm({ ...form, tagline: e.target.value })}
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">

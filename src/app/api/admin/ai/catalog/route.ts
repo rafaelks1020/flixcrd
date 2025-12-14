@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
       tmdbId,
       overview,
       language,
+      task,
       model: modelFromBody,
     } = body ?? {};
 
@@ -78,10 +79,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const defaultModel = "deepseek/deepseek-chat-v3-0324";
+    const normalizedTask = typeof task === "string" ? task.trim().toLowerCase() : "catalog";
+    const isTaglineTask = normalizedTask === "tagline";
+
+    const defaultModelCatalog = "deepseek/deepseek-chat-v3-0324";
+    const defaultModelTagline = defaultModelCatalog;
+
     const requestedModel = typeof modelFromBody === "string" ? modelFromBody.trim() : "";
+    const envModelByTask = isTaglineTask
+      ? ((process.env.OPENROUTER_MODEL_TAGLINE as string | undefined) ?? "")
+      : ((process.env.OPENROUTER_MODEL_CATALOG as string | undefined) ?? "");
     const envModel = (process.env.OPENROUTER_MODEL as string | undefined) ?? "";
-    const primaryModel = (requestedModel || envModel || defaultModel).trim();
+
+    const defaultModel = isTaglineTask ? defaultModelTagline : defaultModelCatalog;
+    const primaryModel = (requestedModel || envModelByTask || envModel || defaultModel).trim();
 
     const userPayload = {
       name,
@@ -93,15 +104,22 @@ export async function POST(request: NextRequest) {
       language: typeof language === "string" ? language : "pt-BR",
     };
 
+    const systemPrompt = isTaglineTask
+      ? "Você é um assistente para curadoria de catálogo de streaming. Responda SEMPRE em JSON puro, sem markdown, no formato: {\"tagline\": string}. A tagline deve ser em pt-BR, curta (até ~90 caracteres), chamativa e sem spoilers."
+      : "Você é um assistente para curadoria de catálogo de streaming. Responda SEMPRE em JSON puro, sem markdown, no formato: {\"overview\": string, \"tagline\": string|null, \"tags\": string[]}. A sinopse deve ser em pt-BR, objetiva e chamativa, sem spoilers, com no máximo ~500 caracteres. As tags devem ser curtas (1-2 palavras), em pt-BR.";
+
+    const userPrompt = isTaglineTask
+      ? `Gere APENAS uma tagline para este título: ${JSON.stringify(userPayload)}`
+      : `Gere sinopse e tags para este título: ${JSON.stringify(userPayload)}`;
+
     const messages = [
       {
         role: "system",
-        content:
-          "Você é um assistente para curadoria de catálogo de streaming. Responda SEMPRE em JSON puro, sem markdown, no formato: {\"overview\": string, \"tagline\": string|null, \"tags\": string[]}. A sinopse deve ser em pt-BR, objetiva e chamativa, sem spoilers, com no máximo ~500 caracteres. As tags devem ser curtas (1-2 palavras), em pt-BR.",
+        content: systemPrompt,
       },
       {
         role: "user",
-        content: `Gere sinopse e tags para este título: ${JSON.stringify(userPayload)}`,
+        content: userPrompt,
       },
     ];
 
@@ -174,20 +192,33 @@ export async function POST(request: NextRequest) {
       attempt.upstreamJson?.choices?.[0]?.text ??
       "";
 
+    const contentText = typeof content === "string" ? content : "";
     const parsed = typeof content === "string" ? safeJsonParse(content) : null;
 
+    const tags = Array.isArray(parsed?.tags)
+      ? parsed.tags.filter((t: any) => typeof t === "string").slice(0, 12)
+      : [];
+
+    const overviewResult = isTaglineTask
+      ? typeof parsed?.overview === "string"
+        ? parsed.overview
+        : ""
+      : typeof parsed?.overview === "string"
+        ? parsed.overview
+        : contentText;
+
+    const taglineResult = typeof parsed?.tagline === "string"
+      ? parsed.tagline
+      : isTaglineTask
+        ? (contentText.trim() ? contentText.trim() : null)
+        : null;
+
     const result = {
-      overview:
-        typeof parsed?.overview === "string"
-          ? parsed.overview
-          : typeof content === "string"
-            ? content
-            : "",
-      tagline: typeof parsed?.tagline === "string" ? parsed.tagline : null,
-      tags: Array.isArray(parsed?.tags)
-        ? parsed.tags.filter((t: any) => typeof t === "string").slice(0, 12)
-        : [],
+      overview: overviewResult,
+      tagline: taglineResult,
+      tags,
       model: attemptModel,
+      task: normalizedTask,
     };
 
     return NextResponse.json(result);

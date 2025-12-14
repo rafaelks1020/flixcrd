@@ -5,12 +5,17 @@ import { useState } from "react";
 
 interface Title {
   id: string;
+  tmdbId: number | null;
   name: string;
   type: string;
+  slug: string;
+  originalName: string | null;
+  overview: string | null;
+  tagline: string | null;
+  hlsPath: string | null;
   posterUrl: string | null;
   backdropUrl: string | null;
   releaseDate: string | null;
-  tmdbId: number | null;
 }
 
 interface CatalogGridViewProps {
