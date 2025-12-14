@@ -1,0 +1,170 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+
+import { authOptions } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
+
+async function requireAdmin() {
+  const session: any = await getServerSession(authOptions as any);
+
+  if (!session || !session.user || (session.user as any).role !== "ADMIN") {
+    return { isAdmin: false };
+  }
+
+  return { isAdmin: true };
+}
+
+function safeJsonParse(input: string): any | null {
+  const trimmed = input.trim();
+
+  const withoutFences = trimmed
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
+
+  try {
+    return JSON.parse(withoutFences);
+  } catch {
+    // ignore
+  }
+
+  const start = withoutFences.indexOf("{");
+  const end = withoutFences.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    const candidate = withoutFences.slice(start, end + 1);
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const { isAdmin } = await requireAdmin();
+    if (!isAdmin) {
+      return NextResponse.json({ error: "Não autorizado." }, { status: 403 });
+    }
+
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "OPENROUTER_API_KEY não configurado." },
+        { status: 500 },
+      );
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const {
+      name,
+      originalName,
+      type,
+      releaseDate,
+      tmdbId,
+      overview,
+      language,
+    } = body ?? {};
+
+    if (!name || typeof name !== "string") {
+      return NextResponse.json(
+        { error: "Campo obrigatório: name" },
+        { status: 400 },
+      );
+    }
+
+    const model =
+      (process.env.OPENROUTER_MODEL as string | undefined) ||
+      "deepseek/deepseek-chat-v3-0324:free";
+
+    const userPayload = {
+      name,
+      originalName: typeof originalName === "string" ? originalName : null,
+      type: typeof type === "string" ? type : null,
+      releaseDate: typeof releaseDate === "string" ? releaseDate : null,
+      tmdbId: typeof tmdbId === "number" ? tmdbId : null,
+      overview: typeof overview === "string" ? overview : null,
+      language: typeof language === "string" ? language : "pt-BR",
+    };
+
+    const messages = [
+      {
+        role: "system",
+        content:
+          "Você é um assistente para curadoria de catálogo de streaming. Responda SEMPRE em JSON puro, sem markdown, no formato: {\"overview\": string, \"tagline\": string|null, \"tags\": string[]}. A sinopse deve ser em pt-BR, objetiva e chamativa, sem spoilers, com no máximo ~500 caracteres. As tags devem ser curtas (1-2 palavras), em pt-BR.",
+      },
+      {
+        role: "user",
+        content: `Gere sinopse e tags para este título: ${JSON.stringify(userPayload)}`,
+      },
+    ];
+
+    const upstreamRes = await fetch(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.4,
+          max_tokens: 500,
+        }),
+      },
+    );
+
+    const upstreamJson = await upstreamRes.json().catch(() => null);
+
+    if (!upstreamRes.ok) {
+      const upstreamError =
+        upstreamJson?.error?.message ||
+        upstreamJson?.error ||
+        upstreamJson?.message ||
+        "Erro ao chamar OpenRouter";
+
+      return NextResponse.json(
+        {
+          error: "Falha ao gerar conteúdo com IA.",
+          upstreamError,
+        },
+        { status: 502 },
+      );
+    }
+
+    const content =
+      upstreamJson?.choices?.[0]?.message?.content ??
+      upstreamJson?.choices?.[0]?.text ??
+      "";
+
+    const parsed = typeof content === "string" ? safeJsonParse(content) : null;
+
+    const result = {
+      overview:
+        typeof parsed?.overview === "string"
+          ? parsed.overview
+          : typeof content === "string"
+            ? content
+            : "",
+      tagline: typeof parsed?.tagline === "string" ? parsed.tagline : null,
+      tags: Array.isArray(parsed?.tags)
+        ? parsed.tags.filter((t: any) => typeof t === "string").slice(0, 12)
+        : [],
+      model,
+    };
+
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error("POST /api/admin/ai/catalog error", error);
+    return NextResponse.json(
+      { error: "Erro ao gerar conteúdo com IA." },
+      { status: 500 },
+    );
+  }
+}

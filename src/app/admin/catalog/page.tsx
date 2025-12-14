@@ -52,6 +52,15 @@ export default function AdminCatalogPage() {
   const [transcodingProgress, setTranscodingProgress] = useState<number | null>(null);
   const [transcodingStatus, setTranscodingStatus] = useState<string | null>(null);
 
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<{
+    overview?: string;
+    tagline?: string | null;
+    tags?: string[];
+    model?: string;
+  } | null>(null);
+
   const [showTitleModal, setShowTitleModal] = useState(false);
   const [openActionsId, setOpenActionsId] = useState<string | null>(null);
   const [showTranscodeOptions, setShowTranscodeOptions] = useState(false);
@@ -363,6 +372,8 @@ export default function AdminCatalogPage() {
 
   function resetForm() {
     setEditingId(null);
+    setAiSuggestion(null);
+    setAiError(null);
     setForm({
       tmdbId: "",
       type: "MOVIE",
@@ -476,6 +487,8 @@ export default function AdminCatalogPage() {
 
   function startEdit(title: Title) {
     setEditingId(title.id);
+    setAiSuggestion(null);
+    setAiError(null);
     setForm({
       tmdbId: title.tmdbId ? String(title.tmdbId) : "",
       type: title.type,
@@ -488,6 +501,47 @@ export default function AdminCatalogPage() {
       backdropUrl: title.backdropUrl ?? "",
       hlsPath: title.hlsPath ?? "",
     });
+  }
+
+  async function handleGenerateAi() {
+    if (!form.name?.trim()) {
+      setAiError("Informe o nome do título antes de gerar a sinopse.");
+      return;
+    }
+
+    setAiGenerating(true);
+    setAiError(null);
+
+    try {
+      const res = await fetch("/api/admin/ai/catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          originalName: form.originalName || null,
+          type: form.type,
+          releaseDate: form.releaseDate || null,
+          tmdbId: form.tmdbId ? Number(form.tmdbId) : null,
+          overview: form.overview || null,
+          language: "pt-BR",
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || data?.upstreamError || "Erro ao gerar conteúdo com IA");
+      }
+
+      setAiSuggestion(data);
+      if (data?.overview && typeof data.overview === "string") {
+        setForm((prev) => ({ ...prev, overview: data.overview }));
+      }
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "Erro ao gerar conteúdo com IA");
+      setAiSuggestion(null);
+    } finally {
+      setAiGenerating(false);
+    }
   }
 
   async function handleDelete(id: string) {
@@ -1166,13 +1220,50 @@ export default function AdminCatalogPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="block text-zinc-300">Sinopse</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="block text-zinc-300">Sinopse</label>
+                  <button
+                    type="button"
+                    onClick={handleGenerateAi}
+                    disabled={aiGenerating || !form.name.trim()}
+                    className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] font-semibold text-zinc-100 hover:bg-zinc-800 disabled:opacity-60"
+                  >
+                    {aiGenerating ? "Gerando..." : "✨ Gerar com IA"}
+                  </button>
+                </div>
                 <textarea
                   rows={3}
                   value={form.overview}
                   onChange={(e) => setForm({ ...form, overview: e.target.value })}
                   className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
                 />
+
+                {aiError && <div className="text-[11px] text-red-300">{aiError}</div>}
+
+                {aiSuggestion && (
+                  <div className="space-y-1 text-[11px] text-zinc-300">
+                    {aiSuggestion.tagline && (
+                      <div>
+                        <span className="text-zinc-500">Tagline:</span> {aiSuggestion.tagline}
+                      </div>
+                    )}
+                    {Array.isArray(aiSuggestion.tags) && aiSuggestion.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {aiSuggestion.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[10px] text-zinc-200"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {aiSuggestion.model && (
+                      <div className="text-[10px] text-zinc-500">model: {aiSuggestion.model}</div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
