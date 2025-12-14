@@ -17,6 +17,7 @@ type ExtendedToken = JWT & {
   id?: string;
   role?: string;
   approvalStatus?: string;
+  approvalStatusCheckedAt?: number;
 };
 
 type SessionWithExtendedUser = Session & {
@@ -92,6 +93,29 @@ export const authOptions: NextAuthOptions = {
         extendedToken.role = typedUser.role ?? extendedToken.role ?? "USER";
         extendedToken.approvalStatus = typedUser.approvalStatus ?? "PENDING";
       }
+
+      if (extendedToken.id) {
+        const currentStatus = extendedToken.approvalStatus ?? "PENDING";
+        const lastChecked =
+          typeof extendedToken.approvalStatusCheckedAt === "number"
+            ? extendedToken.approvalStatusCheckedAt
+            : 0;
+
+        if (currentStatus !== "APPROVED" && Date.now() - lastChecked > 15000) {
+          try {
+            const dbUser = await prisma.user.findUnique({
+              where: { id: extendedToken.id },
+              select: { approvalStatus: true },
+            });
+            if (dbUser?.approvalStatus) {
+              extendedToken.approvalStatus = dbUser.approvalStatus;
+            }
+          } catch {
+          }
+          extendedToken.approvalStatusCheckedAt = Date.now();
+        }
+      }
+
       return extendedToken;
     },
     async session({ session, token }) {

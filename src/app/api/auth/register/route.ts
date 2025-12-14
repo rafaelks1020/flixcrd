@@ -104,10 +104,11 @@ export async function POST(request: NextRequest) {
     // Enviar email de boas-vindas (não bloqueia o fluxo em caso de erro)
     try {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+      const loginUrl = `${String(appUrl).replace(/\/$/, "")}/login`;
 
       await sendMail({
         to: user.email,
-        subject: 'Bem-vindo ao FlixCRD',
+        subject: 'Cadastro recebido - FlixCRD',
         fromEmail: 'suporte@pflix.com.br',
         fromName: 'Suporte FlixCRD',
         meta: {
@@ -123,14 +124,14 @@ export async function POST(request: NextRequest) {
         },
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #e50914;">Bem-vindo ao FlixCRD!</h2>
+            <h2 style="color: #e50914;">Cadastro recebido</h2>
             <p>Olá, ${user.name || user.email}!</p>
-            <p>Sua conta foi criada com sucesso.</p>
-            <p>Agora é só ativar ou renovar sua assinatura para começar a assistir.</p>
+            <p>Sua conta foi criada e está aguardando aprovação.</p>
+            <p>Você receberá um email assim que seu acesso for liberado.</p>
             <p style="text-align: center; margin: 30px 0;">
-              <a href="${appUrl}" 
+              <a href="${loginUrl}" 
                  style="background-color: #e50914; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                Acessar FlixCRD
+                Acompanhar cadastro
               </a>
             </p>
             <p style="color: #666; font-size: 14px;">
@@ -139,14 +140,14 @@ export async function POST(request: NextRequest) {
           </div>
         `,
         text: `
-Bem-vindo ao FlixCRD!
+Cadastro recebido - FlixCRD
 
 Olá, ${user.name || user.email}!
 
-Sua conta foi criada com sucesso.
-Agora é só ativar ou renovar sua assinatura para começar a assistir.
+Sua conta foi criada e está aguardando aprovação.
+Você receberá um email assim que seu acesso for liberado.
 
-Acesse: ${appUrl}
+Acompanhe em: ${loginUrl}
 
 Se você não reconhece este cadastro, entre em contato com o suporte.
         `,
