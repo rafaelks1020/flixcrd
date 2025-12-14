@@ -103,7 +103,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const authUser = await getAuthUser(request);
 
     if (!authUser) {
-      // Evita contar como erro no Vercel e reduzir retries do client.
       return NextResponse.json({ ok: true });
     }
 
@@ -116,8 +115,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const bodyEpisodeId = body?.episodeId as string | undefined;
     const profileId = body?.profileId as string | undefined;
 
-    // Sem profileId não conseguimos associar o progresso a um perfil.
-    // Em vez de retornar erro (que polui os logs do cliente), apenas ignoramos.
     if (!profileId) {
       return NextResponse.json({ ok: true });
     }
