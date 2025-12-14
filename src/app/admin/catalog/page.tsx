@@ -529,7 +529,9 @@ export default function AdminCatalogPage() {
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data?.error || data?.upstreamError || "Erro ao gerar conteúdo com IA");
+        const baseMessage = data?.error || data?.upstreamError || "Erro ao gerar conteúdo com IA";
+        const modelTried = data?.modelTried ? ` (model: ${data.modelTried})` : "";
+        throw new Error(`${baseMessage}${modelTried}`);
       }
 
       setAiSuggestion(data);

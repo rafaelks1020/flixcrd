@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
       tmdbId,
       overview,
       language,
+      model: modelFromBody,
     } = body ?? {};
 
     if (!name || typeof name !== "string") {
@@ -77,9 +78,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const model =
-      (process.env.OPENROUTER_MODEL as string | undefined) ||
-      "deepseek/deepseek-chat-v3-0324:free";
+    const defaultModel = "deepseek/deepseek-chat-v3-0324";
+    const requestedModel = typeof modelFromBody === "string" ? modelFromBody.trim() : "";
+    const envModel = (process.env.OPENROUTER_MODEL as string | undefined) ?? "";
+    const primaryModel = (requestedModel || envModel || defaultModel).trim();
 
     const userPayload = {
       name,
@@ -103,44 +105,73 @@ export async function POST(request: NextRequest) {
       },
     ];
 
-    const upstreamRes = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
+    async function callOpenRouter(model: string) {
+      const upstreamRes = await fetch(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            temperature: 0.4,
+            max_tokens: 500,
+          }),
         },
-        body: JSON.stringify({
-          model,
-          messages,
-          temperature: 0.4,
-          max_tokens: 500,
-        }),
-      },
-    );
+      );
 
-    const upstreamJson = await upstreamRes.json().catch(() => null);
+      const upstreamJson = await upstreamRes.json().catch(() => null);
 
-    if (!upstreamRes.ok) {
       const upstreamError =
         upstreamJson?.error?.message ||
         upstreamJson?.error ||
         upstreamJson?.message ||
         "Erro ao chamar OpenRouter";
 
+      return {
+        ok: upstreamRes.ok,
+        upstreamJson,
+        upstreamError: typeof upstreamError === "string" ? upstreamError : String(upstreamError),
+      };
+    }
+
+    const candidates = [
+      primaryModel,
+      primaryModel.endsWith(":free") ? primaryModel.replace(/:free$/, "") : `${primaryModel}:free`,
+      defaultModel,
+      "deepseek/deepseek-chat-v3",
+    ].filter((m, idx, arr) => typeof m === "string" && m.trim() && arr.indexOf(m) === idx);
+
+    let attemptModel = candidates[0];
+    let attempt = await callOpenRouter(attemptModel);
+
+    if (!attempt.ok && /no endpoints found/i.test(attempt.upstreamError)) {
+      for (const candidate of candidates.slice(1)) {
+        attemptModel = candidate;
+        attempt = await callOpenRouter(candidate);
+        if (attempt.ok || !/no endpoints found/i.test(attempt.upstreamError)) {
+          break;
+        }
+      }
+    }
+
+    if (!attempt.ok) {
       return NextResponse.json(
         {
           error: "Falha ao gerar conteúdo com IA.",
-          upstreamError,
+          upstreamError: attempt.upstreamError,
+          modelTried: attemptModel,
         },
         { status: 502 },
       );
     }
 
     const content =
-      upstreamJson?.choices?.[0]?.message?.content ??
-      upstreamJson?.choices?.[0]?.text ??
+      attempt.upstreamJson?.choices?.[0]?.message?.content ??
+      attempt.upstreamJson?.choices?.[0]?.text ??
       "";
 
     const parsed = typeof content === "string" ? safeJsonParse(content) : null;
@@ -156,7 +187,7 @@ export async function POST(request: NextRequest) {
       tags: Array.isArray(parsed?.tags)
         ? parsed.tags.filter((t: any) => typeof t === "string").slice(0, 12)
         : [],
-      model,
+      model: attemptModel,
     };
 
     return NextResponse.json(result);
