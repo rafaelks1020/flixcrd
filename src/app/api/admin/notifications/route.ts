@@ -66,12 +66,21 @@ export async function GET(request: NextRequest) {
       prisma.pushToken.count({ where: { platform: { equals: "web", mode: "insensitive" } } }),
     ]);
 
+    let activeWebPushSubscriptions = 0;
+    try {
+      activeWebPushSubscriptions = await prisma.webPushSubscription.count({ where: { isActive: true } });
+    } catch (err) {
+      console.error("admin notifications: webPushSubscription count error:", err);
+      activeWebPushSubscriptions = 0;
+    }
+
     const stats = {
       totalTokens,
       activeTokens,
       androidTokens,
       iosTokens,
       webTokens,
+      activeWebPushSubscriptions,
     };
 
     const totalPages = Math.max(1, Math.ceil(totalTokens / pageSize));

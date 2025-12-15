@@ -2,17 +2,31 @@
   "name": "Pflix",
   "short_name": "Pflix",
   "description": "Sua plataforma de streaming",
-  "id": "/",
-  "start_url": "/",
+  "id": "/?source=pwa",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "fullscreen"],
   "background_color": "#000000",
   "theme_color": "#e50914",
-  "orientation": "landscape",
+  "orientation": "any",
   "categories": ["entertainment", "video"],
   "lang": "pt-BR",
   "dir": "ltr",
+  "shortcuts": [
+    {
+      "name": "Início",
+      "short_name": "Início",
+      "url": "/?source=pwa-shortcut",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Continuar Assistindo",
+      "short_name": "Continuar",
+      "url": "/?source=pwa-shortcut#continue-watching",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
   "icons": [
     {
       "src": "/icons/icon-72.png",

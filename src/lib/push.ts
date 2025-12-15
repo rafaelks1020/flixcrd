@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { sendWebPushToSubscriptions } from "@/lib/webpush";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
@@ -50,6 +51,16 @@ type TokenWithPreference = {
   } | null;
 };
 
+type WebSubscriptionWithPreference = {
+  id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  User?: {
+    NotificationPreference?: PreferenceShape | null;
+  } | null;
+};
+
 export function filterTokensByPreference<T extends TokenWithPreference>(
   records: T[],
   category?: NotificationCategory,
@@ -59,6 +70,22 @@ export function filterTokensByPreference<T extends TokenWithPreference>(
       userAllowsCategory(record.User?.NotificationPreference ?? null, category),
     )
     .map((record) => record.token);
+}
+
+export function filterWebSubscriptionsByPreference<T extends WebSubscriptionWithPreference>(
+  records: T[],
+  category?: NotificationCategory,
+) {
+  return records
+    .filter((record) =>
+      userAllowsCategory(record.User?.NotificationPreference ?? null, category),
+    )
+    .map((record) => ({
+      id: record.id,
+      endpoint: record.endpoint,
+      p256dh: record.p256dh,
+      auth: record.auth,
+    }));
 }
 
 async function fetchTokensForUsers(userIds: string[], category?: NotificationCategory) {
@@ -168,6 +195,109 @@ export async function sendPushToUsers(userIds: string[], payload: PushPayload): 
     return await sendPushToTokens(tokens, payload);
   } catch (err) {
     console.error("sendPushToUsers error:", err);
+    return { total: 0, sent: 0, failed: 0 };
+  }
+}
+
+async function fetchWebSubscriptionsForUsers(
+  userIds: string[],
+  category?: NotificationCategory,
+) {
+  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+  if (!uniqueIds.length) {
+    return [];
+  }
+
+  try {
+    const records = await prisma.webPushSubscription.findMany({
+      where: {
+        userId: { in: uniqueIds },
+        isActive: true,
+      },
+      select: {
+        id: true,
+        endpoint: true,
+        p256dh: true,
+        auth: true,
+        User: {
+          select: {
+            NotificationPreference: true,
+          },
+        },
+      },
+    });
+
+    return filterWebSubscriptionsByPreference(records, category);
+  } catch (err) {
+    console.error("fetchWebSubscriptionsForUsers error:", err);
+    return [];
+  }
+}
+
+async function fetchWebSubscriptionsForAll(category?: NotificationCategory) {
+  try {
+    const records = await prisma.webPushSubscription.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        endpoint: true,
+        p256dh: true,
+        auth: true,
+        User: {
+          select: {
+            NotificationPreference: true,
+          },
+        },
+      },
+    });
+
+    return filterWebSubscriptionsByPreference(records, category);
+  } catch (err) {
+    console.error("fetchWebSubscriptionsForAll error:", err);
+    return [];
+  }
+}
+
+export async function sendWebPushToUsers(userIds: string[], payload: PushPayload): Promise<PushResult> {
+  try {
+    if (!userIds.length) {
+      return { total: 0, sent: 0, failed: 0 };
+    }
+
+    const subs = await fetchWebSubscriptionsForUsers(userIds, payload.category);
+    if (!subs.length) {
+      return { total: 0, sent: 0, failed: 0 };
+    }
+
+    const result = await sendWebPushToSubscriptions(subs, {
+      title: payload.title,
+      message: payload.message,
+      data: payload.data,
+    });
+
+    return result;
+  } catch (err) {
+    console.error("sendWebPushToUsers error:", err);
+    return { total: 0, sent: 0, failed: 0 };
+  }
+}
+
+export async function sendWebPushToAll(payload: PushPayload): Promise<PushResult> {
+  try {
+    const subs = await fetchWebSubscriptionsForAll(payload.category);
+    if (!subs.length) {
+      return { total: 0, sent: 0, failed: 0 };
+    }
+
+    const result = await sendWebPushToSubscriptions(subs, {
+      title: payload.title,
+      message: payload.message,
+      data: payload.data,
+    });
+
+    return result;
+  } catch (err) {
+    console.error("sendWebPushToAll error:", err);
     return { total: 0, sent: 0, failed: 0 };
   }
 }

@@ -11,9 +11,127 @@ export default function SettingsClient({ initialUseCloudflareProxy }: SettingsCl
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [webPushSupported, setWebPushSupported] = useState(false);
+  const [webPushPermission, setWebPushPermission] = useState<NotificationPermission>(
+    typeof Notification !== "undefined" ? Notification.permission : "default",
+  );
+  const [webPushSubscribed, setWebPushSubscribed] = useState(false);
+  const [webPushBusy, setWebPushBusy] = useState(false);
+  const [webPushError, setWebPushError] = useState<string | null>(null);
+
   useEffect(() => {
     setUseCloudflareProxy(initialUseCloudflareProxy);
   }, [initialUseCloudflareProxy]);
+
+  useEffect(() => {
+    const supported =
+      typeof window !== "undefined" &&
+      "serviceWorker" in navigator &&
+      "PushManager" in window &&
+      typeof Notification !== "undefined";
+    setWebPushSupported(supported);
+  }, []);
+
+  useEffect(() => {
+    async function refresh() {
+      if (!webPushSupported) return;
+      setWebPushError(null);
+      try {
+        setWebPushPermission(Notification.permission);
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        setWebPushSubscribed(Boolean(sub));
+      } catch {
+        setWebPushSubscribed(false);
+      }
+    }
+
+    refresh();
+  }, [webPushSupported]);
+
+  function urlBase64ToUint8Array(base64String: string) {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; i += 1) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  }
+
+  async function handleEnableWebPush() {
+    if (!webPushSupported) return;
+    setWebPushBusy(true);
+    setWebPushError(null);
+    try {
+      const permission = await Notification.requestPermission();
+      setWebPushPermission(permission);
+      if (permission !== "granted") {
+        throw new Error("Permissão negada. Ative as notificações nas configurações do navegador.");
+      }
+
+      const reg = await navigator.serviceWorker.ready;
+      const keyRes = await fetch("/api/webpush/public-key");
+      const keyJson = await keyRes.json().catch(() => null);
+      if (!keyRes.ok) {
+        throw new Error(keyJson?.error ?? "Web Push não configurado no servidor.");
+      }
+
+      const publicKey = keyJson?.publicKey;
+      if (!publicKey || typeof publicKey !== "string") {
+        throw new Error("Chave pública VAPID inválida.");
+      }
+
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+
+      const saveRes = await fetch("/api/webpush/subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subscription),
+      });
+      const saveJson = await saveRes.json().catch(() => null);
+      if (!saveRes.ok) {
+        throw new Error(saveJson?.error ?? "Falha ao salvar subscription.");
+      }
+
+      setWebPushSubscribed(true);
+    } catch (err) {
+      setWebPushError(err instanceof Error ? err.message : "Erro ao ativar notificações.");
+      setWebPushSubscribed(false);
+    } finally {
+      setWebPushBusy(false);
+    }
+  }
+
+  async function handleDisableWebPush() {
+    if (!webPushSupported) return;
+    setWebPushBusy(true);
+    setWebPushError(null);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      const endpoint = sub?.endpoint;
+
+      if (endpoint) {
+        await fetch("/api/webpush/subscription", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint }),
+        }).catch(() => null);
+      }
+
+      await sub?.unsubscribe?.();
+      setWebPushSubscribed(false);
+    } catch (err) {
+      setWebPushError(err instanceof Error ? err.message : "Erro ao desativar notificações.");
+    } finally {
+      setWebPushBusy(false);
+    }
+  }
 
   async function handleToggle() {
     const next = !useCloudflareProxy;
@@ -96,6 +214,55 @@ export default function SettingsClient({ initialUseCloudflareProxy }: SettingsCl
             Ao instalar o APK, talvez seja necessário permitir instalações de fontes desconhecidas nas configurações do seu
             Android.
           </p>
+        </section>
+
+        <section className="mt-6 space-y-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 text-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-medium text-zinc-100">Notificações Push (PWA)</p>
+              <p className="text-xs text-zinc-400">
+                Receba avisos mesmo com o app fechado. No iPhone/iPad, o push só funciona quando instalado na tela inicial
+                (iOS 16.4+).
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {webPushSupported ? (
+                webPushSubscribed ? (
+                  <button
+                    type="button"
+                    onClick={handleDisableWebPush}
+                    disabled={webPushBusy}
+                    className="inline-flex items-center gap-2 rounded-md bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs font-semibold text-white hover:bg-zinc-800 transition disabled:opacity-60"
+                  >
+                    <span>Desativar</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleEnableWebPush}
+                    disabled={webPushBusy}
+                    className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500 transition disabled:opacity-60"
+                  >
+                    <span>Ativar</span>
+                  </button>
+                )
+              ) : (
+                <span className="text-xs text-zinc-500">Indisponível</span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-zinc-400">
+            <span>
+              Status: {webPushSupported ? (webPushSubscribed ? "Ativo" : "Inativo") : "Não suportado"}
+            </span>
+            <span>
+              Permissão: {webPushSupported ? webPushPermission : "-"}
+            </span>
+          </div>
+
+          {webPushBusy && <p className="text-[11px] text-zinc-400">Processando...</p>}
+          {webPushError && <p className="text-[11px] text-red-400">{webPushError}</p>}
         </section>
       </div>
     </main>

@@ -359,7 +359,9 @@ export default function HomeClientNew2({
       <div style={{ paddingTop: '2rem', paddingBottom: '4rem' }}>
         {/* Continuar Assistindo */}
         {continueWatching.length > 0 && (
-          <PremiumTitleRow title="Continuar Assistindo" titles={continueWatching} />
+          <div id="continue-watching">
+            <PremiumTitleRow title="Continuar Assistindo" titles={continueWatching} />
+          </div>
         )}
 
         {/* Adicionados Recentemente */}

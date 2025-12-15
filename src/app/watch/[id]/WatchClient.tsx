@@ -105,10 +105,14 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const [bufferHealth, setBufferHealth] = useState<"low" | "medium" | "high">("medium");
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const wakeLockRef = useRef<any>(null);
   const hlsRef = useRef<Hls | null>(null);
   const playerRef = useRef<HTMLDivElement | null>(null);
   const hideControlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastProgressSyncRef = useRef<number>(0);
+  const progressSyncInFlightRef = useRef<boolean>(false);
+  const lastSyncedPositionRef = useRef<number>(-1);
+  const pendingProgressRef = useRef<{ positionSeconds: number; durationSeconds: number } | null>(null);
   const tokenRenewalTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLoadingPlaybackRef = useRef<boolean>(false); // Evitar chamadas duplicadas
   const isRenewingTokenRef = useRef<boolean>(false); // Evitar renovações duplicadas
@@ -117,6 +121,237 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const bufferIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasRestoredProgressRef = useRef<boolean>(false); // Evitar múltiplas restaurações de progresso
   const router = useRouter();
+
+  const flushProgressQueue = useCallback(async () => {
+    if (progressSyncInFlightRef.current) return;
+    if (!profileId) return;
+    const pending = pendingProgressRef.current;
+    if (!pending) return;
+
+    progressSyncInFlightRef.current = true;
+    pendingProgressRef.current = null;
+
+    try {
+      await fetch(`/api/titles/${titleId}/progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          positionSeconds: pending.positionSeconds,
+          durationSeconds: pending.durationSeconds,
+          episodeId: episodeId ?? null,
+          profileId,
+        }),
+        keepalive: true,
+      });
+
+      lastSyncedPositionRef.current = pending.positionSeconds;
+    } catch {
+    } finally {
+      progressSyncInFlightRef.current = false;
+      if (pendingProgressRef.current) {
+        void flushProgressQueue();
+      }
+    }
+  }, [episodeId, profileId, titleId]);
+
+  const queueProgressSync = useCallback(
+    (positionSeconds: number, durationSeconds: number) => {
+      if (!profileId) return;
+      if (!durationSeconds || !Number.isFinite(durationSeconds)) return;
+
+      const pos = Math.max(0, Math.floor(positionSeconds));
+      const dur = Math.max(0, Math.floor(durationSeconds));
+
+      const lastPos = lastSyncedPositionRef.current;
+      if (lastPos >= 0 && Math.abs(pos - lastPos) < 3) return;
+
+      pendingProgressRef.current = { positionSeconds: pos, durationSeconds: dur };
+      void flushProgressQueue();
+    },
+    [flushProgressQueue, profileId],
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const flush = () => {
+      const videoEl = videoRef.current;
+      if (!videoEl) return;
+
+      const total = videoEl.duration || duration;
+      if (!profileId) return;
+      if (!total || !Number.isFinite(total)) return;
+
+      const pos = videoEl.currentTime;
+      const payload = JSON.stringify({
+        positionSeconds: pos,
+        durationSeconds: total,
+        episodeId: episodeId ?? null,
+        profileId,
+      });
+
+      if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+        try {
+          navigator.sendBeacon(
+            `/api/titles/${titleId}/progress`,
+            new Blob([payload], { type: "application/json" }),
+          );
+          lastSyncedPositionRef.current = Math.max(0, Math.floor(pos));
+          return;
+        } catch {
+        }
+      }
+
+      queueProgressSync(pos, total);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        flush();
+      }
+    };
+
+    window.addEventListener("beforeunload", flush);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("beforeunload", flush);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [duration, episodeId, profileId, queueProgressSync, titleId]);
+
+  const titleMeta = data?.title;
+  const mediaTitle = titleMeta?.episodeName || titleMeta?.name || "Pflix";
+  const mediaSubtitle =
+    typeof titleMeta?.seasonNumber === "number" && typeof titleMeta?.episodeNumber === "number"
+      ? `S${String(titleMeta.seasonNumber).padStart(2, "0")}E${String(titleMeta.episodeNumber).padStart(2, "0")}`
+      : undefined;
+
+  useEffect(() => {
+    if (typeof navigator === "undefined") return;
+    const ms = (navigator as any).mediaSession;
+    if (!ms) return;
+    if (!titleMeta) return;
+
+    try {
+      const MediaMetadataCtor = (window as any).MediaMetadata;
+      if (typeof MediaMetadataCtor === "function") {
+        ms.metadata = new MediaMetadataCtor({
+          title: mediaTitle,
+          artist: mediaSubtitle || "",
+          album: "Pflix",
+          artwork: titleMeta.posterUrl
+            ? [
+                { src: titleMeta.posterUrl, sizes: "512x512", type: "image/png" },
+                { src: titleMeta.posterUrl, sizes: "384x384", type: "image/png" },
+                { src: titleMeta.posterUrl, sizes: "192x192", type: "image/png" },
+              ]
+            : undefined,
+        });
+      }
+    } catch {
+    }
+
+    const safeSetHandler = (action: string, handler: any) => {
+      try {
+        ms.setActionHandler?.(action, handler);
+      } catch {
+      }
+    };
+
+    safeSetHandler("play", async () => {
+      const v = videoRef.current;
+      if (!v) return;
+      await v.play().catch(() => {});
+    });
+    safeSetHandler("pause", () => {
+      const v = videoRef.current;
+      if (!v) return;
+      v.pause();
+    });
+    safeSetHandler("seekbackward", (details: any) => {
+      const v = videoRef.current;
+      if (!v) return;
+      const offset = Number(details?.seekOffset ?? 10);
+      v.currentTime = Math.max(0, (v.currentTime || 0) - offset);
+    });
+    safeSetHandler("seekforward", (details: any) => {
+      const v = videoRef.current;
+      if (!v) return;
+      const offset = Number(details?.seekOffset ?? 10);
+      v.currentTime = Math.min(v.duration || Infinity, (v.currentTime || 0) + offset);
+    });
+    safeSetHandler("seekto", (details: any) => {
+      const v = videoRef.current;
+      if (!v) return;
+      const t = Number(details?.seekTime);
+      if (!Number.isFinite(t)) return;
+      v.currentTime = t;
+    });
+  }, [mediaSubtitle, mediaTitle, titleMeta]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined") return;
+    const ms = (navigator as any).mediaSession;
+    if (!ms?.setPositionState) return;
+    if (!Number.isFinite(duration) || duration <= 0) return;
+
+    try {
+      const v = videoRef.current;
+      const rate = v?.playbackRate ?? 1;
+      ms.setPositionState({
+        duration,
+        position: Math.max(0, Math.min(duration, currentTime || 0)),
+        playbackRate: rate,
+      });
+    } catch {
+    }
+  }, [currentTime, duration]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined") return;
+    if (typeof document === "undefined") return;
+
+    const release = async () => {
+      try {
+        await wakeLockRef.current?.release?.();
+      } catch {
+      } finally {
+        wakeLockRef.current = null;
+      }
+    };
+
+    const request = async () => {
+      if (!isPlaying) return;
+      if (document.visibilityState !== "visible") return;
+      if (!(navigator as any).wakeLock?.request) return;
+      if (wakeLockRef.current) return;
+
+      try {
+        wakeLockRef.current = await (navigator as any).wakeLock.request("screen");
+        wakeLockRef.current?.addEventListener?.("release", () => {
+          wakeLockRef.current = null;
+        });
+      } catch {
+      }
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void request();
+      } else {
+        void release();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    void request();
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      void release();
+    };
+  }, [isPlaying]);
 
   // Detectar tipo de dispositivo para ajustar buffer
   const getDeviceType = useCallback((): "xbox" | "mobile" | "tv" | "desktop" => {
@@ -1316,23 +1551,21 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
               profileId &&
               total &&
               Number.isFinite(total) &&
-              now - lastProgressSyncRef.current > 30000
+              now - lastProgressSyncRef.current > 60000
             ) {
               lastProgressSyncRef.current = now;
-               
-              fetch(`/api/titles/${titleId}/progress`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  positionSeconds: newTime,
-                  durationSeconds: total,
-                  episodeId: episodeId ?? null,
-                  profileId,
-                }),
-              }).catch(() => {
-                // ignora erro de rede
-              });
+
+              queueProgressSync(newTime, total);
             }
+          }}
+          onSeeked={(event) => {
+            const videoEl = event.currentTarget;
+            const total = videoEl.duration || duration;
+            const pos = videoEl.currentTime;
+            if (!total || !Number.isFinite(total)) return;
+            if (!profileId) return;
+
+            queueProgressSync(pos, total);
           }}
           onPlay={() => setIsPlaying(true)}
           onPause={(event) => {
@@ -1342,17 +1575,8 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
             const pos = videoEl.currentTime;
             if (!total || !Number.isFinite(total)) return;
             if (!profileId) return;
-             
-            fetch(`/api/titles/${titleId}/progress`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                positionSeconds: pos,
-                durationSeconds: total,
-                episodeId: episodeId ?? null,
-                profileId,
-              }),
-            }).catch(() => {});
+
+            queueProgressSync(pos, total);
           }}
           onWaiting={() => setIsBuffering(true)}
           onPlaying={() => setIsBuffering(false)}
@@ -1362,17 +1586,8 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
             const total = videoEl.duration || duration;
             if (!total || !Number.isFinite(total)) return;
             if (!profileId) return;
-             
-            fetch(`/api/titles/${titleId}/progress`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                positionSeconds: total,
-                durationSeconds: total,
-                episodeId: episodeId ?? null,
-                profileId,
-              }),
-            }).catch(() => {});
+
+            queueProgressSync(total, total);
             
             // Mostrar countdown para próximo episódio
             if (nextEpisode) {

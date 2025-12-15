@@ -8,6 +8,20 @@ Resumo das mudanças que impactam o painel admin, fluxos de upload, legendas e m
 
 ## 2025-12-15 – Inter Boleto (Cobrança v3) + Webhook de ativação automática
 
+### PWA (nível app)
+
+- **Offline fallback** – rota `/offline` para fallback quando o usuário estiver sem internet.
+- **Service Worker** – cache inteligente para assets estáticos + fallback offline (sem cachear streaming/API).
+- **UX de instalação e atualização** – banner de instalar quando disponível e CTA de atualização quando houver nova versão.
+- **Playback tipo app** – Media Session e Wake Lock para controles nativos e evitar tela apagando durante o vídeo.
+- **Web Push (PWA)** – suporte a Web Push com VAPID + subscriptions por usuário, envio via admin e handler no Service Worker.
+
+### Variáveis de ambiente (Web Push)
+
+- `WEBPUSH_VAPID_PUBLIC_KEY`
+- `WEBPUSH_VAPID_PRIVATE_KEY`
+- `WEBPUSH_VAPID_SUBJECT` (ex: `mailto:suporte@...` ou `https://pflix.com.br`)
+
 ### Pagamentos (Inter)
 
 - **Boleto Inter (Cobrança v3)** – `POST /api/subscription/create` com `billingType=BOLETO` emite cobrança no Inter e grava `Payment.asaasPaymentId = codigoSolicitacao` (UUID do Inter) e `Payment.invoiceUrl = "INTER"`.
