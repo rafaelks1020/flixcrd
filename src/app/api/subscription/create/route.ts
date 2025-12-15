@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { createInterCobrancaBoleto, createInterPixCobImmediate, getInterPixQrCodeByLocId } from '@/lib/inter';
 import {
   getOrCreateCustomer,
   createPayment,
@@ -45,13 +46,37 @@ export async function POST(request: NextRequest) {
       creditCard,
       creditCardHolderInfo,
       plan = 'BASIC',
+      paymentProvider,
     } = body as {
       billingType: 'PIX' | 'BOLETO' | 'CREDIT_CARD';
       cpfCnpj?: string;
       creditCard?: CreditCardData;
       creditCardHolderInfo?: CreditCardHolderInfo;
       plan?: 'BASIC' | 'DUO';
+      paymentProvider?: 'ASAAS' | 'INTER';
     };
+
+    const normalizeProvider = (value: unknown): 'ASAAS' | 'INTER' | null => {
+      if (typeof value !== 'string') return null;
+      const v = value.trim().toUpperCase();
+      if (v === 'ASAAS') return 'ASAAS';
+      if (v === 'INTER') return 'INTER';
+      return null;
+    };
+
+    const envProviderRaw =
+      (billingType === 'PIX'
+        ? process.env.PAYMENTS_PROVIDER_PIX
+        : billingType === 'BOLETO'
+          ? process.env.PAYMENTS_PROVIDER_BOLETO
+          : undefined) ||
+      process.env.PAYMENTS_PROVIDER_DEFAULT ||
+      process.env.PAYMENTS_PROVIDER ||
+      process.env.PAYMENT_PROVIDER;
+
+    const selectedProvider =
+      (normalizeProvider(paymentProvider) || normalizeProvider(envProviderRaw)) ||
+      'ASAAS';
 
     // Validar dados do cartão se for cartão de crédito
     if (billingType === 'CREDIT_CARD') {
@@ -92,6 +117,354 @@ export async function POST(request: NextRequest) {
     const planKey = plan === 'DUO' ? 'DUO' : 'BASIC';
     const pricing = calculateFinalPrice(billingType, planKey);
 
+    const planConfig = PLAN_CONFIG[planKey];
+    const now = new Date();
+
+    if (billingType === 'CREDIT_CARD' && selectedProvider === 'INTER') {
+      return NextResponse.json(
+        { error: 'Pagamento com cartão de crédito disponível apenas via Asaas' },
+        { status: 400 },
+      );
+    }
+
+    if (billingType === 'PIX' && selectedProvider === 'INTER') {
+      const interPixKey =
+        process.env.INTER_PIX_KEY ||
+        process.env.INTER_CHAVE_PIX ||
+        process.env.INTER_PIX_CHAVE ||
+        process.env.PIX_KEY;
+
+      if (!interPixKey) {
+        return NextResponse.json(
+          { error: 'Chave PIX do Inter não configurada (INTER_PIX_KEY/INTER_CHAVE_PIX)' },
+          { status: 500 },
+        );
+      }
+
+      const expiracaoSegundosRaw = process.env.INTER_PIX_EXPIRATION_SECONDS;
+      const expiracaoSegundos = expiracaoSegundosRaw ? Number(expiracaoSegundosRaw) : 3600;
+      const expiracaoMs =
+        Number.isFinite(expiracaoSegundos) && expiracaoSegundos > 60
+          ? Math.floor(expiracaoSegundos) * 1000
+          : 3600 * 1000;
+
+      const { txid, locId } = await createInterPixCobImmediate({
+        valor: pricing.totalPrice,
+        chavePix: interPixKey,
+        expiracaoSegundos: Math.floor(expiracaoMs / 1000),
+        solicitacaoPagador: `${planConfig.name} - ${planConfig.description}`,
+        devedorCpfCnpj: cpfCnpj || user.cpfCnpj || undefined,
+      });
+
+      const { copiaECola, qrCodeBase64 } = await getInterPixQrCodeByLocId(locId);
+
+      const expiresAt = new Date(Date.now() + expiracaoMs);
+      const expirationDate = expiresAt.toISOString();
+
+      const subscriptionData = {
+        status: 'PENDING',
+        plan: planKey,
+        price: pricing.totalPrice,
+        asaasCustomerId: null,
+        asaasPaymentId: null,
+        currentPeriodStart: now,
+        currentPeriodEnd: calculatePeriodEnd(now),
+      };
+
+      let subscription;
+      if (user.Subscription) {
+        subscription = await prisma.subscription.update({
+          where: { id: user.Subscription.id },
+          data: subscriptionData,
+        });
+      } else {
+        subscription = await prisma.subscription.create({
+          data: {
+            userId: user.id,
+            ...subscriptionData,
+          },
+        });
+      }
+
+      await prisma.pixPayment.create({
+        data: {
+          userId: user.id,
+          subscriptionId: subscription.id,
+          txid,
+          valor: pricing.totalPrice,
+          status: 'PENDING',
+        },
+      });
+
+      const dbPayment = await prisma.payment.create({
+        data: {
+          subscriptionId: subscription.id,
+          asaasPaymentId: txid,
+          status: 'PENDING',
+          value: pricing.totalPrice,
+          billingType,
+          dueDate: expiresAt,
+          paymentDate: null,
+          invoiceUrl: null,
+          pixQrCode: qrCodeBase64,
+          pixCopiaECola: copiaECola,
+        },
+      });
+
+      const origin = new URL(request.url).origin;
+      const invoiceProxyUrl = `${origin}/api/payments/${dbPayment.id}/invoice`;
+
+      try {
+        const planName = planConfig.name;
+        const planPrice = `R$ ${pricing.totalPrice.toFixed(2).replace('.', ',')}`;
+
+        await sendMail({
+          to: user.email,
+          subject: `Pagamento PIX - ${planName}`,
+          fromEmail: 'financeiro@pflix.com.br',
+          fromName: 'Financeiro FlixCRD',
+          meta: {
+            reason: 'payment-created',
+            userId: user.id,
+            subscriptionId: subscription.id,
+            paymentId: txid,
+            extra: {
+              billingType,
+              plan: planName,
+              invoiceUrl: invoiceProxyUrl,
+            },
+          },
+          context: {
+            value: pricing.totalPrice,
+            dueDate: expirationDate,
+          },
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #e50914;">🎬 FlixCRD - Assinatura ${planName}</h2>
+              <p>Olá, ${user.name || 'usuário'}!</p>
+              <p>Sua assinatura <strong>${planName}</strong> foi criada com sucesso!</p>
+              <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="margin-top: 0;">Pagamento via PIX</h3>
+                <p><strong>Valor:</strong> ${planPrice}</p>
+                <p style="font-size: 14px; color: #666;">Escaneie o QR Code abaixo ou use o código Pix Copia e Cola:</p>
+                <div style="text-align: center; margin: 20px 0;">
+                  <img src="data:image/png;base64,${qrCodeBase64}" alt="QR Code PIX" style="max-width: 200px;" />
+                </div>
+                <div style="background-color: #fff; padding: 10px; border-radius: 4px; word-break: break-all; font-size: 12px; font-family: monospace;">
+                  ${copiaECola}
+                </div>
+              </div>
+              <p style="color: #666; font-size: 14px;">
+                ⏰ Após o pagamento, sua assinatura será ativada automaticamente em alguns minutos.
+              </p>
+            </div>
+          `,
+          text: `
+FlixCRD - Assinatura ${planName}
+
+Olá, ${user.name || 'usuário'}!
+
+Sua assinatura ${planName} foi criada com sucesso!
+
+Pagamento via PIX
+Valor: ${planPrice}
+
+Código Pix Copia e Cola:
+${copiaECola}
+
+Após o pagamento, sua assinatura será ativada automaticamente em alguns minutos.
+          `,
+        });
+
+        console.log(`[Subscription] Email de pagamento enviado para ${user.email} (PIX Inter)`);
+      } catch (emailError) {
+        console.error('[Subscription] Erro ao enviar email:', emailError);
+      }
+
+      return NextResponse.json({
+        success: true,
+        subscription,
+        pricing: {
+          basePrice: pricing.basePrice,
+          fee: pricing.fee,
+          totalPrice: pricing.totalPrice,
+          feeDescription: pricing.feeDescription,
+        },
+        payment: {
+          id: dbPayment.id,
+          status: 'PENDING',
+          value: pricing.totalPrice,
+          dueDate: expirationDate,
+          billingType,
+          invoiceUrl: `/api/payments/${dbPayment.id}/invoice`,
+          pix: {
+            qrCode: qrCodeBase64,
+            copiaECola,
+            expirationDate,
+          },
+          isPaid: false,
+        },
+      });
+    }
+
+    if (billingType === 'BOLETO' && selectedProvider === 'INTER') {
+      const cpfPagador = cpfCnpj || user.cpfCnpj;
+      if (!cpfPagador) {
+        return NextResponse.json(
+          { error: 'CPF/CNPJ é obrigatório para pagamento com boleto' },
+          { status: 400 },
+        );
+      }
+
+      const dueDate = getNextDueDate();
+      const pagadorNome = user.name || user.email.split('@')[0];
+      const seuNumero = `flix-${user.id.slice(0, 8)}-${Date.now()}`;
+
+      const { codigoSolicitacao } = await createInterCobrancaBoleto({
+        seuNumero,
+        valor: pricing.totalPrice,
+        dataVencimento: dueDate,
+        pagador: {
+          cpfCnpj: cpfPagador,
+          nome: pagadorNome,
+          email: user.email,
+          phone: user.phone || undefined,
+        },
+        numDiasAgenda: 0,
+        linha1: `${planConfig.name} - Assinatura FlixCRD`,
+        linha2: `Pagamento via boleto`,
+      });
+
+      const subscriptionData = {
+        status: 'PENDING',
+        plan: planKey,
+        price: pricing.totalPrice,
+        asaasCustomerId: null,
+        asaasPaymentId: null,
+        currentPeriodStart: now,
+        currentPeriodEnd: calculatePeriodEnd(now),
+      };
+
+      let subscription;
+      if (user.Subscription) {
+        subscription = await prisma.subscription.update({
+          where: { id: user.Subscription.id },
+          data: subscriptionData,
+        });
+      } else {
+        subscription = await prisma.subscription.create({
+          data: {
+            userId: user.id,
+            ...subscriptionData,
+          },
+        });
+      }
+
+      const dbPayment = await prisma.payment.create({
+        data: {
+          subscriptionId: subscription.id,
+          asaasPaymentId: codigoSolicitacao,
+          status: 'PENDING',
+          value: pricing.totalPrice,
+          billingType,
+          dueDate: new Date(dueDate),
+          paymentDate: null,
+          invoiceUrl: 'INTER',
+          pixQrCode: null,
+          pixCopiaECola: null,
+        },
+      });
+
+      const origin = new URL(request.url).origin;
+      const invoiceProxyUrl = `${origin}/api/payments/${dbPayment.id}/invoice`;
+
+      try {
+        const planName = planConfig.name;
+        const planPrice = `R$ ${pricing.totalPrice.toFixed(2).replace('.', ',')}`;
+
+        await sendMail({
+          to: user.email,
+          subject: `Boleto de Pagamento - ${planName}`,
+          fromEmail: "financeiro@pflix.com.br",
+          fromName: "Financeiro FlixCRD",
+          meta: {
+            reason: "payment-created",
+            userId: user.id,
+            subscriptionId: subscription.id,
+            paymentId: codigoSolicitacao,
+            extra: {
+              billingType,
+              plan: planName,
+            },
+          },
+          context: {
+            value: pricing.totalPrice,
+            dueDate,
+            boletoUrl: invoiceProxyUrl,
+          },
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #e50914;">🎬 FlixCRD - Assinatura ${planName}</h2>
+              <p>Olá, ${user.name || 'usuário'}!</p>
+              <p>Sua assinatura <strong>${planName}</strong> foi criada com sucesso!</p>
+              <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="margin-top: 0;">Pagamento via Boleto</h3>
+                <p><strong>Valor:</strong> ${planPrice}</p>
+                <p><strong>Vencimento:</strong> ${new Date(dueDate).toLocaleDateString('pt-BR')}</p>
+              </div>
+              <p style="text-align: center;">
+                <a href="${invoiceProxyUrl}"
+                   style="background-color: #e50914; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                  📄 Visualizar Boleto
+                </a>
+              </p>
+              <p style="color: #666; font-size: 14px;">
+                ⏰ Após a confirmação do pagamento (até 3 dias úteis), sua assinatura será ativada automaticamente.
+              </p>
+            </div>
+          `,
+          text: `
+FlixCRD - Assinatura ${planName}
+
+Olá, ${user.name || 'usuário'}!
+
+Sua assinatura ${planName} foi criada com sucesso!
+
+Pagamento via Boleto
+Valor: ${planPrice}
+Vencimento: ${new Date(dueDate).toLocaleDateString('pt-BR')}
+
+Acesse o boleto: ${invoiceProxyUrl}
+
+Após a confirmação do pagamento (até 3 dias úteis), sua assinatura será ativada automaticamente.
+          `,
+        });
+      } catch (emailError) {
+        console.error('[Subscription] Erro ao enviar email:', emailError);
+      }
+
+      return NextResponse.json({
+        success: true,
+        subscription,
+        pricing: {
+          basePrice: pricing.basePrice,
+          fee: pricing.fee,
+          totalPrice: pricing.totalPrice,
+          feeDescription: pricing.feeDescription,
+        },
+        payment: {
+          id: dbPayment.id,
+          status: 'PENDING',
+          value: pricing.totalPrice,
+          dueDate,
+          billingType,
+          invoiceUrl: `/api/payments/${dbPayment.id}/invoice`,
+          pix: null,
+          isPaid: false,
+        },
+      });
+    }
+
     // Criar ou buscar cliente no Asaas
     const customer = await getOrCreateCustomer({
       name: user.name || user.email.split('@')[0],
@@ -100,7 +473,6 @@ export async function POST(request: NextRequest) {
     });
 
     // Criar cobrança
-    const planConfig = PLAN_CONFIG[planKey];
     const dueDate = getNextDueDate();
     
     // Preparar dados do pagamento
@@ -127,15 +499,9 @@ export async function POST(request: NextRequest) {
 
     const payment = await createPayment(paymentData);
 
-    // Buscar QR Code PIX se for PIX
-    let pixData = null;
-    if (billingType === 'PIX') {
-      pixData = await getPixQrCode(payment.id);
-    }
+    // PIX é tratado via Inter (early return acima)
 
     // Criar ou atualizar subscription no banco
-    const now = new Date();
-    
     // Se pagamento com cartão foi aprovado, já ativa
     const isCardApproved = billingType === 'CREDIT_CARD' && 
       (payment.status === 'CONFIRMED' || payment.status === 'RECEIVED');
@@ -165,6 +531,26 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    let paymentInvoiceUrl: string | null = null;
+    let pixQrCode: string | null = null;
+    let pixCopiaECola: string | null = null;
+    let pixExpirationDate: string | null = null;
+
+    if (billingType === 'BOLETO') {
+      paymentInvoiceUrl = (payment as any).bankSlipUrl || (payment as any).invoiceUrl || null;
+    }
+
+    if (billingType === 'PIX') {
+      try {
+        const pixData = await getPixQrCode(payment.id);
+        pixQrCode = pixData?.encodedImage || null;
+        pixCopiaECola = pixData?.payload || null;
+        pixExpirationDate = pixData?.expirationDate || null;
+      } catch (error) {
+        console.error('[Subscription] Falha ao obter QRCode PIX do Asaas:', error);
+      }
+    }
+
     // Criar registro de pagamento
     const dbPayment = await prisma.payment.create({
       data: {
@@ -175,12 +561,9 @@ export async function POST(request: NextRequest) {
         billingType,
         dueDate: new Date(dueDate),
         paymentDate: isCardApproved ? now : null,
-        invoiceUrl:
-          billingType === 'BOLETO'
-            ? (payment.bankSlipUrl || payment.invoiceUrl)
-            : null,
-        pixQrCode: pixData?.encodedImage,
-        pixCopiaECola: pixData?.payload,
+        invoiceUrl: paymentInvoiceUrl,
+        pixQrCode,
+        pixCopiaECola,
       },
     });
 
@@ -192,124 +575,7 @@ export async function POST(request: NextRequest) {
       const planName = planConfig.name;
       const planPrice = `R$ ${pricing.totalPrice.toFixed(2).replace('.', ',')}`;
 
-      if (billingType === 'PIX' && pixData) {
-        // Email com instruções de pagamento PIX
-        await sendMail({
-          to: user.email,
-          subject: `Pagamento PIX - ${planName}`,
-          fromEmail: "financeiro@pflix.com.br",
-          fromName: "Financeiro FlixCRD",
-          meta: {
-            reason: "payment-created",
-            userId: user.id,
-            subscriptionId: subscription.id,
-            paymentId: payment.id,
-            extra: {
-              billingType,
-              plan: planName,
-            },
-          },
-          context: {
-            value: pricing.totalPrice,
-            dueDate,
-          },
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #e50914;">🎬 FlixCRD - Assinatura ${planName}</h2>
-              <p>Olá, ${user.name || 'usuário'}!</p>
-              <p>Sua assinatura <strong>${planName}</strong> foi criada com sucesso!</p>
-              <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="margin-top: 0;">Pagamento via PIX</h3>
-                <p><strong>Valor:</strong> ${planPrice}</p>
-                <p style="font-size: 14px; color: #666;">Escaneie o QR Code abaixo ou use o código Pix Copia e Cola:</p>
-                <div style="text-align: center; margin: 20px 0;">
-                  <img src="${pixData.encodedImage}" alt="QR Code PIX" style="max-width: 200px;">
-                </div>
-                <div style="background-color: #fff; padding: 10px; border-radius: 4px; word-break: break-all; font-size: 12px; font-family: monospace;">
-                  ${pixData.payload}
-                </div>
-              </div>
-              <p style="color: #666; font-size: 14px;">
-                ⏰ Após o pagamento, sua assinatura será ativada automaticamente em alguns minutos.
-              </p>
-            </div>
-          `,
-          text: `
-FlixCRD - Assinatura ${planName}
-
-Olá, ${user.name || 'usuário'}!
-
-Sua assinatura ${planName} foi criada com sucesso!
-
-Pagamento via PIX
-Valor: ${planPrice}
-
-Código Pix Copia e Cola:
-${pixData.payload}
-
-Após o pagamento, sua assinatura será ativada automaticamente em alguns minutos.
-          `,
-        });
-      } else if (billingType === 'BOLETO') {
-        // Email com link do boleto
-        await sendMail({
-          to: user.email,
-          subject: `Boleto de Pagamento - ${planName}`,
-          fromEmail: "financeiro@pflix.com.br",
-          fromName: "Financeiro FlixCRD",
-          meta: {
-            reason: "payment-created",
-            userId: user.id,
-            subscriptionId: subscription.id,
-            paymentId: payment.id,
-            extra: {
-              billingType,
-              plan: planName,
-            },
-          },
-          context: {
-            value: pricing.totalPrice,
-            dueDate,
-            boletoUrl: invoiceProxyUrl,
-          },
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #e50914;">🎬 FlixCRD - Assinatura ${planName}</h2>
-              <p>Olá, ${user.name || 'usuário'}!</p>
-              <p>Sua assinatura <strong>${planName}</strong> foi criada com sucesso!</p>
-              <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="margin-top: 0;">Pagamento via Boleto</h3>
-                <p><strong>Valor:</strong> ${planPrice}</p>
-                <p><strong>Vencimento:</strong> ${new Date(dueDate).toLocaleDateString('pt-BR')}</p>
-              </div>
-              <p style="text-align: center;">
-                <a href="${invoiceProxyUrl}" 
-                   style="background-color: #e50914; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
-                  📄 Visualizar Boleto
-                </a>
-              </p>
-              <p style="color: #666; font-size: 14px;">
-                ⏰ Após a confirmação do pagamento (até 3 dias úteis), sua assinatura será ativada automaticamente.
-              </p>
-            </div>
-          `,
-          text: `
-FlixCRD - Assinatura ${planName}
-
-Olá, ${user.name || 'usuário'}!
-
-Sua assinatura ${planName} foi criada com sucesso!
-
-Pagamento via Boleto
-Valor: ${planPrice}
-Vencimento: ${new Date(dueDate).toLocaleDateString('pt-BR')}
-
-Acesse o boleto: ${invoiceProxyUrl}
-
-Após a confirmação do pagamento (até 3 dias úteis), sua assinatura será ativada automaticamente.
-          `,
-        });
-      } else if (billingType === 'CREDIT_CARD' && isCardApproved) {
+      if (billingType === 'CREDIT_CARD' && isCardApproved) {
         // Email de confirmação de pagamento aprovado
         await sendMail({
           to: user.email,
@@ -369,6 +635,125 @@ Aproveite todo o conteúdo disponível na plataforma!
         });
       }
 
+      if (billingType === 'PIX') {
+        const planPricePix = `R$ ${pricing.totalPrice.toFixed(2).replace('.', ',')}`;
+        if (pixQrCode && pixCopiaECola) {
+          await sendMail({
+            to: user.email,
+            subject: `Pagamento PIX - ${planName}`,
+            fromEmail: 'financeiro@pflix.com.br',
+            fromName: 'Financeiro FlixCRD',
+            meta: {
+              reason: 'payment-created',
+              userId: user.id,
+              subscriptionId: subscription.id,
+              paymentId: payment.id,
+              extra: {
+                billingType,
+                plan: planName,
+                provider: 'ASAAS',
+              },
+            },
+            context: {
+              value: pricing.totalPrice,
+              dueDate: pixExpirationDate || dueDate,
+            },
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #e50914;">🎬 FlixCRD - Assinatura ${planName}</h2>
+                <p>Olá, ${user.name || 'usuário'}!</p>
+                <p>Sua assinatura <strong>${planName}</strong> foi criada com sucesso!</p>
+                <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                  <h3 style="margin-top: 0;">Pagamento via PIX</h3>
+                  <p><strong>Valor:</strong> ${planPricePix}</p>
+                  <p style="font-size: 14px; color: #666;">Escaneie o QR Code abaixo ou use o código Pix Copia e Cola:</p>
+                  <div style="text-align: center; margin: 20px 0;">
+                    <img src="data:image/png;base64,${pixQrCode}" alt="QR Code PIX" style="max-width: 200px;" />
+                  </div>
+                  <div style="background-color: #fff; padding: 10px; border-radius: 4px; word-break: break-all; font-size: 12px; font-family: monospace;">
+                    ${pixCopiaECola}
+                  </div>
+                </div>
+                <p style="color: #666; font-size: 14px;">⏰ Após o pagamento, sua assinatura será ativada automaticamente em alguns minutos.</p>
+              </div>
+            `,
+            text: `
+FlixCRD - Assinatura ${planName}
+
+Olá, ${user.name || 'usuário'}!
+
+Sua assinatura ${planName} foi criada com sucesso!
+
+Pagamento via PIX
+Valor: ${planPricePix}
+
+Código Pix Copia e Cola:
+${pixCopiaECola}
+
+Após o pagamento, sua assinatura será ativada automaticamente em alguns minutos.
+            `,
+          });
+        }
+      }
+
+      if (billingType === 'BOLETO') {
+        const planPriceBoleto = `R$ ${pricing.totalPrice.toFixed(2).replace('.', ',')}`;
+        await sendMail({
+          to: user.email,
+          subject: `Boleto de Pagamento - ${planName}`,
+          fromEmail: "financeiro@pflix.com.br",
+          fromName: "Financeiro FlixCRD",
+          meta: {
+            reason: "payment-created",
+            userId: user.id,
+            subscriptionId: subscription.id,
+            paymentId: payment.id,
+            extra: {
+              billingType,
+              plan: planName,
+              provider: 'ASAAS',
+            },
+          },
+          context: {
+            value: pricing.totalPrice,
+            dueDate,
+            boletoUrl: invoiceProxyUrl,
+          },
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #e50914;">🎬 FlixCRD - Assinatura ${planName}</h2>
+              <p>Olá, ${user.name || 'usuário'}!</p>
+              <p>Sua assinatura <strong>${planName}</strong> foi criada com sucesso!</p>
+              <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="margin-top: 0;">Pagamento via Boleto</h3>
+                <p><strong>Valor:</strong> ${planPriceBoleto}</p>
+                <p><strong>Vencimento:</strong> ${new Date(dueDate).toLocaleDateString('pt-BR')}</p>
+              </div>
+              <p style="text-align: center;">
+                <a href="${invoiceProxyUrl}"
+                   style="background-color: #e50914; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                  📄 Visualizar Boleto
+                </a>
+              </p>
+              <p style="color: #666; font-size: 14px;">⏰ Após a confirmação do pagamento, sua assinatura será ativada automaticamente.</p>
+            </div>
+          `,
+          text: `
+FlixCRD - Assinatura ${planName}
+
+Olá, ${user.name || 'usuário'}!
+
+Sua assinatura ${planName} foi criada com sucesso!
+
+Pagamento via Boleto
+Valor: ${planPriceBoleto}
+Vencimento: ${new Date(dueDate).toLocaleDateString('pt-BR')}
+
+Acesse o boleto: ${invoiceProxyUrl}
+          `,
+        });
+      }
+
       console.log(`[Subscription] Email de pagamento enviado para ${user.email} (${billingType})`);
     } catch (emailError) {
       // Não bloqueia a criação da assinatura se o email falhar
@@ -390,11 +775,11 @@ Aproveite todo o conteúdo disponível na plataforma!
         value: payment.value,
         dueDate: payment.dueDate,
         billingType,
-        invoiceUrl: dbPayment.invoiceUrl ? `/api/payments/${dbPayment.id}/invoice` : null,
-        pix: pixData ? {
-          qrCode: pixData.encodedImage,
-          copiaECola: pixData.payload,
-          expirationDate: pixData.expirationDate,
+        invoiceUrl: billingType === 'PIX' ? `/api/payments/${dbPayment.id}/invoice` : dbPayment.invoiceUrl ? `/api/payments/${dbPayment.id}/invoice` : null,
+        pix: billingType === 'PIX' && pixQrCode && pixCopiaECola ? {
+          qrCode: pixQrCode,
+          copiaECola: pixCopiaECola,
+          expirationDate: pixExpirationDate || '',
         } : null,
         // Se cartão foi aprovado, já está pago
         isPaid: isCardApproved,

@@ -129,6 +129,26 @@ model Payment {
   @@index([subscriptionId])
 }
 
+model PixPayment {
+  id                String        @id @default(cuid())
+  userId            String        @map("user_id")
+  subscriptionId    String?       @map("subscription_id")
+  txid              String        @unique
+  valor             Float
+  status            PixPaymentStatus
+  createdAt         DateTime      @default(now()) @map("created_at")
+  paidAt            DateTime?     @map("paid_at")
+  rawWebhookPayload Json?         @map("raw_webhook_payload")
+  User              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  Subscription      Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("pix_payments")
+}
+
 model PlaybackProgress {
   id              String   @id @default(cuid())
   profileId       String
@@ -304,6 +324,7 @@ model Subscription {
   asaasSubscriptionId String?
   price               Float     @default(10.00)
   Payment             Payment[]
+  PixPayment          PixPayment[]
   User                User      @relation(fields: [userId], references: [id])
 }
 
@@ -376,6 +397,7 @@ model User {
   Request                Request[]
   AssignedRequests       Request[]              @relation("RequestAssignedAdmin")
   Subscription           Subscription?
+  PixPayment             PixPayment[]
 }
 
 model UserFavorite {
@@ -429,6 +451,12 @@ enum ApprovalStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum PixPaymentStatus {
+  PENDING
+  PAID
+  EXPIRED
 }
 
 enum RequestHistoryAction {

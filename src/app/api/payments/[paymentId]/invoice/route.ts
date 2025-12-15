@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth-mobile";
 import { getPayment, getPixQrCode } from "@/lib/asaas";
+import { getInterCobrancaPdf } from "@/lib/inter";
 
 function normalizePixImageSrc(input: string) {
   const value = (input || "").trim();
@@ -158,6 +159,26 @@ export async function GET(
           "Content-Type": "text/html; charset=utf-8",
           "Cache-Control": "private, no-store",
           "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
+
+    const isUuid = (value: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+    const isInterBoleto = payment.billingType === "BOLETO" && (payment.invoiceUrl === "INTER" || isUuid(payment.asaasPaymentId));
+
+    if (isInterBoleto) {
+      const pdf = await getInterCobrancaPdf(payment.asaasPaymentId);
+      const body = new Uint8Array(pdf);
+
+      return new NextResponse(body, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Cache-Control": "private, no-store",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Disposition": "inline",
         },
       });
     }

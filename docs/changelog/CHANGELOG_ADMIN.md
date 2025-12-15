@@ -6,6 +6,40 @@
 
 Resumo das mudanças que impactam o painel admin, fluxos de upload, legendas e monitoramento.
 
+## 2025-12-15 – Inter Boleto (Cobrança v3) + Webhook de ativação automática
+
+### Pagamentos (Inter)
+
+- **Boleto Inter (Cobrança v3)** – `POST /api/subscription/create` com `billingType=BOLETO` emite cobrança no Inter e grava `Payment.asaasPaymentId = codigoSolicitacao` (UUID do Inter) e `Payment.invoiceUrl = "INTER"`.
+- **PIX Inter** – `POST /api/subscription/create` com `billingType=PIX` emite cobrança imediata no Inter e grava `PixPayment.txid` e `Payment.asaasPaymentId = txid`.
+- **PDF do boleto via proxy** – `GET /api/payments/:paymentId/invoice` retorna `application/pdf` baixado do Inter quando o pagamento for do Inter.
+- **Webhook Inter Cobrança (boleto)** – novo endpoint `POST /api/webhooks/inter/cobranca`:
+  - Valida token por header (`x-webhook-token` / `x-inter-webhook-token` / `inter-webhook-token`) quando `INTER_WEBHOOK_TOKEN` (ou `INTER_COBRANCA_WEBHOOK_TOKEN` / `INTER_BOLETO_WEBHOOK_TOKEN`) estiver definido.
+  - Confirma o status **server-to-server** consultando o Inter (`GET /cobranca/v3/cobrancas/{codigoSolicitacao}`).
+  - Atualiza `Payment` e ativa a `Subscription` de forma **idempotente** (evita reprocessar o mesmo pagamento e evita email duplicado).
+- **Webhook Inter PIX** – endpoint `POST /api/webhooks/inter/pix`:
+  - Protegido por token (em produção **exige** `INTER_WEBHOOK_TOKEN` ou `INTER_PIX_WEBHOOK_TOKEN`).
+  - Aceita payload no formato `[{...}]` e também `{ pix: [{...}] }`.
+  - Confirma o status **server-to-server** consultando o Inter (`GET /pix/v2/cob/{txid}`), valida valor e ativa a assinatura de forma **idempotente**.
+
+### Variáveis de ambiente (Inter)
+
+- `INTER_CLIENT_ID`, `INTER_CLIENT_SECRET` (OAuth)
+- `INTER_CERTIFICATE` e `INTER_PRIVATE_KEY` (mTLS)
+- `INTER_CONTA_CORRENTE` (quando aplicável)
+- `INTER_WEBHOOK_TOKEN` para proteger webhooks (PIX e Cobrança)
+- `INTER_PIX_WEBHOOK_TOKEN` (opcional) para proteger apenas o webhook PIX
+- `INTER_COBRANCA_WEBHOOK_TOKEN` / `INTER_BOLETO_WEBHOOK_TOKEN` (opcional) para proteger apenas o webhook Cobrança
+
+### Seletor de provedor (ASAAS vs INTER)
+
+- **Provider por ambiente** – é possível escolher o gateway de cobrança por env:
+  - `PAYMENTS_PROVIDER_PIX=ASAAS|INTER`
+  - `PAYMENTS_PROVIDER_BOLETO=ASAAS|INTER`
+  - fallback: `PAYMENTS_PROVIDER_DEFAULT=ASAAS|INTER` (ou `PAYMENTS_PROVIDER` / `PAYMENT_PROVIDER`)
+- **Override por request (opcional)** – `POST /api/subscription/create` aceita `paymentProvider: "ASAAS" | "INTER"`.
+- **Padrão (sem env/payload)** – volta para **ASAAS** (INTER é opt-in).
+
 ## 2025-12-10 – Mailjet, Recuperação de Senha e Cron visível
 
 ### Comunicação & Emails (Mailjet)
