@@ -34,7 +34,6 @@ export const metadata: Metadata = {
     apple: "/icons/icon-192.png",
   },
   manifest: "/manifest.json",
-  themeColor: "#e50914",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -46,6 +45,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: "#e50914",
 };
 
 export const dynamic = "force-dynamic";

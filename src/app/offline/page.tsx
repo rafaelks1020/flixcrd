@@ -18,13 +18,12 @@ export default function OfflinePage() {
           >
             Voltar para o início
           </a>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
+          <a
+            href="/offline"
             className="w-full rounded-lg bg-zinc-900 hover:bg-zinc-800 transition-colors border border-zinc-800 px-4 py-3 font-semibold"
           >
             Tentar novamente
-          </button>
+          </a>
         </div>
         <p className="mt-6 text-xs text-zinc-500">
           Dica: no iPhone, instale o PWA em “Compartilhar” → “Adicionar à Tela de Início”.
