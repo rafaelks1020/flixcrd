@@ -9,6 +9,22 @@ Regras de uso:
 
 ---
 
+## 2025-12-16 – Admin não conseguia abrir detalhes de solicitação (404 “Solicitação não encontrada”)
+
+- **Sintoma**  
+  A solicitação aparecia na listagem, mas ao abrir o link `/solicitacao/{id}` a tela mostrava “Solicitação não encontrada.”
+
+- **Causa raiz**  
+  A rota `GET /api/solicitacoes/[id]` restringia acesso ao **dono** ou **seguidor** da solicitação. Ao acessar como **ADMIN**, o usuário não era dono/seguidor e o endpoint retornava `404` (por design), causando a mensagem no frontend.
+
+- **Correção aplicada**  
+  Permitimos que `role === "ADMIN"` retorne a solicitação diretamente no endpoint `GET /api/solicitacoes/[id]`.
+
+- **Arquivos envolvidos**  
+  - `src/app/api/solicitacoes/[id]/route.ts`
+
+- **Status**: Resolvido.
+
 ## 2025-12-12 – /subscribe quebrando build TypeScript (JSX dentro de useEffect)
 
 - **Sintoma**  

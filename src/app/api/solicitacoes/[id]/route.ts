@@ -54,6 +54,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
     }
 
+    if (user.role === "ADMIN") {
+      return NextResponse.json(requestRecord);
+    }
+
     if (requestRecord.userId !== user.id) {
       const follower = await prisma.requestFollower.findFirst({
         where: {
