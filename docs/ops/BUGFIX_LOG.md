@@ -9,6 +9,44 @@ Regras de uso:
 
 ---
 
+## 2025-12-17 – Lab: warning/erro de React por keys duplicadas no catálogo ("Encountered two children with the same key")
+
+- **Sintoma**  
+  No `/lab`, ao renderizar a grade de catálogo/busca, o console exibia:
+  `Encountered two children with the same key ...`.
+
+- **Causa raiz**  
+  As rotas do Lab (`/api/lab/discover` e/ou `/api/lab/busca`) podem retornar itens duplicados (mesmo `type` + `tmdbId`). O `LabClient` renderizava a lista usando keys que colidiam nesses casos.
+
+- **Correção aplicada**  
+  - Deduplicação no client por chave estável `type + tmdbId` antes de salvar no estado.
+  - Ajuste das `keys` do React para usar chave estável (`type-tmdbId`).
+
+- **Arquivos envolvidos**  
+  - `src/app/lab/LabClient.tsx`
+
+- **Status**: Resolvido.
+
+## 2025-12-17 – Lab Explore: warning/erro de React por keys duplicadas ("Encountered two children with the same key")
+
+- **Sintoma**  
+  No `/lab/explore`, ao renderizar `TitleRow`, o console exibia:
+  `Encountered two children with the same key ...`.
+
+- **Causa raiz**  
+  As rotas `/api/lab/discover` e `/api/lab/busca` podem retornar itens repetidos durante o scan de múltiplas páginas. O Explore renderizava a lista usando `id` derivado de `type + tmdbId`, gerando colisão quando vinham duplicados.
+
+- **Correção aplicada**  
+  - Deduplicação no client (`LabExploreClient`) antes de salvar resultados em estado.
+  - Deduplicação também nas APIs `/api/lab/discover` e `/api/lab/busca` durante o scan para evitar repetição na origem.
+
+- **Arquivos envolvidos**  
+  - `src/app/lab/explore/LabExploreClient.tsx`
+  - `src/app/api/lab/discover/route.ts`
+  - `src/app/api/lab/busca/route.ts`
+
+- **Status**: Resolvido.
+
 ## 2025-12-16 – Admin não conseguia abrir detalhes de solicitação (404 “Solicitação não encontrada”)
 
 - **Sintoma**  

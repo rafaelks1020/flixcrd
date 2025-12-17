@@ -80,7 +80,33 @@ async function fetchAvailableIds(): Promise<Set<number>> {
   return ids;
 }
 
-interface TmdbSearchResult {
+type Seed = { mediaType: "movie" | "tv"; id: number };
+
+function parseSeeds(raw: string): Seed[] {
+  const parts = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const out: Seed[] = [];
+  const seen = new Set<string>();
+
+  for (const p of parts) {
+    const [typeRaw, idRaw] = p.split(":");
+    const type = (typeRaw || "").trim().toLowerCase();
+    const id = parseInt((idRaw || "").trim(), 10);
+    if (!Number.isFinite(id)) continue;
+    if (type !== "movie" && type !== "tv") continue;
+    const key = `${type}:${id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ mediaType: type, id });
+  }
+
+  return out.slice(0, 6);
+}
+
+interface TmdbRecItem {
   id: number;
   title?: string;
   name?: string;
@@ -90,20 +116,6 @@ interface TmdbSearchResult {
   vote_average: number;
   release_date?: string;
   first_air_date?: string;
-  media_type: string;
-}
-
-interface LabSearchResult {
-  id: string;
-  tmdbId: number;
-  imdbId: string | null;
-  name: string;
-  posterUrl: string | null;
-  backdropUrl: string | null;
-  overview: string;
-  voteAverage: number;
-  releaseDate: string | null;
-  type: string;
 }
 
 export async function GET(request: NextRequest) {
@@ -125,80 +137,61 @@ export async function GET(request: NextRequest) {
 
   try {
     const url = new URL(request.url);
-    const q = url.searchParams.get("q") || "";
+    const seedsRaw = url.searchParams.get("seeds") || "";
+    const limit = clampInt(url.searchParams.get("limit"), 24, 6, 48);
 
-    const page = clampInt(url.searchParams.get("page"), 1, 1, 500);
-    const limit = clampInt(url.searchParams.get("limit"), 20, 5, 40);
-
-    if (!q.trim()) {
-      return NextResponse.json({ results: [], page, limit, totalPages: 0, scannedPages: 0 });
+    const seeds = parseSeeds(seedsRaw);
+    if (seeds.length === 0) {
+      return NextResponse.json({ results: [], seeds, limit });
     }
 
     const availableIds = await fetchAvailableIds();
 
-    const results: LabSearchResult[] = [];
-    const seenTmdbIds = new Set<number>();
-    let tmdbPage = page;
-    let scannedPages = 0;
-    let totalPages = 0;
+    const out: any[] = [];
+    const seen = new Set<string>();
 
-    while (results.length < limit && scannedPages < 4) {
-      const searchUrl = `${TMDB_API}/search/multi?api_key=${TMDB_KEY}&language=pt-BR&query=${encodeURIComponent(q)}&page=${tmdbPage}&include_adult=false`;
+    for (const seed of seeds) {
+      const recUrl = `${TMDB_API}/${seed.mediaType}/${seed.id}/recommendations?api_key=${TMDB_KEY}&language=pt-BR&page=1`;
+      const recRes = await fetch(recUrl, { next: { revalidate: 300 } });
+      if (!recRes.ok) continue;
 
-      const res = await fetch(searchUrl, { next: { revalidate: 120 } });
+      const recJson = await recRes.json();
+      const items: TmdbRecItem[] = Array.isArray(recJson?.results) ? recJson.results : [];
 
-      if (!res.ok) {
-        return NextResponse.json({ error: "Erro na busca", results: [] });
-      }
-
-      const data = await res.json();
-      const tmdbResults: TmdbSearchResult[] = data.results || [];
-      if (!totalPages) totalPages = data?.total_pages || 0;
-
-      for (const item of tmdbResults) {
-        if (item.media_type !== "movie" && item.media_type !== "tv") continue;
+      for (const item of items) {
+        if (typeof item?.id !== "number") continue;
         if (!availableIds.has(item.id)) continue;
-        if (seenTmdbIds.has(item.id)) continue;
-        seenTmdbIds.add(item.id);
 
-        results.push({
-          id: `lab-${item.media_type}-${item.id}`,
+        const type = seed.mediaType === "movie" ? "MOVIE" : "SERIES";
+        const key = `${type}-${item.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        out.push({
+          id: `lab-${seed.mediaType}-${item.id}`,
           tmdbId: item.id,
-          imdbId: null,
           name: item.title || item.name || "Sem título",
           posterUrl: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
           backdropUrl: item.backdrop_path ? `https://image.tmdb.org/t/p/original${item.backdrop_path}` : null,
           overview: item.overview || "",
-          voteAverage: item.vote_average || 0,
+          voteAverage: typeof item.vote_average === "number" ? item.vote_average : 0,
           releaseDate: item.release_date || item.first_air_date || null,
-          type: item.media_type === "movie" ? "MOVIE" : "SERIES",
+          type,
         });
 
-        if (results.length >= limit) break;
+        if (out.length >= limit) break;
       }
 
-      scannedPages += 1;
-      tmdbPage += 1;
-      if (!totalPages || tmdbPage > totalPages) break;
-      if (tmdbResults.length === 0) break;
+      if (out.length >= limit) break;
     }
 
-    const tmdbPageEnd = tmdbPage - 1;
-    const hasMore = totalPages ? tmdbPage <= totalPages : false;
-    const nextPage = hasMore ? tmdbPageEnd + 1 : null;
-
     return NextResponse.json({
-      results,
-      page,
+      seeds,
       limit,
-      totalPages,
-      scannedPages,
-      tmdbPageEnd,
-      hasMore,
-      nextPage,
+      results: out.slice(0, limit),
     });
   } catch (err) {
-    console.error("Lab /busca error:", err);
-    return NextResponse.json({ error: "Erro ao consultar busca.", results: [] }, { status: 500 });
+    console.error("Lab /recommendations error:", err);
+    return NextResponse.json({ error: "Erro ao buscar recomendações." }, { status: 500 });
   }
 }

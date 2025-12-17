@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import TVNavigation from './TVNavigation';
 import ServiceWorkerRegister from './ServiceWorkerRegister';
 import Toast from './ui/Toast';
+import PresenceHeartbeat from './PresenceHeartbeat';
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -17,6 +18,7 @@ export default function Providers({ children }: ProvidersProps) {
   return (
     <SessionProvider>
       {showToast ? <Toast /> : null}
+      <PresenceHeartbeat />
       <ServiceWorkerRegister />
       <TVNavigation />
       {children}

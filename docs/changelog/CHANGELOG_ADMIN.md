@@ -34,6 +34,28 @@ Resumo das mudanças que impactam o painel admin, fluxos de upload, legendas e m
 
 - **Catálogo Inteligente (UI)**: `/lab/explore` com filtros por categoria (Filmes/Séries/Animes), ordenação (popularidade/nota/votos/novidades), gênero e ano; resultados apontam para `/lab/title/...`.
 
+## 2025-12-17 – Lab: Explore inteligente + seções automáticas
+
+- **Explore inteligente**: `/lab/explore` ganhou seções automáticas antes dos filtros:
+  - **Em alta no LAB** (tendências TMDB filtradas apenas para itens disponíveis na SuperFlix)
+  - **Recomendados pra você** (TMDB recommendations baseado em seeds do localStorage do LAB)
+- **Novas APIs**:
+  - `GET /api/lab/trending?type=all|movie|tv&time=day|week&limit=N`
+  - `GET /api/lab/recommendations?seeds=movie:ID,tv:ID&limit=N`
+- **Estabilidade**: deduplicação reforçada em `discover/busca` para evitar warnings de React por keys duplicadas.
+
+## 2025-12-17 – Métricas: Presença/Tempo online (MVP)
+
+- **Heartbeat de presença**: o frontend envia batimentos periódicos para registrar sessão/lastSeen.
+- **Métricas no admin**: `/admin/analytics` agora mostra:
+  - Online agora (usuários/sessões)
+  - Tempo online hoje (agregado)
+  - Tempo online na janela (7/30/90d)
+  - Top usuários por tempo online
+- **Novas APIs**:
+  - `POST /api/presence/heartbeat` (web/mobile)
+  - `GET /api/admin/presence` (ADMIN)
+
 ## 2025-12-15 – Inter Boleto (Cobrança v3) + Webhook de ativação automática
 
 ### PWA (nível app)

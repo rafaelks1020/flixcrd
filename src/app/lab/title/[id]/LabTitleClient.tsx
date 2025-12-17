@@ -1,10 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import toast from "react-hot-toast";
 
 import PremiumNavbar from "@/components/ui/PremiumNavbar";
+import {
+  isInLabMyList,
+  isInLabWatchLater,
+  makeLabTitleKey,
+  toggleLabMyList,
+  toggleLabWatchLater,
+  upsertLabContinue,
+} from "../../labStorage";
 
 interface Season {
   seasonNumber: number;
@@ -77,6 +86,15 @@ export default function LabTitleClient({
   const [seasonDetails, setSeasonDetails] = useState<SeasonDetails | null>(null);
   const [loadingSeason, setLoadingSeason] = useState(false);
 
+  const titleKey = useMemo(() => {
+    const idNum = Number(tmdbId);
+    const safeId = Number.isFinite(idNum) ? idNum : 0;
+    return makeLabTitleKey(mediaType, safeId);
+  }, [tmdbId, mediaType]);
+
+  const [inMyList, setInMyList] = useState(false);
+  const [inWatchLater, setInWatchLater] = useState(false);
+
   // Carregar detalhes do título
   useEffect(() => {
     async function loadTitle() {
@@ -109,6 +127,12 @@ export default function LabTitleClient({
     loadTitle();
   }, [tmdbId, mediaType]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setInMyList(isInLabMyList(titleKey));
+    setInWatchLater(isInLabWatchLater(titleKey));
+  }, [titleKey]);
+
   // Carregar episódios da temporada selecionada
   useEffect(() => {
     if (!title || title.type !== "SERIES" || !selectedSeason) return;
@@ -139,15 +163,48 @@ export default function LabTitleClient({
     if (title.type === "MOVIE") {
       // Filme: usar IMDb ID
       const id = title.imdbId || title.tmdbId;
-      router.push(`/lab/watch?type=filme&id=${id}`);
+
+      upsertLabContinue({
+        key: makeLabTitleKey("movie", title.tmdbId),
+        watchUrl: `/lab/watch?type=filme&id=${id}&tmdb=${title.tmdbId}`,
+        title: title.name,
+        posterUrl: title.posterUrl,
+        watchType: "filme",
+        contentId: String(title.tmdbId),
+      });
+
+      router.push(`/lab/watch?type=filme&id=${id}&tmdb=${title.tmdbId}`);
     } else {
       // Série: ir para o primeiro episódio
+      upsertLabContinue({
+        key: makeLabTitleKey("tv", title.tmdbId),
+        watchUrl: `/lab/watch?type=serie&id=${title.tmdbId}&season=${selectedSeason}&episode=1&tmdb=${title.tmdbId}`,
+        title: title.name,
+        posterUrl: title.posterUrl,
+        watchType: "serie",
+        contentId: String(title.tmdbId),
+        season: selectedSeason,
+        episode: 1,
+      });
+
       router.push(`/lab/watch?type=serie&id=${title.tmdbId}&season=${selectedSeason}&episode=1`);
     }
   }
 
   function handlePlayEpisode(episodeNumber: number) {
     if (!title) return;
+
+    upsertLabContinue({
+      key: makeLabTitleKey("tv", title.tmdbId),
+      watchUrl: `/lab/watch?type=serie&id=${title.tmdbId}&season=${selectedSeason}&episode=${episodeNumber}&tmdb=${title.tmdbId}`,
+      title: title.name,
+      posterUrl: title.posterUrl,
+      watchType: "serie",
+      contentId: String(title.tmdbId),
+      season: selectedSeason,
+      episode: episodeNumber,
+    });
+
     router.push(`/lab/watch?type=serie&id=${title.tmdbId}&season=${selectedSeason}&episode=${episodeNumber}`);
   }
 
@@ -277,6 +334,64 @@ export default function LabTitleClient({
                     <path d="M8 5v14l11-7z" />
                   </svg>
                   <span>Assistir</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!title) return;
+                    const item = {
+                      key: titleKey,
+                      tmdbId: title.tmdbId,
+                      mediaType,
+                      title: title.name,
+                      posterUrl: title.posterUrl,
+                      type: title.type,
+                      addedAt: Date.now(),
+                    };
+
+                    const next = toggleLabMyList(item);
+                    const nowIn = next.some((x) => x.key === titleKey);
+                    setInMyList(nowIn);
+                    toast.success(nowIn ? "Adicionado à Minha lista (LAB)" : "Removido da Minha lista (LAB)");
+                  }}
+                  className={`flex items-center gap-2 px-6 py-4 rounded-full font-semibold transition border ${
+                    inMyList
+                      ? "bg-white/10 border-white/20 text-white hover:bg-white/15"
+                      : "bg-zinc-800/80 border-white/10 text-white hover:bg-zinc-700/80"
+                  }`}
+                  title="Minha lista (LAB)"
+                >
+                  {inMyList ? "✓ Minha lista" : "+ Minha lista"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!title) return;
+                    const item = {
+                      key: titleKey,
+                      tmdbId: title.tmdbId,
+                      mediaType,
+                      title: title.name,
+                      posterUrl: title.posterUrl,
+                      type: title.type,
+                      addedAt: Date.now(),
+                    };
+
+                    const next = toggleLabWatchLater(item);
+                    const nowIn = next.some((x) => x.key === titleKey);
+                    setInWatchLater(nowIn);
+                    toast.success(nowIn ? "Adicionado em Assistir depois (LAB)" : "Removido de Assistir depois (LAB)");
+                  }}
+                  className={`flex items-center gap-2 px-6 py-4 rounded-full font-semibold transition border ${
+                    inWatchLater
+                      ? "bg-white/10 border-white/20 text-white hover:bg-white/15"
+                      : "bg-zinc-800/80 border-white/10 text-white hover:bg-zinc-700/80"
+                  }`}
+                  title="Assistir depois (LAB)"
+                >
+                  {inWatchLater ? "✓ Assistir depois" : "⏰ Assistir depois"}
                 </button>
 
                 <Link

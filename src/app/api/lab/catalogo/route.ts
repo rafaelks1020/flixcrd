@@ -82,6 +82,7 @@ export async function GET(request: NextRequest) {
     const listaUrl = `${SUPERFLIX_API}/lista?category=${category}&type=tmdb&format=json&order=desc`;
     const listaRes = await fetch(listaUrl, {
       headers: { "User-Agent": "FlixCRD-Lab/1.0" },
+      next: { revalidate: 300 },
     });
 
     if (!listaRes.ok) {
@@ -112,35 +113,32 @@ export async function GET(request: NextRequest) {
     // Limitar quantidade
     const limitedIds = ids.slice(0, limit);
 
-    // Buscar detalhes do TMDB para cada ID
-    const items: LabTitle[] = [];
-    
-    await Promise.all(
+    // Buscar detalhes do TMDB para cada ID (preservando a ordem do /lista)
+    const resolved = await Promise.all(
       limitedIds.map(async (tmdbId) => {
         const details = await fetchTmdbDetails(tmdbId, mediaType);
-        if (details) {
-          // Extrair imdb_id: pode vir direto ou em external_ids
-          const imdbId = details.imdb_id || details.external_ids?.imdb_id || null;
-          
-          items.push({
-            id: `lab-${mediaType}-${tmdbId}`,
-            tmdbId,
-            imdbId,
-            name: details.title || details.name || "Sem título",
-            posterUrl: details.poster_path
-              ? `https://image.tmdb.org/t/p/w500${details.poster_path}`
-              : null,
-            backdropUrl: details.backdrop_path
-              ? `https://image.tmdb.org/t/p/original${details.backdrop_path}`
-              : null,
-            overview: details.overview || "",
-            voteAverage: details.vote_average || 0,
-            releaseDate: details.release_date || details.first_air_date || null,
-            type: mediaType === "movie" ? "MOVIE" : "SERIES",
-          });
-        }
+        if (!details) return null;
+
+        const imdbId = details.imdb_id || details.external_ids?.imdb_id || null;
+
+        const item: LabTitle = {
+          id: `lab-${mediaType}-${tmdbId}`,
+          tmdbId,
+          imdbId,
+          name: details.title || details.name || "Sem título",
+          posterUrl: details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : null,
+          backdropUrl: details.backdrop_path ? `https://image.tmdb.org/t/p/original${details.backdrop_path}` : null,
+          overview: details.overview || "",
+          voteAverage: details.vote_average || 0,
+          releaseDate: details.release_date || details.first_air_date || null,
+          type: mediaType === "movie" ? "MOVIE" : "SERIES",
+        };
+
+        return item;
       })
     );
+
+    const items: LabTitle[] = resolved.filter(Boolean) as LabTitle[];
 
     return NextResponse.json({ items });
   } catch (err) {

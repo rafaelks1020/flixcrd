@@ -5,6 +5,7 @@ import PremiumTitleCard from "./PremiumTitleCard";
 
 interface Title {
   id: string;
+  href?: string;
   name: string;
   posterUrl: string | null;
   backdropUrl?: string | null;
@@ -172,6 +173,7 @@ export default function PremiumTitleRow({ title, titles, showNewBadge }: Premium
             <PremiumTitleCard
               key={item.id}
               id={item.id}
+              href={item.href}
               name={item.name}
               posterUrl={item.posterUrl}
               backdropUrl={item.backdropUrl}

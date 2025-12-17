@@ -10,14 +10,14 @@ type CalendarStatus = "Atualizado" | "Hoje" | "Futuro" | "Atrasado" | string;
 
 interface CalendarItem {
   title: string;
-  episode_title: string;
-  episode_number: number;
-  air_date: string;
-  poster_path: string;
-  backdrop_path: string;
-  season_number: number;
-  tmdb_id: number;
-  imdb_id: string;
+  episodeTitle: string;
+  episodeNumber: number;
+  airDate: string;
+  posterPath: string;
+  backdropPath: string;
+  seasonNumber: number;
+  tmdbId: number;
+  imdbId: string;
   status: CalendarStatus;
 }
 
@@ -37,6 +37,54 @@ function normalizeItems(data: unknown): CalendarItem[] {
   return [];
 }
 
+function safeText(v: any, fallback = "") {
+  if (v === null || v === undefined) return fallback;
+  const s = String(v);
+  return s === "undefined" || s === "null" ? fallback : s;
+}
+
+function safeInt(v: any, fallback = 0) {
+  const n = typeof v === "number" ? v : parseInt(String(v || "").replace(/[^0-9]/g, ""), 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function parseAirDateToMs(airDate: string) {
+  const s = (airDate || "").trim();
+  if (!s) return Number.POSITIVE_INFINITY;
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const d = new Date(s);
+    const t = d.getTime();
+    return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+  }
+
+  const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (m) {
+    const dd = parseInt(m[1], 10);
+    const mm = parseInt(m[2], 10);
+    const yyyy = parseInt(m[3], 10);
+    const d = new Date(yyyy, mm - 1, dd);
+    const t = d.getTime();
+    return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+  }
+
+  const d = new Date(s);
+  const t = d.getTime();
+  return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY;
+}
+
+function formatEpisodeLine(it: CalendarItem) {
+  const season = safeInt(it.seasonNumber, 0);
+  const ep = safeInt(it.episodeNumber, 0);
+  const epTitle = safeText(it.episodeTitle, "").trim();
+
+  if (season > 0 && ep > 0) {
+    const base = `S${String(season).padStart(2, "0")}E${String(ep).padStart(2, "0")}`;
+    return epTitle ? `${base} — ${epTitle}` : base;
+  }
+  return epTitle || "";
+}
+
 function tmdbImageUrl(pathOrUrl: string | null | undefined, size: "w300" | "w780" | "original" = "w300") {
   if (!pathOrUrl) return null;
   if (pathOrUrl.startsWith("http")) return pathOrUrl;
@@ -54,8 +102,9 @@ function CalendarioHeroSection({
 }) {
   if (!item) return null;
 
-  const backdrop = tmdbImageUrl(item.backdrop_path, "original");
-  const air = item.air_date ? new Date(item.air_date).toLocaleDateString("pt-BR") : "-";
+  const backdrop = tmdbImageUrl(item.backdropPath, "original");
+  const air = item.airDate ? new Date(item.airDate).toLocaleDateString("pt-BR") : "-";
+  const episodeLine = formatEpisodeLine(item);
 
   return (
     <section className="relative h-[85vh] min-h-[600px] w-full overflow-hidden bg-black pt-16">
@@ -85,7 +134,7 @@ function CalendarioHeroSection({
           </div>
 
           <p className="line-clamp-3 text-sm text-zinc-200 drop-shadow-lg md:text-base lg:line-clamp-4">
-            S{String(item.season_number).padStart(2, "0")}E{String(item.episode_number).padStart(2, "0")} — {item.episode_title}
+            {episodeLine || "Episódio"}
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-4">
@@ -154,27 +203,15 @@ export default function LabCalendarioClient({ isLoggedIn, isAdmin }: LabCalendar
 
         const res = await fetch("/api/lab/calendario", { cache: "no-store" });
 
-        const contentType = res.headers.get("content-type") || "";
-
         if (!res.ok) {
-          const text = await res.text();
-          setError(text || "Erro ao carregar calendário");
+          const data = await res.json().catch(() => null);
+          const message = data?.error ? String(data.error) : "Erro ao carregar calendário";
+          setError(message);
           return;
         }
 
-        if (contentType.includes("application/json")) {
-          const data = await res.json();
-          setItems(normalizeItems(data));
-          return;
-        }
-
-        const text = await res.text();
-        try {
-          const parsed = JSON.parse(text);
-          setItems(normalizeItems(parsed));
-        } catch {
-          setError("Resposta inválida do calendário (não é JSON)");
-        }
+        const data = await res.json();
+        setItems(normalizeItems(data));
       } catch (e) {
         console.error(e);
         setError("Erro ao carregar calendário");
@@ -200,15 +237,15 @@ export default function LabCalendarioClient({ isLoggedIn, isAdmin }: LabCalendar
       .filter((it) => (statusFilter === "ALL" ? true : it.status === statusFilter))
       .filter((it) => {
         if (!q) return true;
-        const hay = `${it.title} ${it.episode_title}`.toLowerCase();
+        const hay = `${safeText(it.title)} ${safeText(it.episodeTitle)}`.toLowerCase();
         return hay.includes(q);
       })
-      .sort((a, b) => (a.air_date || "").localeCompare(b.air_date || ""));
+      .sort((a, b) => parseAirDateToMs(a.airDate) - parseAirDateToMs(b.airDate));
   }, [items, statusFilter, query]);
 
   const heroItem = useMemo(() => {
     if (!items || items.length === 0) return null;
-    const pick = items.find((it) => Boolean(it.backdrop_path)) || items[0];
+    const pick = items.find((it) => Boolean(it.backdropPath)) || items[0];
     return pick;
   }, [items]);
 
@@ -218,7 +255,7 @@ export default function LabCalendarioClient({ isLoggedIn, isAdmin }: LabCalendar
 
   function handleWatch(it: CalendarItem) {
     router.push(
-      `/lab/watch?type=serie&id=${it.tmdb_id}&season=${it.season_number}&episode=${it.episode_number}`,
+      `/lab/watch?type=serie&id=${it.tmdbId}&season=${it.seasonNumber || 1}&episode=${it.episodeNumber || 1}`,
     );
   }
 
@@ -234,7 +271,7 @@ export default function LabCalendarioClient({ isLoggedIn, isAdmin }: LabCalendar
         }}
         onMore={() => {
           if (!heroItem) return;
-          router.push(`/lab/title/${heroItem.tmdb_id}?type=tv`);
+          router.push(`/lab/title/${heroItem.tmdbId}?type=tv`);
         }}
       />
 
@@ -281,12 +318,13 @@ export default function LabCalendarioClient({ isLoggedIn, isAdmin }: LabCalendar
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {filtered.map((it, idx) => {
-                  const poster = tmdbImageUrl(it.poster_path, "w300");
-                  const air = it.air_date ? new Date(it.air_date).toLocaleDateString("pt-BR") : "-";
+                  const poster = tmdbImageUrl(it.posterPath, "w300");
+                  const air = it.airDate ? new Date(it.airDate).toLocaleDateString("pt-BR") : "-";
+                  const episodeLine = formatEpisodeLine(it);
 
                   return (
                     <div
-                      key={`${it.tmdb_id}-${it.season_number}-${it.episode_number}-${idx}`}
+                      key={`${it.tmdbId}-${it.seasonNumber}-${it.episodeNumber}-${it.airDate}-${idx}`}
                       className="rounded-2xl border border-zinc-800 bg-zinc-950/60 overflow-hidden"
                     >
                       <div className="flex gap-4 p-4">
@@ -306,14 +344,12 @@ export default function LabCalendarioClient({ isLoggedIn, isAdmin }: LabCalendar
                             </span>
                           </div>
 
-                          <div className="mt-1 text-sm text-zinc-300 line-clamp-2">
-                            S{String(it.season_number).padStart(2, "0")}E{String(it.episode_number).padStart(2, "0")} — {it.episode_title}
-                          </div>
+                          {episodeLine ? (
+                            <div className="mt-1 text-sm text-zinc-300 line-clamp-2">{episodeLine}</div>
+                          ) : null}
 
                           <div className="mt-2 text-xs text-zinc-500 flex items-center gap-2 flex-wrap">
                             <span>{air}</span>
-                            <span>•</span>
-                            <span>TMDB {it.tmdb_id}</span>
                           </div>
 
                           <div className="mt-4 flex gap-2 flex-wrap">
@@ -325,7 +361,7 @@ export default function LabCalendarioClient({ isLoggedIn, isAdmin }: LabCalendar
                               ▶ Assistir
                             </button>
                             <Link
-                              href={`/lab/title/${it.tmdb_id}?type=tv`}
+                              href={`/lab/title/${it.tmdbId}?type=tv`}
                               className="px-4 py-2 rounded-full bg-zinc-900/70 border border-zinc-700 hover:bg-zinc-800/80 text-white text-sm font-semibold"
                             >
                               Detalhes

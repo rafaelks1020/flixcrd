@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 interface PremiumNavbarProps {
   isLoggedIn: boolean;
@@ -16,9 +16,12 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const pathname = usePathname();
   const router = useRouter();
 
   const showLab = isAdmin || process.env.NEXT_PUBLIC_LAB_ENABLED === "true";
+  const isLabRoute = Boolean(pathname && pathname.startsWith("/lab"));
+  const hideSearch = false;
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -53,7 +56,8 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      router.push(`/browse?q=${encodeURIComponent(searchQuery)}`);
+      const target = isLabRoute ? "/lab/explore" : "/browse";
+      router.push(`${target}?q=${encodeURIComponent(searchQuery)}`);
       setSearchOpen(false);
       setSearchQuery("");
     }
@@ -158,7 +162,7 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
       {/* Right Section: Search + Admin + Profile */}
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '20px' }}>
         {/* Search */}
-        {isLoggedIn && (
+        {isLoggedIn && !hideSearch && (
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             {searchOpen && !isMobile ? (
               <form onSubmit={handleSearch} style={{ display: 'flex', alignItems: 'center' }}>

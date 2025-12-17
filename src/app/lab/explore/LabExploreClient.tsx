@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import PremiumNavbar from "@/components/ui/PremiumNavbar";
 import TitleRow from "@/components/ui/TitleRow";
+import { getLabContinue, getLabMyList, getLabWatchLater } from "../labStorage";
 
 type Category = "movie" | "serie" | "anime";
 
@@ -18,7 +19,8 @@ interface Genre {
 
 interface LabTitle {
   id: string;
-  tmdbId: number;
+  tmdbId?: number;
+  imdbId?: string | null;
   name: string;
   posterUrl: string | null;
   backdropUrl: string | null;
@@ -26,6 +28,22 @@ interface LabTitle {
   voteAverage: number;
   releaseDate: string | null;
   type: "MOVIE" | "SERIES";
+}
+
+function labTitleKey(t: LabTitle) {
+  return `${t.type}-${t.tmdbId ?? t.id}`;
+}
+
+function dedupeLabTitles(list: LabTitle[]) {
+  const seen = new Set<string>();
+  const out: LabTitle[] = [];
+  for (const t of list) {
+    const k = labTitleKey(t);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+  }
+  return out;
 }
 
 function ExploreHeroSection({
@@ -146,6 +164,10 @@ export default function LabExploreClient({
   isAdmin: boolean;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlQuery = (searchParams.get("q") || "").trim();
+  const searchMode = urlQuery.length >= 2;
+
   const [category, setCategory] = useState<Category>("movie");
   const [sort, setSort] = useState<Sort>("most_watched");
   const [year, setYear] = useState("");
@@ -157,6 +179,18 @@ export default function LabExploreClient({
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [results, setResults] = useState<LabTitle[]>([]);
+  const [hasMore, setHasMore] = useState(true);
+
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchNextPage, setSearchNextPage] = useState(1);
+  const [searchHasMore, setSearchHasMore] = useState(false);
+  const [searchResults, setSearchResults] = useState<LabTitle[]>([]);
+
+  const [trending, setTrending] = useState<LabTitle[]>([]);
+  const [trendingError, setTrendingError] = useState<string | null>(null);
+  const [recommendations, setRecommendations] = useState<LabTitle[]>([]);
+  const [recommendationsError, setRecommendationsError] = useState<string | null>(null);
 
   const tmdbType = category === "movie" ? "movie" : "tv";
 
@@ -190,6 +224,7 @@ export default function LabExploreClient({
   useEffect(() => {
     async function load() {
       try {
+        if (searchMode) return;
         setLoading(true);
         setError(null);
 
@@ -202,17 +237,158 @@ export default function LabExploreClient({
 
         const data = await res.json();
         const list = Array.isArray(data?.results) ? (data.results as LabTitle[]) : [];
-        setResults(list);
+        setResults(dedupeLabTitles(list));
+        setHasMore(Boolean(data?.hasMore));
       } catch (e) {
         console.error(e);
         setError("Erro ao carregar catálogo");
+        setHasMore(false);
       } finally {
         setLoading(false);
       }
     }
 
     load();
-  }, [queryString]);
+  }, [queryString, searchMode]);
+
+  async function performSearch({ startPage, append }: { startPage: number; append: boolean }) {
+    const query = urlQuery;
+
+    if (!query || query.length < 2) {
+      setSearchResults([]);
+      setSearchError(null);
+      setSearchNextPage(1);
+      setSearchHasMore(false);
+      return;
+    }
+
+    try {
+      setSearching(true);
+      setSearchError(null);
+
+      const res = await fetch(
+        `/api/lab/busca?q=${encodeURIComponent(query)}&page=${startPage}&limit=24`,
+        { cache: "no-store" }
+      );
+
+      if (!res.ok) {
+        const text = await res.text();
+        setSearchError(text || "Erro na busca");
+        setSearchHasMore(false);
+        return;
+      }
+
+      const data = await res.json();
+      const list = Array.isArray(data?.results) ? (data.results as LabTitle[]) : [];
+      const hasMoreRes = Boolean(data?.hasMore);
+      const tmdbPageEnd = typeof data?.tmdbPageEnd === "number" ? (data.tmdbPageEnd as number) : startPage;
+      const nextStart = tmdbPageEnd + 1;
+
+      setSearchNextPage(nextStart);
+      setSearchHasMore(hasMoreRes);
+      setSearchResults((prev) => {
+        const merged = append ? [...prev, ...list] : list;
+        return dedupeLabTitles(merged);
+      });
+    } catch (e) {
+      console.error(e);
+      setSearchError("Erro na busca");
+      setSearchHasMore(false);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!searchMode) {
+      setSearchResults([]);
+      setSearchError(null);
+      setSearchNextPage(1);
+      setSearchHasMore(false);
+      return;
+    }
+
+    setLoading(false);
+    setSearchNextPage(1);
+    performSearch({ startPage: 1, append: false });
+  }, [urlQuery, searchMode]);
+
+  useEffect(() => {
+    if (searchMode) return;
+    if (typeof window === "undefined") return;
+
+    async function loadSmart() {
+      try {
+        setTrendingError(null);
+        const tRes = await fetch("/api/lab/trending?type=all&time=week&limit=24", { cache: "no-store" });
+        if (tRes.ok) {
+          const tJson = await tRes.json();
+          const list = Array.isArray(tJson?.results) ? (tJson.results as LabTitle[]) : [];
+          setTrending(dedupeLabTitles(list));
+        } else {
+          setTrending([]);
+        }
+      } catch (e) {
+        console.error(e);
+        setTrending([]);
+        setTrendingError("Erro ao carregar Em alta");
+      }
+
+      try {
+        setRecommendationsError(null);
+
+        const continueList = getLabContinue();
+        const myList = getLabMyList();
+        const watchLater = getLabWatchLater();
+
+        const seeds: string[] = [];
+
+        for (const it of continueList.slice(0, 3)) {
+          const tmdb = Number(it.contentId);
+          if (!Number.isFinite(tmdb)) continue;
+          seeds.push(`${it.watchType === "filme" ? "movie" : "tv"}:${tmdb}`);
+        }
+
+        for (const it of myList.slice(0, 2)) {
+          seeds.push(`${it.mediaType}:${it.tmdbId}`);
+        }
+
+        for (const it of watchLater.slice(0, 1)) {
+          seeds.push(`${it.mediaType}:${it.tmdbId}`);
+        }
+
+        const uniqueSeeds = Array.from(new Set(seeds)).slice(0, 6);
+        if (uniqueSeeds.length === 0) {
+          setRecommendations([]);
+          return;
+        }
+
+        const rRes = await fetch(`/api/lab/recommendations?limit=24&seeds=${encodeURIComponent(uniqueSeeds.join(","))}`, {
+          cache: "no-store",
+        });
+
+        if (rRes.ok) {
+          const rJson = await rRes.json();
+          const list = Array.isArray(rJson?.results) ? (rJson.results as LabTitle[]) : [];
+          setRecommendations(dedupeLabTitles(list));
+        } else {
+          setRecommendations([]);
+        }
+      } catch (e) {
+        console.error(e);
+        setRecommendations([]);
+        setRecommendationsError("Erro ao carregar recomendações");
+      }
+    }
+
+    loadSmart();
+  }, [searchMode]);
+
+  async function loadMoreSearch() {
+    if (searching || !searchHasMore) return;
+    const start = searchNextPage;
+    await performSearch({ startPage: start, append: true });
+  }
 
   function resetAndLoad(nextCategory: Category, nextSort: Sort) {
     setCategory(nextCategory);
@@ -234,13 +410,15 @@ export default function LabExploreClient({
   }, [category, sort]);
 
   const heroTitle = useMemo(() => {
-    if (!results || results.length === 0) return null;
-    const withBackdrop = results.find((r) => Boolean(r.backdropUrl));
-    return withBackdrop || results[0];
-  }, [results]);
+    const base = searchMode ? searchResults : results;
+    if (!base || base.length === 0) return null;
+    const withBackdrop = base.find((r) => Boolean(r.backdropUrl));
+    return withBackdrop || base[0];
+  }, [results, searchResults, searchMode]);
 
   function openHero() {
     if (!heroTitle) return;
+    if (!heroTitle.tmdbId) return;
     router.push(`/lab/title/${heroTitle.tmdbId}?type=${heroTitle.type === "MOVIE" ? "movie" : "tv"}`);
   }
 
@@ -256,6 +434,42 @@ export default function LabExploreClient({
 
       <div className={contentContainerClass}>
         <div className="max-w-7xl mx-auto">
+          {!searchMode && (
+            <>
+              {trendingError ? <div className="text-red-400">{trendingError}</div> : null}
+              {trending.length > 0 && (
+                <TitleRow
+                  title="🔥 Em alta no LAB"
+                  titles={trending.map((t) => ({
+                    id: labTitleKey(t),
+                    name: t.name,
+                    href: t.tmdbId ? `/lab/title/${t.tmdbId}?type=${t.type === "MOVIE" ? "movie" : "tv"}` : "/lab",
+                    posterUrl: t.posterUrl,
+                    type: t.type,
+                    voteAverage: t.voteAverage,
+                    releaseDate: t.releaseDate,
+                  }))}
+                />
+              )}
+
+              {recommendationsError ? <div className="text-red-400">{recommendationsError}</div> : null}
+              {recommendations.length > 0 && (
+                <TitleRow
+                  title="✨ Recomendados pra você"
+                  titles={recommendations.map((t) => ({
+                    id: labTitleKey(t),
+                    name: t.name,
+                    href: t.tmdbId ? `/lab/title/${t.tmdbId}?type=${t.type === "MOVIE" ? "movie" : "tv"}` : "/lab",
+                    posterUrl: t.posterUrl,
+                    type: t.type,
+                    voteAverage: t.voteAverage,
+                    releaseDate: t.releaseDate,
+                  }))}
+                />
+              )}
+            </>
+          )}
+
           <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap gap-2">
@@ -340,7 +554,8 @@ export default function LabExploreClient({
                   <button
                     type="button"
                     onClick={() => setPage((p) => p + 1)}
-                    className="px-4 py-2 rounded-lg bg-zinc-900/80 border border-zinc-700 text-white"
+                    disabled={!hasMore || loading}
+                    className="px-4 py-2 rounded-lg bg-zinc-900/80 border border-zinc-700 text-white disabled:opacity-50"
                   >
                     →
                   </button>
@@ -350,8 +565,40 @@ export default function LabExploreClient({
           </div>
 
           <div className="mt-6">
-            {loading ? (
+            {loading && !searchMode ? (
               <div className="text-zinc-400">Carregando...</div>
+            ) : searchMode ? (
+              searchError ? (
+                <div className="text-red-400">{searchError}</div>
+              ) : searchResults.length === 0 && !searching ? (
+                <div className="text-zinc-400">Nenhum resultado para “{urlQuery}”.</div>
+              ) : (
+                <>
+                  <TitleRow
+                    title={`🔍 Resultados para "${urlQuery}"`}
+                    titles={searchResults.map((t) => ({
+                      id: labTitleKey(t),
+                      name: t.name,
+                      href: t.tmdbId ? `/lab/title/${t.tmdbId}?type=${t.type === "MOVIE" ? "movie" : "tv"}` : "/lab",
+                      posterUrl: t.posterUrl,
+                      type: t.type,
+                      voteAverage: t.voteAverage,
+                      releaseDate: t.releaseDate,
+                    }))}
+                  />
+
+                  {searchHasMore && (
+                    <button
+                      type="button"
+                      onClick={loadMoreSearch}
+                      disabled={searching}
+                      className="mt-6 rounded-full bg-white/5 border border-white/10 px-6 py-3 text-sm font-semibold text-white hover:bg-white/10 disabled:opacity-40"
+                    >
+                      {searching ? "Carregando..." : "Carregar mais"}
+                    </button>
+                  )}
+                </>
+              )
             ) : error ? (
               <div className="text-red-400">{error}</div>
             ) : results.length === 0 ? (
@@ -360,9 +607,9 @@ export default function LabExploreClient({
               <TitleRow
                 title={titleForRow}
                 titles={results.map((t) => ({
-                  id: t.id,
+                  id: labTitleKey(t),
                   name: t.name,
-                  href: `/lab/title/${t.tmdbId}?type=${t.type === "MOVIE" ? "movie" : "tv"}`,
+                  href: t.tmdbId ? `/lab/title/${t.tmdbId}?type=${t.type === "MOVIE" ? "movie" : "tv"}` : "/lab",
                   posterUrl: t.posterUrl,
                   type: t.type,
                   voteAverage: t.voteAverage,

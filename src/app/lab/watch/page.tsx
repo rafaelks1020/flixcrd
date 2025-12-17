@@ -7,7 +7,7 @@ import LabWatchClient from "./LabWatchClient";
 export const dynamic = "force-dynamic";
 
 interface PageProps {
-  searchParams: Promise<{ type?: string; id?: string; season?: string; episode?: string }>;
+  searchParams: Promise<{ type?: string; id?: string; season?: string; episode?: string; tmdb?: string }>;
 }
 
 export default async function LabWatchPage({ searchParams }: PageProps) {
@@ -34,6 +34,7 @@ export default async function LabWatchPage({ searchParams }: PageProps) {
       contentId={params.id || ""}
       initialSeason={params.season || "1"}
       initialEpisode={params.episode || "1"}
+      tmdbId={params.tmdb || ""}
     />
   );
 }

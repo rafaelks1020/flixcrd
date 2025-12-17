@@ -115,8 +115,10 @@ export async function GET(request: NextRequest) {
     const sortBy = mapSort(sort, mediaType);
 
     const results: any[] = [];
+    const seenTmdbIds = new Set<number>();
     let tmdbPage = page;
     let scannedPages = 0;
+    let totalPages = 0;
 
     while (results.length < limit && scannedPages < 6) {
       const params = new URLSearchParams({
@@ -154,11 +156,14 @@ export async function GET(request: NextRequest) {
 
       const tmdbJson = await tmdbRes.json();
       const pageResults: any[] = Array.isArray(tmdbJson?.results) ? tmdbJson.results : [];
+      if (!totalPages) totalPages = tmdbJson?.total_pages || 0;
 
       for (const item of pageResults) {
         const tmdbId = item?.id;
         if (typeof tmdbId !== "number") continue;
         if (!idsSet.has(tmdbId)) continue;
+        if (seenTmdbIds.has(tmdbId)) continue;
+        seenTmdbIds.add(tmdbId);
 
         results.push({
           id: `lab-${mediaType}-${tmdbId}`,
@@ -177,15 +182,21 @@ export async function GET(request: NextRequest) {
 
       scannedPages += 1;
       tmdbPage += 1;
-      if (tmdbPage > (tmdbJson?.total_pages || 500)) break;
+      if (tmdbPage > (totalPages || 500)) break;
       if (pageResults.length === 0) break;
     }
+
+    const tmdbPageEnd = tmdbPage - 1;
+    const hasMore = totalPages ? tmdbPage <= totalPages : false;
 
     return NextResponse.json({
       page,
       limit,
       results,
       scannedPages,
+      totalPages,
+      tmdbPageEnd,
+      hasMore,
       superflixCategory,
       sort,
     });

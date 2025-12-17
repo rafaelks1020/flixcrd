@@ -3,6 +3,27 @@
 import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 
+const PWA_INSTALL_DISMISS_KEY = "pwa_install_dismissed_until_v1";
+const PWA_INSTALL_DISMISS_DAYS = 7;
+
+function getDismissUntil() {
+  try {
+    const raw = window.localStorage.getItem(PWA_INSTALL_DISMISS_KEY);
+    const n = raw ? Number(raw) : 0;
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function setDismissForDays(days: number) {
+  try {
+    const ms = Date.now() + days * 24 * 60 * 60 * 1000;
+    window.localStorage.setItem(PWA_INSTALL_DISMISS_KEY, String(ms));
+  } catch {
+  }
+}
+
 export default function ServiceWorkerRegister() {
   const deferredPromptRef = useRef<any>(null);
   const [canInstall, setCanInstall] = useState(false);
@@ -78,6 +99,13 @@ export default function ServiceWorkerRegister() {
     if (typeof window === "undefined") return;
 
     const onBeforeInstallPrompt = (event: any) => {
+      try {
+        const until = getDismissUntil();
+        if (until && Date.now() < until) {
+          return;
+        }
+      } catch {
+      }
       event.preventDefault();
       deferredPromptRef.current = event;
       setCanInstall(true);
@@ -119,6 +147,20 @@ export default function ServiceWorkerRegister() {
   useEffect(() => {
     if (!canInstall) return;
 
+    if (process.env.NODE_ENV === "development") {
+      setCanInstall(false);
+      return;
+    }
+
+    try {
+      const until = getDismissUntil();
+      if (until && Date.now() < until) {
+        setCanInstall(false);
+        return;
+      }
+    } catch {
+    }
+
     toast((t) => (
       <div className="flex items-center gap-3">
         <div className="flex-1">
@@ -146,6 +188,7 @@ export default function ServiceWorkerRegister() {
         <button
           className="rounded-md px-2 py-2 text-xs font-semibold text-zinc-200 hover:text-white"
           onClick={() => {
+            setDismissForDays(PWA_INSTALL_DISMISS_DAYS);
             setCanInstall(false);
             toast.dismiss(t.id);
           }}

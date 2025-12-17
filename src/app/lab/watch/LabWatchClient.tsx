@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import PremiumNavbar from "@/components/ui/PremiumNavbar";
+import { makeLabTitleKey, upsertLabContinue } from "../labStorage";
 
 const SUPERFLIX_BASE = "https://superflixapi.run";
 
@@ -15,6 +16,7 @@ interface LabWatchClientProps {
   contentId: string;
   initialSeason: string;
   initialEpisode: string;
+  tmdbId?: string;
 }
 
 export default function LabWatchClient({
@@ -24,10 +26,59 @@ export default function LabWatchClient({
   contentId,
   initialSeason,
   initialEpisode,
+  tmdbId,
 }: LabWatchClientProps) {
   const router = useRouter();
   const [season, setSeason] = useState(initialSeason);
   const [episode, setEpisode] = useState(initialEpisode);
+
+  const resolvedTmdbId = useMemo(() => {
+    const n = Number(tmdbId || "");
+    if (Number.isFinite(n) && n > 0) return n;
+    const fromContent = Number(contentId);
+    if (type === "serie" && Number.isFinite(fromContent) && fromContent > 0) return fromContent;
+    if (type === "filme" && Number.isFinite(fromContent) && fromContent > 0) return fromContent;
+    return 0;
+  }, [tmdbId, contentId, type]);
+
+  const continueKey = useMemo(() => {
+    if (resolvedTmdbId > 0) {
+      return makeLabTitleKey(type === "filme" ? "movie" : "tv", resolvedTmdbId);
+    }
+    return `lab-${type}-${contentId}`;
+  }, [resolvedTmdbId, type, contentId]);
+
+  const watchUrl = useMemo(() => {
+    const base = `/lab/watch?type=${type}&id=${encodeURIComponent(contentId)}`;
+    const parts: string[] = [];
+    if (type === "serie") {
+      parts.push(`season=${encodeURIComponent(season)}`);
+      parts.push(`episode=${encodeURIComponent(episode)}`);
+    }
+    if (resolvedTmdbId > 0) {
+      parts.push(`tmdb=${encodeURIComponent(String(resolvedTmdbId))}`);
+    }
+    return parts.length ? `${base}&${parts.join("&")}` : base;
+  }, [type, contentId, season, episode, resolvedTmdbId]);
+
+  const continueContentId = useMemo(() => {
+    if (type === "filme" && resolvedTmdbId > 0) return String(resolvedTmdbId);
+    return contentId;
+  }, [type, resolvedTmdbId, contentId]);
+
+  useEffect(() => {
+    if (!contentId) return;
+    upsertLabContinue({
+      key: continueKey,
+      watchUrl,
+      title: "",
+      posterUrl: null,
+      watchType: type,
+      contentId: continueContentId,
+      season: type === "serie" ? Number(season) : undefined,
+      episode: type === "serie" ? Number(episode) : undefined,
+    });
+  }, [continueKey, watchUrl, type, contentId, continueContentId, season, episode]);
 
   const embedOptions = {
     transparent: true,
@@ -157,9 +208,13 @@ export default function LabWatchClient({
                 width: "100%",
                 height: "100%",
                 border: "none",
+                pointerEvents: "auto",
+                zIndex: 1,
               }}
+              frameBorder={0}
+              scrolling="no"
               allowFullScreen
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allow="autoplay; encrypted-media; picture-in-picture"
             />
           </div>
 
