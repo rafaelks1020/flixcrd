@@ -6,7 +6,7 @@ import Link from "next/link";
 
 import PremiumNavbar from "@/components/ui/PremiumNavbar";
 
-const SUPERFLIX_PROXY_BASE = "/api/lab/proxy";
+const SUPERFLIX_BASE = "https://superflixapi.run";
 
 interface LabWatchClientProps {
   isLoggedIn: boolean;
@@ -35,9 +35,9 @@ export default function LabWatchClient({
   };
 
   function buildEmbedUrl() {
-    // Usar endpoint /filme/ ou /serie/ direto via proxy
-    // A SuperFlixAPI detecta que está em iframe real e libera o player
-    let url = `${SUPERFLIX_PROXY_BASE}/${type}/${encodeURIComponent(contentId)}`;
+    // Usar endpoint /filme/ ou /serie/ direto (como na documentação)
+    // Evita problemas de origin/proxy que podem quebrar os cliques no player.
+    let url = `${SUPERFLIX_BASE}/${type}/${encodeURIComponent(contentId)}`;
 
     if (type === "serie") {
       url += `/${encodeURIComponent(season)}/${encodeURIComponent(episode)}`;
