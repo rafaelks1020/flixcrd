@@ -9,6 +9,22 @@ Regras de uso:
 
 ---
 
+## 2025-12-17 – Presence Heartbeat: web retornava 401 (não autenticado) e não registrava sessões
+
+- **Sintoma**  
+  O `POST /api/presence/heartbeat` retornava `401 Não autenticado` no frontend web (session NextAuth via cookie), impedindo registrar presença/tempo online.
+
+- **Causa raiz**  
+  O endpoint estava validando autenticação apenas via `Authorization: Bearer ...` (helper `getAuthUser`), mas o web usa sessão NextAuth (cookie) na maioria das requisições.
+
+- **Correção aplicada**  
+  O endpoint passou a aceitar autenticação por **sessão NextAuth** (via `getServerSession(authOptions)`) e, como fallback, continuar aceitando **Bearer token** para o app mobile.
+
+- **Arquivos envolvidos**  
+  - `src/app/api/presence/heartbeat/route.ts`
+
+- **Status**: Resolvido.
+
 ## 2025-12-17 – Lab: warning/erro de React por keys duplicadas no catálogo ("Encountered two children with the same key")
 
 - **Sintoma**  

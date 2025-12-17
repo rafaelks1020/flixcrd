@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { getServerSession } from "next-auth";
+
 import { prisma } from "@/lib/prisma";
+import { authOptions } from "@/lib/auth";
 import { getAuthUser } from "@/lib/auth-mobile";
 
 function isValidId(value: unknown) {
@@ -13,9 +16,13 @@ function isValidId(value: unknown) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getAuthUser(request);
+    const session = (await getServerSession(authOptions)) as any;
+    const sessionUserId = session?.user?.id as string | undefined;
 
-    if (!user?.id) {
+    const bearerUser = sessionUserId ? null : await getAuthUser(request);
+    const userId = sessionUserId || bearerUser?.id;
+
+    if (!userId) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
     }
 
@@ -49,7 +56,7 @@ export async function POST(request: NextRequest) {
 
       await prisma.userPresenceSession.create({
         data: {
-          userId: user.id,
+          userId,
           sessionId: String(sessionId),
           deviceId: safeDeviceId,
           platform: safePlatform,
@@ -62,7 +69,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    if (existing.userId !== user.id) {
+    if (existing.userId !== userId) {
       return NextResponse.json({ error: "Sessão não pertence ao usuário." }, { status: 403 });
     }
 
