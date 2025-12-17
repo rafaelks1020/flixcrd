@@ -21,22 +21,21 @@ export default function AdminUploadsPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    let nextLogs: UploadLogEntry[] = [];
+
     try {
       const raw = window.localStorage.getItem("flixcrd:upload-logs");
       if (!raw) {
-        setLogs([]);
-        return;
-      }
-
-      const parsed = JSON.parse(raw) as UploadLogEntry[];
-      if (Array.isArray(parsed)) {
-        setLogs(parsed);
+        nextLogs = [];
       } else {
-        setLogs([]);
+        const parsed = JSON.parse(raw) as UploadLogEntry[];
+        nextLogs = Array.isArray(parsed) ? parsed : [];
       }
     } catch {
-      setLogs([]);
+      nextLogs = [];
     }
+
+    setTimeout(() => setLogs(nextLogs), 0);
   }, []);
 
   const hasLogs = logs.length > 0;

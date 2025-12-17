@@ -18,6 +18,8 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
   const [isMobile, setIsMobile] = useState(false);
   const router = useRouter();
 
+  const showLab = isAdmin || process.env.NEXT_PUBLIC_LAB_ENABLED === "true";
+
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", handleScroll);
@@ -30,7 +32,11 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
     const mq = window.matchMedia("(max-width: 768px)");
 
     const update = () => {
-      setIsMobile(Boolean(mq.matches));
+      const mobile = Boolean(mq.matches);
+      setIsMobile(mobile);
+      if (!mobile) {
+        setMobileMenuOpen(false);
+      }
     };
 
     update();
@@ -43,12 +49,6 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
     mq.addListener(update);
     return () => mq.removeListener(update);
   }, []);
-
-  useEffect(() => {
-    if (!isMobile) {
-      setMobileMenuOpen(false);
-    }
-  }, [isMobile]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,6 +133,7 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
               { href: '/browse', label: 'Catálogo' },
               { href: '/solicitacoes', label: 'Solicitações' },
               { href: '/profiles', label: 'Perfis' },
+              ...(showLab ? [{ href: '/lab', label: 'Lab' }] : []),
             ].map((item) => (
               <Link
                 key={item.href}
@@ -479,6 +480,7 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
                 { href: '/browse', label: 'Catálogo' },
                 { href: '/solicitacoes', label: 'Solicitações' },
                 { href: '/profiles', label: 'Perfis' },
+                ...(showLab ? [{ href: '/lab', label: 'Lab' }] : []),
                 { href: '/subscribe', label: 'Minha Assinatura' },
                 { href: '/payments', label: 'Pagamentos' },
                 { href: '/settings', label: 'Configurações' },

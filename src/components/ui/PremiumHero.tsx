@@ -19,8 +19,6 @@ interface PremiumHeroProps {
 }
 
 export default function PremiumHero({ title, isLoggedIn }: PremiumHeroProps) {
-  if (!title) return null;
-
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -38,6 +36,8 @@ export default function PremiumHero({ title, isLoggedIn }: PremiumHeroProps) {
     mq.addListener(update);
     return () => mq.removeListener(update);
   }, []);
+
+  if (!title) return null;
 
   const year = title.releaseDate ? new Date(title.releaseDate).getFullYear() : null;
   const rating = title.voteAverage ? title.voteAverage.toFixed(1) : null;

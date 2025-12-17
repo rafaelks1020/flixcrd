@@ -1,5 +1,7 @@
 export const dynamic = "force-static";
 
+import Link from "next/link";
+
 export default function OfflinePage() {
   return (
     <main className="min-h-screen bg-black text-zinc-100 flex items-center justify-center px-6">
@@ -12,18 +14,18 @@ export default function OfflinePage() {
           Sem internet no momento. Assim que a conexão voltar, tente novamente.
         </p>
         <div className="mt-6 flex flex-col gap-3">
-          <a
+          <Link
             href="/"
             className="w-full rounded-lg bg-red-600 hover:bg-red-700 transition-colors px-4 py-3 font-semibold"
           >
             Voltar para o início
-          </a>
-          <a
+          </Link>
+          <Link
             href="/offline"
             className="w-full rounded-lg bg-zinc-900 hover:bg-zinc-800 transition-colors border border-zinc-800 px-4 py-3 font-semibold"
           >
             Tentar novamente
-          </a>
+          </Link>
         </div>
         <p className="mt-6 text-xs text-zinc-500">
           Dica: no iPhone, instale o PWA em “Compartilhar” → “Adicionar à Tela de Início”.

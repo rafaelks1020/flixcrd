@@ -25,6 +25,68 @@ Regras de uso:
 
 - **Status**: Resolvido.
 
+## 2025-12-16 – Lab: clicar em Anime/Série abria 404 (link apontava para /title)
+
+- **Sintoma**  
+  Ao clicar em cards de **Séries/Animes** no módulo `/lab`, o usuário caía em `404` (rota do app principal) em vez de abrir a página de detalhes do Lab.
+
+- **Causa raiz**  
+  O componente `TitleCard` estava com o `Link` hardcoded para `href={/title/${id}}`, o que fazia qualquer uso fora do catálogo principal (ex.: Lab) navegar para a rota errada.
+
+- **Correção aplicada**  
+  - Adicionado `href?: string` no `TitleCard`.
+  - `TitleRow` passou a aceitar/repasse `href` via spread props.
+  - `LabClient` passou a preencher `href` para apontar para `/lab/title/{tmdbId}?type=tv|movie`.
+
+- **Arquivos envolvidos**  
+  - `src/components/ui/TitleCard.tsx`
+  - `src/components/ui/TitleRow.tsx`
+  - `src/app/lab/LabClient.tsx`
+
+- **Status**: Resolvido.
+
+## 2025-12-16 – Lab: player travado na tela “Disponível apenas via iframe”
+
+- **Sintoma**  
+  Ao abrir `/lab/watch` em alguns títulos, o embed não carregava o player e mostrava uma tela com mensagem “Disponível apenas via iframe” e botão “Visualização”.
+
+- **Causa raiz**  
+  O embed adiciona um “gate” de proteção que exige interação/click em “Visualização” antes de renderizar o conteúdo do player.
+
+- **Correção aplicada**  
+  Atualizado o script injetado no proxy `/api/lab/proxy/*` para:
+  - Normalizar acentos no matcher de texto (ex.: `Visualização` → `visualizacao`).
+  - Auto-clicar em “Visualização” antes de tentar áudio/servidor/play.
+  - Esconder o bloco do gate quando detectado.
+
+- **Arquivos envolvidos**  
+  - `src/app/api/lab/proxy/[...path]/route.ts`
+  - `src/app/lab/watch/LabWatchClient.tsx`
+
+- **Status**: Resolvido.
+
+## 2025-12-16 – Lab: player não carregava (tela preta) devido a script de autoplay
+
+- **Sintoma**  
+  Ao abrir `/lab/watch`, o iframe ficava completamente preto e não exibia o player da SuperFlixAPI.
+
+- **Causa raiz**  
+  O script de autoplay/auto-seleção injetado no proxy estava:
+  - Escondendo elementos grandes demais (incluindo o container do player).
+  - Clicando em elementos genéricos (`div`) causando comportamento inesperado.
+  - Tentando manipular o DOM antes do player carregar completamente.
+
+- **Correção aplicada**  
+  Removido completamente o script de autoplay/auto-seleção do proxy `/api/lab/proxy/*`. O proxy agora apenas:
+  - Injeta `<base href>` para rewrite de URLs relativas.
+  - Reescreve URLs da SuperFlixAPI para passar pelo proxy same-origin.
+  - Deixa o player padrão da SuperFlixAPI carregar normalmente sem interferência.
+
+- **Arquivos envolvidos**  
+  - `src/app/api/lab/proxy/[...path]/route.ts`
+
+- **Status**: Resolvido.
+
 ## 2025-12-12 – /subscribe quebrando build TypeScript (JSX dentro de useEffect)
 
 - **Sintoma**  
