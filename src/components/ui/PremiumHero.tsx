@@ -16,11 +16,11 @@ interface HeroTitle {
 interface PremiumHeroProps {
   title: HeroTitle | null;
   isLoggedIn: boolean;
+  playHref?: string;
+  infoHref?: string;
 }
 
-export default function PremiumHero({ title, isLoggedIn }: PremiumHeroProps) {
-  if (!title) return null;
-
+export default function PremiumHero({ title, isLoggedIn, playHref, infoHref }: PremiumHeroProps) {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -39,8 +39,12 @@ export default function PremiumHero({ title, isLoggedIn }: PremiumHeroProps) {
     return () => mq.removeListener(update);
   }, []);
 
+  if (!title) return null;
+
   const year = title.releaseDate ? new Date(title.releaseDate).getFullYear() : null;
   const rating = title.voteAverage ? title.voteAverage.toFixed(1) : null;
+  const playLink = playHref ?? `/title/${title.id}`;
+  const infoLink = infoHref ?? `/title/${title.id}`;
 
   return (
     <section
@@ -181,7 +185,7 @@ export default function PremiumHero({ title, isLoggedIn }: PremiumHeroProps) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           {/* Play Button */}
           <Link
-            href={`/title/${title.id}`}
+            href={playLink}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -212,7 +216,7 @@ export default function PremiumHero({ title, isLoggedIn }: PremiumHeroProps) {
 
           {/* More Info Button */}
           <Link
-            href={`/title/${title.id}`}
+            href={infoLink}
             style={{
               display: 'inline-flex',
               alignItems: 'center',

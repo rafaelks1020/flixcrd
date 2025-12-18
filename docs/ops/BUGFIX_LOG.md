@@ -9,6 +9,60 @@ Regras de uso:
 
 ---
 
+## 2025-12-17 – Presence Heartbeat: web retornava 401 (não autenticado) e não registrava sessões
+
+- **Sintoma**  
+  O `POST /api/presence/heartbeat` retornava `401 Não autenticado` no frontend web (session NextAuth via cookie), impedindo registrar presença/tempo online.
+
+- **Causa raiz**  
+  O endpoint estava validando autenticação apenas via `Authorization: Bearer ...` (helper `getAuthUser`), mas o web usa sessão NextAuth (cookie) na maioria das requisições.
+
+- **Correção aplicada**  
+  O endpoint passou a aceitar autenticação por **sessão NextAuth** (via `getServerSession(authOptions)`) e, como fallback, continuar aceitando **Bearer token** para o app mobile.
+
+- **Arquivos envolvidos**  
+  - `src/app/api/presence/heartbeat/route.ts`
+
+- **Status**: Resolvido.
+
+## 2025-12-17 – Lab: warning/erro de React por keys duplicadas no catálogo ("Encountered two children with the same key")
+
+- **Sintoma**  
+  No `/lab`, ao renderizar a grade de catálogo/busca, o console exibia:
+  `Encountered two children with the same key ...`.
+
+- **Causa raiz**  
+  As rotas do Lab (`/api/lab/discover` e/ou `/api/lab/busca`) podem retornar itens duplicados (mesmo `type` + `tmdbId`). O `LabClient` renderizava a lista usando keys que colidiam nesses casos.
+
+- **Correção aplicada**  
+  - Deduplicação no client por chave estável `type + tmdbId` antes de salvar no estado.
+  - Ajuste das `keys` do React para usar chave estável (`type-tmdbId`).
+
+- **Arquivos envolvidos**  
+  - `src/app/lab/LabClient.tsx`
+
+- **Status**: Resolvido.
+
+## 2025-12-17 – Lab Explore: warning/erro de React por keys duplicadas ("Encountered two children with the same key")
+
+- **Sintoma**  
+  No `/lab/explore`, ao renderizar `TitleRow`, o console exibia:
+  `Encountered two children with the same key ...`.
+
+- **Causa raiz**  
+  As rotas `/api/lab/discover` e `/api/lab/busca` podem retornar itens repetidos durante o scan de múltiplas páginas. O Explore renderizava a lista usando `id` derivado de `type + tmdbId`, gerando colisão quando vinham duplicados.
+
+- **Correção aplicada**  
+  - Deduplicação no client (`LabExploreClient`) antes de salvar resultados em estado.
+  - Deduplicação também nas APIs `/api/lab/discover` e `/api/lab/busca` durante o scan para evitar repetição na origem.
+
+- **Arquivos envolvidos**  
+  - `src/app/lab/explore/LabExploreClient.tsx`
+  - `src/app/api/lab/discover/route.ts`
+  - `src/app/api/lab/busca/route.ts`
+
+- **Status**: Resolvido.
+
 ## 2025-12-16 – Admin não conseguia abrir detalhes de solicitação (404 “Solicitação não encontrada”)
 
 - **Sintoma**  
@@ -22,6 +76,68 @@ Regras de uso:
 
 - **Arquivos envolvidos**  
   - `src/app/api/solicitacoes/[id]/route.ts`
+
+- **Status**: Resolvido.
+
+## 2025-12-16 – Lab: clicar em Anime/Série abria 404 (link apontava para /title)
+
+- **Sintoma**  
+  Ao clicar em cards de **Séries/Animes** no módulo `/lab`, o usuário caía em `404` (rota do app principal) em vez de abrir a página de detalhes do Lab.
+
+- **Causa raiz**  
+  O componente `TitleCard` estava com o `Link` hardcoded para `href={/title/${id}}`, o que fazia qualquer uso fora do catálogo principal (ex.: Lab) navegar para a rota errada.
+
+- **Correção aplicada**  
+  - Adicionado `href?: string` no `TitleCard`.
+  - `TitleRow` passou a aceitar/repasse `href` via spread props.
+  - `LabClient` passou a preencher `href` para apontar para `/lab/title/{tmdbId}?type=tv|movie`.
+
+- **Arquivos envolvidos**  
+  - `src/components/ui/TitleCard.tsx`
+  - `src/components/ui/TitleRow.tsx`
+  - `src/app/lab/LabClient.tsx`
+
+- **Status**: Resolvido.
+
+## 2025-12-16 – Lab: player travado na tela “Disponível apenas via iframe”
+
+- **Sintoma**  
+  Ao abrir `/lab/watch` em alguns títulos, o embed não carregava o player e mostrava uma tela com mensagem “Disponível apenas via iframe” e botão “Visualização”.
+
+- **Causa raiz**  
+  O embed adiciona um “gate” de proteção que exige interação/click em “Visualização” antes de renderizar o conteúdo do player.
+
+- **Correção aplicada**  
+  Atualizado o script injetado no proxy `/api/lab/proxy/*` para:
+  - Normalizar acentos no matcher de texto (ex.: `Visualização` → `visualizacao`).
+  - Auto-clicar em “Visualização” antes de tentar áudio/servidor/play.
+  - Esconder o bloco do gate quando detectado.
+
+- **Arquivos envolvidos**  
+  - `src/app/api/lab/proxy/[...path]/route.ts`
+  - `src/app/lab/watch/LabWatchClient.tsx`
+
+- **Status**: Resolvido.
+
+## 2025-12-16 – Lab: player não carregava (tela preta) devido a script de autoplay
+
+- **Sintoma**  
+  Ao abrir `/lab/watch`, o iframe ficava completamente preto e não exibia o player da SuperFlixAPI.
+
+- **Causa raiz**  
+  O script de autoplay/auto-seleção injetado no proxy estava:
+  - Escondendo elementos grandes demais (incluindo o container do player).
+  - Clicando em elementos genéricos (`div`) causando comportamento inesperado.
+  - Tentando manipular o DOM antes do player carregar completamente.
+
+- **Correção aplicada**  
+  Removido completamente o script de autoplay/auto-seleção do proxy `/api/lab/proxy/*`. O proxy agora apenas:
+  - Injeta `<base href>` para rewrite de URLs relativas.
+  - Reescreve URLs da SuperFlixAPI para passar pelo proxy same-origin.
+  - Deixa o player padrão da SuperFlixAPI carregar normalmente sem interferência.
+
+- **Arquivos envolvidos**  
+  - `src/app/api/lab/proxy/[...path]/route.ts`
 
 - **Status**: Resolvido.
 

@@ -6,6 +6,56 @@
 
 Resumo das mudanças que impactam o painel admin, fluxos de upload, legendas e monitoramento.
 
+## 2025-12-16 – Módulo oculto "Lab" (integração SuperFlixAPI completa)
+
+- **Nova rota interna**: `/lab` – Catálogo estilo Netflix idêntico à página inicial com Hero, busca exclusiva e carrosséis.
+- **Página de detalhes**: `/lab/title/[id]?type=movie|tv` – Página completa do título com:
+  - Hero com backdrop, poster, sinopse, gêneros, nota, duração
+  - Para séries/animes: seletor de temporada + lista de episódios com thumbnails
+  - Botão "Assistir" que leva ao player
+- **Player integrado**: `/lab/watch?type=filme|serie&id=...&season=...&episode=...`
+  - Filmes: usa IMDb ID → `superflixapi.run/filme/ttXXXXXXX`
+  - Séries/Animes: usa TMDB ID → `superflixapi.run/serie/ID/temporada/episodio`
+  - Player minimalista (somente vídeo + controles de temporada/episódio quando série)
+  - Personalização visual aplicada por padrão: `#noEpList`, `#noLink`, `#transparent`, `#noBackground`
+- **Persistência de busca**: resultados da busca são mantidos no localStorage ao navegar entre páginas.
+- **Acesso controlado**: aparece no menu apenas para **ADMIN** ou quando `NEXT_PUBLIC_LAB_ENABLED=true`.
+- **APIs proxy**:
+  - `GET /api/lab/catalogo?type=movie|serie|anime&limit=N` – busca IDs da SuperFlixAPI + detalhes do TMDB
+  - `GET /api/lab/busca?q=...` – busca no TMDB multi-search
+  - `GET /api/lab/titulo/[id]?type=movie|tv` – detalhes completos do título (TMDB)
+  - `GET /api/lab/titulo/[id]/temporada/[season]` – episódios da temporada (TMDB)
+  - `GET /api/lab/lista` – proxy para `/lista` (IDs por categoria)
+  - `GET /api/lab/calendario` – proxy para `/calendario.php`
+  - `GET /api/lab/discover?category=movie|serie|anime&sort=...&year=...&genre=...&page=...&limit=...` – catálogo inteligente (TMDB discover filtrado por IDs disponíveis na SuperFlix)
+  - `GET /api/lab/tmdb/genres?type=movie|tv` – lista de gêneros do TMDB para UI de filtros
+
+- **Calendário (UI)**: `/lab/calendario` mostra lançamentos por dia/status com botões para abrir Detalhes e Assistir no player do Lab.
+
+- **Catálogo Inteligente (UI)**: `/lab/explore` com filtros por categoria (Filmes/Séries/Animes), ordenação (popularidade/nota/votos/novidades), gênero e ano; resultados apontam para `/lab/title/...`.
+
+## 2025-12-17 – Lab: Explore inteligente + seções automáticas
+
+- **Explore inteligente**: `/lab/explore` ganhou seções automáticas antes dos filtros:
+  - **Em alta no LAB** (tendências TMDB filtradas apenas para itens disponíveis na SuperFlix)
+  - **Recomendados pra você** (TMDB recommendations baseado em seeds do localStorage do LAB)
+- **Novas APIs**:
+  - `GET /api/lab/trending?type=all|movie|tv&time=day|week&limit=N`
+  - `GET /api/lab/recommendations?seeds=movie:ID,tv:ID&limit=N`
+- **Estabilidade**: deduplicação reforçada em `discover/busca` para evitar warnings de React por keys duplicadas.
+
+## 2025-12-17 – Métricas: Presença/Tempo online (MVP)
+
+- **Heartbeat de presença**: o frontend envia batimentos periódicos para registrar sessão/lastSeen.
+- **Métricas no admin**: `/admin/analytics` agora mostra:
+  - Online agora (usuários/sessões)
+  - Tempo online hoje (agregado)
+  - Tempo online na janela (7/30/90d)
+  - Top usuários por tempo online
+- **Novas APIs**:
+  - `POST /api/presence/heartbeat` (web/mobile)
+  - `GET /api/admin/presence` (ADMIN)
+
 ## 2025-12-15 – Inter Boleto (Cobrança v3) + Webhook de ativação automática
 
 ### PWA (nível app)

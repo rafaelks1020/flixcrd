@@ -314,6 +314,23 @@ model ServiceStatusSnapshot {
   @@index([createdAt])
 }
 
+model UserPresenceSession {
+  id         String   @id @default(cuid())
+  userId     String
+  sessionId  String   @unique
+  deviceId   String?
+  platform   String   @default("web")
+  userAgent  String?
+  startedAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  endedAt    DateTime?
+  User       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([lastSeenAt])
+  @@index([endedAt])
+}
+
 model Settings {
   id                         String   @id @default(cuid())
   siteName                   String   @default("Pflix")
@@ -416,6 +433,7 @@ model User {
   AssignedRequests       Request[]              @relation("RequestAssignedAdmin")
   Subscription           Subscription?
   PixPayment             PixPayment[]
+  PresenceSessions       UserPresenceSession[]
 }
 
 model UserFavorite {

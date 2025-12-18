@@ -5,6 +5,7 @@ import Link from "next/link";
 
 interface PremiumTitleCardProps {
   id: string;
+  href?: string;
   name: string;
   posterUrl: string | null;
   backdropUrl?: string | null;
@@ -18,6 +19,7 @@ interface PremiumTitleCardProps {
 
 export default function PremiumTitleCard({
   id,
+  href,
   name,
   posterUrl,
   backdropUrl: _backdropUrl,
@@ -67,6 +69,7 @@ export default function PremiumTitleCard({
 
   const quality = rating && rating > 8 ? "4K" : rating && rating > 6 ? "HD" : "SD";
   const isNew = showNewBadge || (year && year >= new Date().getFullYear() - 1);
+  const linkHref = href ?? `/title/${id}`;
 
   return (
     <div
@@ -82,7 +85,7 @@ export default function PremiumTitleCard({
         position: 'relative',
       }}
     >
-      <Link href={`/title/${id}`} style={{ textDecoration: 'none', display: 'block' }}>
+      <Link href={linkHref} style={{ textDecoration: 'none', display: 'block' }}>
         <div
           style={{
             position: 'relative',
