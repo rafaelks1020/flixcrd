@@ -25,22 +25,6 @@ Regras de uso:
 
 - **Status**: Resolvido.
 
-## 2025-12-17 – Lab: /api/lab/video-id retornava 401 no web (cookie NextAuth)
-
-- **Sintoma**  
-  No `/lab/watch`, o player não carregava e o `GET /api/lab/video-id` retornava `401 Não autenticado` quando chamado pelo frontend web (sessão NextAuth via cookie).
-
-- **Causa raiz**  
-  O endpoint `GET /api/lab/video-id` validava autenticação apenas via Bearer token (`getAuthUser`), mas o web usa sessão NextAuth por cookie.
-
-- **Correção aplicada**  
-  O endpoint passou a aceitar autenticação por **sessão NextAuth** (via `getServerSession(authOptions)`) e, como fallback, continuar aceitando **Bearer token** (app mobile).
-
-- **Arquivos envolvidos**  
-  - `src/app/api/lab/video-id/route.ts`
-
-- **Status**: Resolvido.
-
 ## 2025-12-17 – Lab: warning/erro de React por keys duplicadas no catálogo ("Encountered two children with the same key")
 
 - **Sintoma**  
