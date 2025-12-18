@@ -41,22 +41,6 @@ Regras de uso:
 
 - **Status**: Resolvido.
 
-## 2025-12-17 – Lab: /api/lab/video-id retornava 400 quando chamado com type_/id_
-
-- **Sintoma**  
-  O `GET /api/lab/video-id` retornava `400 Parâmetros inválidos` quando a UI chamava a rota usando query params `type_` e `id_` (ex.: `?type_=filme&id_=tt...`).
-
-- **Causa raiz**  
-  O endpoint aceitava apenas `type` e `id` (sem underscore), então a validação de parâmetros falhava.
-
-- **Correção aplicada**  
-  O endpoint passou a aceitar também `type_`, `id_`, `season_` e `episode_` como fallback.
-
-- **Arquivos envolvidos**  
-  - `src/app/api/lab/video-id/route.ts`
-
-- **Status**: Resolvido.
-
 ## 2025-12-17 – Lab: warning/erro de React por keys duplicadas no catálogo ("Encountered two children with the same key")
 
 - **Sintoma**  
