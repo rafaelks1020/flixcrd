@@ -1,26 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getServerSession } from "next-auth";
-
 import { getAuthUser } from "@/lib/auth-mobile";
-import { authOptions } from "@/lib/auth";
 
 const SUPERFLIX_BASE = "https://superflixapi.run";
 
 export async function GET(request: NextRequest) {
-  const session = (await getServerSession(authOptions)) as any;
-  const sessionUserId = session?.user?.id as string | undefined;
-  const sessionRole = session?.user?.role as string | undefined;
+  const user = await getAuthUser(request);
 
-  const bearerUser = sessionUserId ? null : await getAuthUser(request);
-  const userId = sessionUserId || bearerUser?.id;
-  const role = sessionRole || bearerUser?.role;
-
-  if (!userId) {
+  if (!user?.id) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
 
-  const enabled = role === "ADMIN" || process.env.NEXT_PUBLIC_LAB_ENABLED === "true";
+  const enabled = user.role === "ADMIN" || process.env.NEXT_PUBLIC_LAB_ENABLED === "true";
 
   if (!enabled) {
     return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
