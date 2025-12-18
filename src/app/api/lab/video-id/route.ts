@@ -27,13 +27,18 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url);
-  const type = searchParams.get("type"); // "filme" ou "serie"
-  const id = searchParams.get("id"); // IMDb ID (filme) ou TMDB ID (série)
-  const season = searchParams.get("season");
-  const episode = searchParams.get("episode");
+  const type = searchParams.get("type") || searchParams.get("type_"); // "filme" ou "serie"
+  const id = searchParams.get("id") || searchParams.get("id_"); // IMDb ID (filme) ou TMDB ID (série)
+  const season = searchParams.get("season") || searchParams.get("season_");
+  const episode = searchParams.get("episode") || searchParams.get("episode_");
 
   if (!type || !id) {
-    return NextResponse.json({ error: "Parâmetros inválidos." }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: "Parâmetros inválidos. Informe type e id.",
+      },
+      { status: 400 }
+    );
   }
 
   try {
