@@ -73,6 +73,25 @@ Regras de uso:
 
 - **Status**: Resolvido.
 
+## 2025-12-17 – Lab: "Player Streamtape não encontrado" no /api/lab/video-id
+
+- **Sintoma**  
+  Em alguns títulos do LAB, o `GET /api/lab/video-id` retornava `404 Player Streamtape não encontrado`, mesmo com o título abrindo normalmente em sites de “visualização”.
+
+- **Causa raiz**  
+  Em alguns domínios a página de “visualização” retornada é uma página de detalhes (sem `<iframe>`/`/stape/` direto) e o embed real fica atrás de outro link/atributo (`href/src/data-src/data-embed`) ou usa variações como `stape?...id=...`.
+
+- **Correção aplicada**  
+  O endpoint passou a:
+  - Escolher melhor o link de visualização (evitando links de share/IMDB/TMDB).
+  - Detectar `videoId` em mais formatos (`src`, `data-src`, `data-embed`, `/stape/{id}` e `stape?...id=`).
+  - Fazer fallback seguindo URLs candidatas (limitado) no mesmo host da visualização e/ou `superflixapi.run`.
+
+- **Arquivos envolvidos**  
+  - `src/app/api/lab/video-id/route.ts`
+
+- **Status**: Resolvido.
+
 ## 2025-12-17 – Lab: warning/erro de React por keys duplicadas no catálogo ("Encountered two children with the same key")
 
 - **Sintoma**  
