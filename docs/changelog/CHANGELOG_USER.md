@@ -20,6 +20,7 @@ Este arquivo registra mudanças que afetam diretamente quem assiste (web/app).
   - Minha lista
   - Assistir depois
   Essas listas ficam salvas localmente no seu navegador (localStorage).
+- **Player do LAB mais limpo** – o player do LAB (`/lab/watch`) foi ajustado para usar o player do Streamtape de forma direta, sem exibir logo e sem configurar anúncios.
 
 ### Bastidores (mas que ajudam você)
 

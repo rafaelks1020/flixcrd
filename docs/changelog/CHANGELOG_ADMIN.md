@@ -56,6 +56,13 @@ Resumo das mudanças que impactam o painel admin, fluxos de upload, legendas e m
   - `POST /api/presence/heartbeat` (web/mobile)
   - `GET /api/admin/presence` (ADMIN)
 
+## 2025-12-17 – Lab: Player Streamtape puro (sem anúncios/logo)
+
+- **Player do Lab** (`/lab/watch`) agora resolve o `videoId` via `GET /api/lab/video-id` e embute diretamente:
+  - `https://superflixapi.run/stape/{videoId}`
+- **Sem anúncios/logo por contrato do app**: não passamos `vast`, `logo` ou `logo_link` em nenhum cenário.
+- **Auth**: `GET /api/lab/video-id` aceita autenticação via **sessão NextAuth** (web) ou **Bearer token** (mobile).
+
 ## 2025-12-15 – Inter Boleto (Cobrança v3) + Webhook de ativação automática
 
 ### PWA (nível app)

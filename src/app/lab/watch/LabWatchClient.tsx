@@ -31,6 +31,10 @@ export default function LabWatchClient({
   const router = useRouter();
   const [season, setSeason] = useState(initialSeason);
   const [episode, setEpisode] = useState(initialEpisode);
+  const [videoId, setVideoId] = useState<string | null>(null);
+  const [videoIdLoading, setVideoIdLoading] = useState(false);
+  const [videoIdError, setVideoIdError] = useState<string | null>(null);
+  const [videoIdReload, setVideoIdReload] = useState(0);
 
   const resolvedTmdbId = useMemo(() => {
     const n = Number(tmdbId || "");
@@ -80,31 +84,59 @@ export default function LabWatchClient({
     });
   }, [continueKey, watchUrl, type, contentId, continueContentId, season, episode]);
 
-  const embedOptions = {
-    transparent: true,
-    noBackground: true,
-  };
+  useEffect(() => {
+    let cancelled = false;
 
-  function buildEmbedUrl() {
-    // Usar endpoint /filme/ ou /serie/ direto (como na documentação)
-    // Evita problemas de origin/proxy que podem quebrar os cliques no player.
-    let url = `${SUPERFLIX_BASE}/${type}/${encodeURIComponent(contentId)}`;
+    async function resolveVideoId() {
+      if (!contentId) return;
 
-    if (type === "serie") {
-      url += `/${encodeURIComponent(season)}/${encodeURIComponent(episode)}`;
+      setVideoId(null);
+      setVideoIdError(null);
+      setVideoIdLoading(true);
+
+      try {
+        const qs = new URLSearchParams();
+        qs.set("type", type);
+        qs.set("id", contentId);
+        if (type === "serie") {
+          qs.set("season", season);
+          qs.set("episode", episode);
+        }
+
+        const res = await fetch(`/api/lab/video-id?${qs.toString()}`, { cache: "no-store" });
+        const data = (await res.json().catch(() => null)) as any;
+
+        if (!res.ok) {
+          throw new Error(data?.error || "Erro ao resolver player.");
+        }
+
+        const resolved = data?.videoId;
+        if (!resolved) {
+          throw new Error("ID do vídeo não encontrado.");
+        }
+
+        if (!cancelled) {
+          setVideoId(String(resolved));
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Erro ao resolver player.";
+        if (!cancelled) {
+          setVideoIdError(message);
+        }
+      } finally {
+        if (!cancelled) {
+          setVideoIdLoading(false);
+        }
+      }
     }
 
-    // Adicionar parâmetros de hash para personalização visual
-    const hashParams: string[] = [];
-    if (embedOptions.transparent) hashParams.push("transparent");
-    if (embedOptions.noBackground) hashParams.push("noBackground");
+    void resolveVideoId();
 
-    if (hashParams.length > 0) {
-      url += "#" + hashParams.join("#");
-    }
+    return () => {
+      cancelled = true;
+    };
+  }, [contentId, type, season, episode, videoIdReload]);
 
-    return url;
-  }
 
   if (!contentId) {
     return (
@@ -163,7 +195,10 @@ export default function LabWatchClient({
     handleEpisodeChange(String(prev));
   }
 
-  const embedUrl = buildEmbedUrl();
+  const embedUrl = useMemo(() => {
+    if (!videoId) return "";
+    return `${SUPERFLIX_BASE}/stape/${encodeURIComponent(videoId)}`;
+  }, [videoId]);
 
   return (
     <div style={{ minHeight: "100vh", background: "#000", color: "#fff" }}>
@@ -199,23 +234,96 @@ export default function LabWatchClient({
               border: "1px solid rgba(255,255,255,0.1)",
             }}
           >
-            <iframe
-              src={embedUrl}
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                height: "100%",
-                border: "none",
-                pointerEvents: "auto",
-                zIndex: 1,
-              }}
-              frameBorder={0}
-              scrolling="no"
-              allowFullScreen
-              allow="autoplay; encrypted-media; picture-in-picture"
-            />
+            <style jsx>{`
+              @keyframes spin {
+                from {
+                  transform: rotate(0deg);
+                }
+                to {
+                  transform: rotate(360deg);
+                }
+              }
+            `}</style>
+            {videoId ? (
+              <iframe
+                key={embedUrl}
+                src={embedUrl}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  pointerEvents: "auto",
+                  zIndex: 1,
+                }}
+                frameBorder={0}
+                scrolling="no"
+                allowFullScreen
+                allow="autoplay; encrypted-media; picture-in-picture"
+              />
+            ) : null}
+
+            {videoIdLoading ? (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexDirection: "column",
+                  gap: 10,
+                  zIndex: 2,
+                  color: "rgba(255,255,255,0.75)",
+                  fontSize: 14,
+                }}
+              >
+                <div style={{ width: 40, height: 40, borderRadius: 999, border: "3px solid rgba(255,255,255,0.15)", borderTopColor: "#fff", animation: "spin 1s linear infinite" }} />
+                Carregando player...
+              </div>
+            ) : null}
+
+            {videoIdError ? (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexDirection: "column",
+                  gap: 12,
+                  zIndex: 3,
+                  padding: 16,
+                  textAlign: "center",
+                }}
+              >
+                <div style={{ fontSize: 14, color: "rgba(255,255,255,0.8)" }}>{videoIdError}</div>
+                <button
+                  type="button"
+                  onClick={() => setVideoIdReload((v) => v + 1)}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    background: "rgba(255,255,255,0.06)",
+                    color: "#fff",
+                    fontSize: 13,
+                    cursor: "pointer",
+                  }}
+                >
+                  Tentar novamente
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {/* Controls for series */}
