@@ -57,22 +57,6 @@ Regras de uso:
 
 - **Status**: Resolvido.
 
-## 2025-12-17 – Lab: "Link de visualização não encontrado" no /api/lab/video-id
-
-- **Sintoma**  
-  Em alguns títulos do LAB, o `GET /api/lab/video-id` retornava `404 Link de visualização não encontrado`, impedindo carregar o player.
-
-- **Causa raiz**  
-  O parser do endpoint procurava um `<a>` com o texto `Visualização` usando um regex rígido, falhando quando o upstream retornava variações do HTML (ex.: link em formato markdown `[Visualização](...)`, tags internas no `<a>`, ou mudanças de markup).
-
-- **Correção aplicada**  
-  Extração do link de visualização ficou mais tolerante (markdown + `<a>` com conteúdo flexível + fallback para primeira URL externa) e a extração do `videoId` passou a ter fallback por ocorrência de `/stape/{id}` no HTML.
-
-- **Arquivos envolvidos**  
-  - `src/app/api/lab/video-id/route.ts`
-
-- **Status**: Resolvido.
-
 ## 2025-12-17 – Lab: warning/erro de React por keys duplicadas no catálogo ("Encountered two children with the same key")
 
 - **Sintoma**  
