@@ -5,6 +5,42 @@ Este arquivo é o changelog principal do **flixcrd-web**.
 - Formato: **Conventional Commits** + **SemVer** (`vX.Y.Z`)
 - Geração: **automática** via *Release Please* (GitHub Actions)
 
+## [0.3.0](https://github.com/rafaelks1020/flixcrd/compare/flixcrd-web-v0.2.0...flixcrd-web-v0.3.0) (2025-12-19)
+
+
+### Features
+
+* Add a new admin dashboard layout with dynamic navigation and a … ([9032cf7](https://github.com/rafaelks1020/flixcrd/commit/9032cf7bf84930a30ff731ca56daf2e870a82282))
+* Add a new admin dashboard layout with dynamic navigation and a PremiumNavbar component. ([3a49288](https://github.com/rafaelks1020/flixcrd/commit/3a4928811027853f23924310ff0051cb28486058))
+* **admin:** generate catalog synopsis with AI ([bdf0fde](https://github.com/rafaelks1020/flixcrd/commit/bdf0fde4b29eec5611b33ee3696cfbc50ef31907))
+* **admin:** show system version in settings ([ea81461](https://github.com/rafaelks1020/flixcrd/commit/ea81461dcd06b565452bf4f15e583d735ccf43ab))
+* **ai:** split catalog vs tagline models ([8d5aa1f](https://github.com/rafaelks1020/flixcrd/commit/8d5aa1f65f58b5d7631b2ffeb6669cc2608904df))
+* Introduce Lab, Browse, and Admin Settings features with new UI components, API routes, and database schema, including a neural scan search interface. ([e1077cb](https://github.com/rafaelks1020/flixcrd/commit/e1077cbc94cfd5c7bc7f7e88817bdb804caab87b))
+* **lab:** use pure streamtape player without ads/logo ([0a7cb4a](https://github.com/rafaelks1020/flixcrd/commit/0a7cb4a25e39638f43b3c3c1dc21378359973a5b))
+* **payments:** selector ASAAS/INTER + webhooks Inter (default ASAAS) ([818d417](https://github.com/rafaelks1020/flixcrd/commit/818d41756547df556d76a4c67dba90a2cd618d8b))
+* **pwa:** web push + PWA perfection ([1d84e2a](https://github.com/rafaelks1020/flixcrd/commit/1d84e2a909caf9fb58a1122a60f2edb2a58084b3))
+* **tmdb:** support search by IMDb id ([61b12f5](https://github.com/rafaelks1020/flixcrd/commit/61b12f536e8123c789e3ae158763d4624e70ee41))
+
+
+### Bug Fixes
+
+* **admin:** correct users API response data structure handling ([2a8497e](https://github.com/rafaelks1020/flixcrd/commit/2a8497e30598d76c6be4d3c6eae8a0f3c881e463))
+* **ai:** retry OpenRouter model and surface model in UI errors ([ad99ac3](https://github.com/rafaelks1020/flixcrd/commit/ad99ac38be5a83b9a932db4edf83f18968648bcf))
+* allow ADMIN to view request details ([5bf3fdd](https://github.com/rafaelks1020/flixcrd/commit/5bf3fddddbb9869cdef776c8cf579ae08a09d3e4))
+* **approval:** align register email and refresh approval status ([8ac52ae](https://github.com/rafaelks1020/flixcrd/commit/8ac52aea205dc75e40a130ae5639d85f1e83ffdc))
+* **lab:** accept legacy type_/id_ params in video-id ([83d28dc](https://github.com/rafaelks1020/flixcrd/commit/83d28dc4d21713603c4a07148c2a5893803d3cfa))
+* **lab:** improve streamtape detection fallback ([3ab0c33](https://github.com/rafaelks1020/flixcrd/commit/3ab0c33bb224edfc8f3fad2902b23f8d94b779f8))
+* **lab:** robust video-id extraction ([d7f8144](https://github.com/rafaelks1020/flixcrd/commit/d7f8144a602d88058cc4e5d3911a54fb1512f8a6))
+* **lab:** video-id auth via NextAuth session ([8a0e4b0](https://github.com/rafaelks1020/flixcrd/commit/8a0e4b017d8f935fd7f800c702c27c129157e68d))
+* **metrics:** allow presence heartbeat via NextAuth or bearer ([868699d](https://github.com/rafaelks1020/flixcrd/commit/868699dd445b0b696bd0a75f214d47147ae6460b))
+* **pwa:** offline static + themeColor viewport + webpush key 503 ([bdc40c3](https://github.com/rafaelks1020/flixcrd/commit/bdc40c35c93ab869234aeea9c6f21400bdf7b4a0))
+* resolve Admin Catalog build errors and restore Lab Majestic HUD ([0e01e79](https://github.com/rafaelks1020/flixcrd/commit/0e01e79130efd4185310c1ff9aae80aaf464d0ca))
+
+
+### Performance Improvements
+
+* **api:** reduce health/progress overhead on Vercel ([20f4a3b](https://github.com/rafaelks1020/flixcrd/commit/20f4a3b6fb3785de75bb0ea61b317c94b62d7bea))
+
 ## [0.2.0](https://github.com/rafaelks1020/flixcrd/compare/flixcrd-web-v0.1.0...flixcrd-web-v0.2.0) (2025-12-13)
 
 
