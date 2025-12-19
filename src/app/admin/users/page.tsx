@@ -81,7 +81,7 @@ export default function AdminUsersPage() {
       const res = await fetch("/api/admin/users");
       if (!res.ok) throw new Error("Erro ao carregar usuários");
       const data = await res.json();
-      setUsers(data.users || []);
+      setUsers(data || []);
     } catch (err: any) {
       setError(err.message);
     } finally {
