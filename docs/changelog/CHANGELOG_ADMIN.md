@@ -6,6 +6,19 @@
 
 Resumo das mudanças que impactam o painel admin, fluxos de upload, legendas e monitoramento.
 
+## 2025-12-18 – LAB: Recomendações por IA (Claude)
+
+- **Nova API**: `POST /api/lab/ai/recommendations` – recomendações a partir de texto livre (ex.: "comédia romântica + John Wick"), usando Anthropic (Claude Haiku) apenas para interpretar preferências e gerando a lista via TMDB (filtrando somente itens disponíveis no LAB).
+- **UI no LAB**: `/lab` ganhou um campo "Peça pra IA recomendar" que exibe os resultados em grid (formato catálogo).
+- **Persistência (perfil)**: o sistema grava no banco as **últimas 3 rodadas** de recomendações por usuário (top 3 itens por rodada) para permitir montar um perfil/média de gosto.
+- **Limitação de uso**: para evitar custo excessivo, usuários não-admin podem gerar recomendações **apenas 1 vez por mês**.
+- **Melhorias de catálogo**: as recomendações agora consultam múltiplas páginas do TMDB para aumentar variedade (mantendo filtro pelo catálogo LAB) e a UI exibe os resultados em grid (formato catálogo).
+- **Melhoria de precisão**: o parser da IA agora define preferência de mídia (filme/série) quando o usuário pede explicitamente, e o ranking aplica filtragem/ordenação por gêneros e faixa de ano para resultados mais coerentes.
+- **Controle de acesso**: disponível somente para **ADMIN** ou quando `NEXT_PUBLIC_LAB_ENABLED=true`.
+- **Variáveis de ambiente**:
+  - `CLAUDE_KEY` (obrigatória)
+  - `CLAUDE_MODEL` (opcional, default: `claude-3-haiku-20240307`)
+
 ## 2025-12-16 – Módulo oculto "Lab" (integração SuperFlixAPI completa)
 
 - **Nova rota interna**: `/lab` – Catálogo estilo Netflix idêntico à página inicial com Hero, busca exclusiva e carrosséis.

@@ -3,8 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Play, Calendar, Clock, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 import PremiumNavbar from "@/components/ui/PremiumNavbar";
+import PremiumCalendarCard from "@/components/ui/PremiumCalendarCard";
 
 type CalendarStatus = "Atualizado" | "Hoje" | "Futuro" | "Atrasado" | string;
 
@@ -91,99 +94,7 @@ function tmdbImageUrl(pathOrUrl: string | null | undefined, size: "w300" | "w780
   return `https://image.tmdb.org/t/p/${size}${pathOrUrl}`;
 }
 
-function CalendarioHeroSection({
-  item,
-  onPlay,
-  onMore,
-}: {
-  item: CalendarItem | null;
-  onPlay: () => void;
-  onMore: () => void;
-}) {
-  if (!item) return null;
-
-  const backdrop = tmdbImageUrl(item.backdropPath, "original");
-  const air = item.airDate ? new Date(item.airDate).toLocaleDateString("pt-BR") : "-";
-  const episodeLine = formatEpisodeLine(item);
-
-  return (
-    <section className="relative h-[85vh] min-h-[600px] w-full overflow-hidden bg-black pt-16">
-      <div className="absolute inset-0">
-        {backdrop && (
-          <>
-            <img src={backdrop} alt={item.title} className="h-full w-full object-cover" loading="eager" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-transparent to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black to-transparent" />
-          </>
-        )}
-      </div>
-
-      <div className="relative z-10 flex h-full flex-col justify-end px-4 pb-24 md:px-12 md:pb-32">
-        <div className="max-w-2xl space-y-4 animate-fade-in">
-          <h1 className="text-4xl font-extrabold tracking-tight text-white drop-shadow-2xl md:text-6xl lg:text-7xl">
-            {item.title}
-          </h1>
-
-          <div className="flex items-center gap-3 text-sm text-zinc-200 md:text-base">
-            <span className="font-semibold">{air}</span>
-            <span>•</span>
-            <span className="rounded bg-zinc-800/80 backdrop-blur-sm px-2 py-0.5 text-xs font-semibold uppercase">
-              {item.status}
-            </span>
-          </div>
-
-          <p className="line-clamp-3 text-sm text-zinc-200 drop-shadow-lg md:text-base lg:line-clamp-4">
-            {episodeLine || "Episódio"}
-          </p>
-
-          <div className="flex flex-wrap items-center gap-3 pt-4">
-            <button
-              onClick={onPlay}
-              className="flex items-center gap-3 rounded-full bg-gradient-to-r from-red-600 to-red-500 px-8 py-3 text-sm font-semibold text-white shadow-xl hover:from-red-500 hover:to-red-400 transition-all hover:scale-105"
-            >
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
-                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              </span>
-              <span>Assistir</span>
-            </button>
-
-            <button
-              onClick={onMore}
-              className="flex items-center gap-2 rounded-full border border-zinc-500 bg-zinc-900/70 px-7 py-3 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition-all hover:border-white hover:bg-zinc-800/80"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="16" x2="12" y2="12" />
-                <line x1="12" y1="8" x2="12.01" y2="8" />
-              </svg>
-              <span>Mais informações</span>
-            </button>
-
-            <div className="ml-auto flex gap-2">
-              <Link
-                href="/lab"
-                className="rounded-full bg-zinc-900/70 border border-zinc-700 px-5 py-2 text-sm font-semibold text-white hover:bg-zinc-800/80"
-              >
-                Voltar
-              </Link>
-              <Link
-                href="/lab/explore"
-                className="rounded-full bg-zinc-900/70 border border-zinc-700 px-5 py-2 text-sm font-semibold text-white hover:bg-zinc-800/80"
-              >
-                Explorar
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-black to-transparent" />
-    </section>
-  );
-}
+// CalendarioHeroSection removed (inlined)
 
 export default function LabCalendarioClient({ isLoggedIn, isAdmin }: LabCalendarioClientProps) {
   const router = useRouter();
@@ -260,121 +171,150 @@ export default function LabCalendarioClient({ isLoggedIn, isAdmin }: LabCalendar
   }
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-black font-sans selection:bg-red-500/30">
       <PremiumNavbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
 
-      <CalendarioHeroSection
-        item={heroItem}
-        onPlay={() => {
-          if (!heroItem) return;
-          handleWatch(heroItem);
-        }}
-        onMore={() => {
-          if (!heroItem) return;
-          router.push(`/lab/title/${heroItem.tmdbId}?type=tv`);
-        }}
-      />
+      {heroItem && (
+        <div className="relative w-full h-[70vh] md:h-[85vh] overflow-hidden group">
+          <div className="absolute inset-0">
+            {heroItem.backdropPath && (
+              <img
+                src={tmdbImageUrl(heroItem.backdropPath, "original") || ""}
+                alt={heroItem.title}
+                className="w-full h-full object-cover scale-105 group-hover:scale-100 transition-transform duration-[10s] ease-out"
+              />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-r from-black via-black/40 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/20" />
+            <div className="absolute inset-0 bg-black/20" />
+          </div>
 
-      <div className={contentContainerClass}>
-        <div className="max-w-7xl mx-auto">
-          <div className="mt-6 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-            <div className="flex gap-2 flex-wrap items-center">
-              <button
-                type="button"
-                onClick={() => setStatusFilter("ALL")}
-                className={`px-4 py-2 rounded-full text-sm font-semibold border ${statusFilter === "ALL" ? "bg-red-600 border-red-500 text-white" : "bg-zinc-900/60 border-zinc-700 text-zinc-200 hover:bg-zinc-800/70"}`}
-              >
-                Todos
-              </button>
-              {statuses.map((st) => (
+          <div className="absolute inset-0 flex flex-col justify-end px-4 md:px-12 pb-24 md:pb-32 max-w-[1700px] mx-auto w-full">
+            <div className="max-w-3xl space-y-6 animate-in slide-in-from-left-10 fade-in duration-1000">
+              <div className="flex items-center gap-3">
+                <span className={cn(
+                  "px-2 py-1 text-[10px] font-black uppercase tracking-widest rounded-sm text-white shadow-lg backdrop-blur-md border border-white/10",
+                  heroItem.status === "Hoje" ? "bg-red-600 border-red-500" : "bg-zinc-800"
+                )}>
+                  {heroItem.status}
+                </span>
+                <div className="flex items-center gap-1.5 px-2 py-1 bg-white/10 backdrop-blur-md rounded-md border border-white/10">
+                  <Clock size={12} className="text-zinc-300" />
+                  <span className="text-[10px] font-black text-white">
+                    {heroItem.airDate ? new Date(heroItem.airDate).toLocaleDateString("pt-BR") : "Em breve"}
+                  </span>
+                </div>
+              </div>
+
+              <h1 className="text-5xl md:text-8xl font-black tracking-tighter text-white uppercase leading-[0.8] drop-shadow-2xl">
+                {heroItem.title}
+              </h1>
+
+              <div className="flex flex-col gap-1">
+                <h2 className="text-xl md:text-2xl font-bold text-primary tracking-tight uppercase">
+                  {formatEpisodeLine(heroItem)}
+                </h2>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-4 pt-4">
                 <button
-                  key={st}
-                  type="button"
-                  onClick={() => setStatusFilter(st)}
-                  className={`px-4 py-2 rounded-full text-sm font-semibold border ${statusFilter === st ? "bg-red-600 border-red-500 text-white" : "bg-zinc-900/60 border-zinc-700 text-zinc-200 hover:bg-zinc-800/70"}`}
+                  onClick={() => handleWatch(heroItem)}
+                  className="h-12 md:h-14 px-8 md:px-12 bg-white text-black rounded-xl font-black uppercase text-xs md:text-sm tracking-[0.2em] flex items-center gap-3 hover:bg-zinc-200 transition-all hover:scale-105 active:scale-95 shadow-xl shadow-white/10"
                 >
-                  {st}
+                  <Play size={20} fill="currentColor" />
+                  Assistir Agora
                 </button>
+
+                <button
+                  onClick={() => router.push(`/lab/title/${heroItem.tmdbId}?type=tv`)}
+                  className="h-12 md:h-14 px-8 md:px-12 bg-zinc-900/80 backdrop-blur-xl text-white border border-white/10 rounded-xl font-black uppercase text-xs md:text-sm tracking-[0.2em] flex items-center gap-3 hover:bg-zinc-800 transition-all hover:scale-105 active:scale-95 shadow-2xl"
+                >
+                  Mais Infos
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-black to-transparent pointer-events-none" />
+        </div>
+      )}
+
+      <div className={cn("relative z-10 px-4 md:px-12 pb-24 max-w-[1800px] mx-auto", heroItem ? "-mt-20" : "pt-24")}>
+
+        {/* Filters & Search - Glassmorphism */}
+        <div className="mb-12 sticky top-24 z-40 bg-black/50 backdrop-blur-xl border border-white/5 rounded-2xl p-4 shadow-2xl flex flex-col xl:flex-row gap-6 items-center justify-between">
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide w-full xl:w-auto pb-2 xl:pb-0">
+            <button
+              onClick={() => setStatusFilter("ALL")}
+              className={cn(
+                "px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap border",
+                statusFilter === "ALL"
+                  ? "bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.3)]"
+                  : "bg-zinc-900/50 text-zinc-400 border-white/5 hover:bg-zinc-800 hover:text-white hover:border-white/20"
+              )}
+            >
+              Todos
+            </button>
+            {statuses.map((st) => (
+              <button
+                key={st}
+                onClick={() => setStatusFilter(st)}
+                className={cn(
+                  "px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap border",
+                  statusFilter === st
+                    ? "bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.3)]"
+                    : "bg-zinc-900/50 text-zinc-400 border-white/5 hover:bg-zinc-800 hover:text-white hover:border-white/20"
+                )}
+              >
+                {st}
+              </button>
+            ))}
+          </div>
+
+          <div className="relative w-full xl:w-[400px] group">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="FILTRAR POR TÍTULO..."
+              className="w-full bg-black/40 border border-white/10 rounded-xl px-5 py-3 pl-12 text-sm text-white focus:border-primary/50 outline-none transition-all font-bold uppercase tracking-wider placeholder:text-zinc-600"
+            />
+            <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+          </div>
+        </div>
+
+        <div className="mt-8">
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : error ? (
+            <div className="text-center py-20">
+              <h3 className="text-xl font-bold text-red-500 mb-2">Erro ao carregar</h3>
+              <p className="text-zinc-500">{error}</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-20 opacity-50">
+              <Calendar size={48} className="mx-auto mb-4 text-zinc-600" />
+              <p className="text-zinc-400 font-bold uppercase tracking-widest">Nenhum evento encontrado</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-4 gap-y-12">
+              {filtered.map((it, idx) => (
+                <PremiumCalendarCard
+                  key={`${it.tmdbId}-${it.seasonNumber}-${it.episodeNumber}-${idx}`} // Added idx for safety
+                  tmdbId={it.tmdbId}
+                  seasonNumber={it.seasonNumber}
+                  episodeNumber={it.episodeNumber}
+                  title={it.title}
+                  episodeTitle={it.episodeTitle}
+                  posterUrl={tmdbImageUrl(it.posterPath, "w780")}
+                  airDate={it.airDate}
+                  status={it.status}
+                  onWatch={() => handleWatch(it)}
+                />
               ))}
             </div>
-
-            <div className="relative w-full md:w-[360px]">
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Filtrar por título..."
-                className="w-full px-5 py-3 rounded-full bg-zinc-900/90 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:border-red-500"
-              />
-            </div>
-          </div>
-
-          <div className="mt-6">
-            {loading ? (
-              <div className="text-zinc-400">Carregando calendário...</div>
-            ) : error ? (
-              <div className="text-red-400">{error}</div>
-            ) : filtered.length === 0 ? (
-              <div className="text-zinc-400">Nenhum item encontrado.</div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {filtered.map((it, idx) => {
-                  const poster = tmdbImageUrl(it.posterPath, "w300");
-                  const air = it.airDate ? new Date(it.airDate).toLocaleDateString("pt-BR") : "-";
-                  const episodeLine = formatEpisodeLine(it);
-
-                  return (
-                    <div
-                      key={`${it.tmdbId}-${it.seasonNumber}-${it.episodeNumber}-${it.airDate}-${idx}`}
-                      className="rounded-2xl border border-zinc-800 bg-zinc-950/60 overflow-hidden"
-                    >
-                      <div className="flex gap-4 p-4">
-                        <div className="w-20 h-28 bg-zinc-900 rounded-lg overflow-hidden flex-shrink-0">
-                          {poster ? (
-                            <img src={poster} alt={it.title} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-zinc-600">🎬</div>
-                          )}
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="text-white font-bold truncate">{it.title}</div>
-                            <span className="text-[11px] px-2 py-0.5 rounded bg-zinc-800/80 text-zinc-200 border border-zinc-700">
-                              {it.status}
-                            </span>
-                          </div>
-
-                          {episodeLine ? (
-                            <div className="mt-1 text-sm text-zinc-300 line-clamp-2">{episodeLine}</div>
-                          ) : null}
-
-                          <div className="mt-2 text-xs text-zinc-500 flex items-center gap-2 flex-wrap">
-                            <span>{air}</span>
-                          </div>
-
-                          <div className="mt-4 flex gap-2 flex-wrap">
-                            <button
-                              type="button"
-                              onClick={() => handleWatch(it)}
-                              className="px-4 py-2 rounded-full bg-red-600 hover:bg-red-500 text-white text-sm font-semibold"
-                            >
-                              ▶ Assistir
-                            </button>
-                            <Link
-                              href={`/lab/title/${it.tmdbId}?type=tv`}
-                              className="px-4 py-2 rounded-full bg-zinc-900/70 border border-zinc-700 hover:bg-zinc-800/80 text-white text-sm font-semibold"
-                            >
-                              Detalhes
-                            </Link>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
     </div>

@@ -91,7 +91,7 @@ export default function HomeClientNew2({
     // Autoplay: trocar de título a cada 8 segundos
     const interval = setInterval(() => {
       setIsTransitioning(true);
-      
+
       setTimeout(() => {
         setCurrentHeroIndex((prevIndex) => {
           const nextIndex = (prevIndex + 1) % topTitles.length;
@@ -201,32 +201,24 @@ export default function HomeClientNew2({
   }, [isLoggedIn, activeProfileId]);
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#000' }}>
+    <div
+      className="min-h-screen bg-black text-white selection:bg-red-500/30"
+      style={{ "--spotlight-color": "rgba(229, 9, 20, 0.15)" } as any}
+    >
       {/* Premium Navbar */}
       <PremiumNavbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
 
       {/* Premium Hero com Carrossel */}
       {heroTitle && (
-        <div style={{ position: 'relative' }}>
-          <div 
-            style={{ 
-              transition: 'opacity 0.3s ease-in-out',
-              opacity: isTransitioning ? 0 : 1,
-            }}
+        <div className="relative group/hero">
+          <div
+            className={`transition-opacity duration-700 ease-in-out ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}
           >
             <PremiumHero title={heroTitle} isLoggedIn={isLoggedIn} />
           </div>
 
           {/* Indicadores de Carrossel */}
-          <div style={{
-            position: 'absolute',
-            bottom: '30px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            gap: '8px',
-            zIndex: 10,
-          }}>
+          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
             {topTitles.map((_, index) => (
               <button
                 key={index}
@@ -238,125 +230,50 @@ export default function HomeClientNew2({
                     setIsTransitioning(false);
                   }, 300);
                 }}
-                style={{
-                  width: currentHeroIndex === index ? '32px' : '8px',
-                  height: '8px',
-                  borderRadius: '4px',
-                  border: 'none',
-                  background: currentHeroIndex === index 
-                    ? 'linear-gradient(90deg, #dc2626 0%, #f87171 100%)'
-                    : 'rgba(255, 255, 255, 0.3)',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  boxShadow: currentHeroIndex === index ? '0 0 10px rgba(220, 38, 38, 0.5)' : 'none',
-                }}
-                onMouseEnter={(e) => {
-                  if (currentHeroIndex !== index) {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.5)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (currentHeroIndex !== index) {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
-                  }
-                }}
+                className={`h-1.5 rounded-full transition-all duration-300 ${currentHeroIndex === index
+                  ? 'w-8 bg-gradient-to-r from-red-600 to-red-400 shadow-[0_0_10px_rgba(220,38,38,0.5)]'
+                  : 'w-2 bg-white/30 hover:bg-white/50'
+                  }`}
               />
             ))}
           </div>
 
-          {/* Botões de Navegação */}
-          <button
-            onClick={() => {
-              setIsTransitioning(true);
-              setTimeout(() => {
-                const prevIndex = (currentHeroIndex - 1 + topTitles.length) % topTitles.length;
-                setCurrentHeroIndex(prevIndex);
-                setHeroTitle(topTitles[prevIndex]);
-                setIsTransitioning(false);
-              }, 300);
-            }}
-            style={{
-              position: 'absolute',
-              left: '20px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              width: '50px',
-              height: '50px',
-              borderRadius: '50%',
-              border: '2px solid rgba(255, 255, 255, 0.3)',
-              background: 'rgba(0, 0, 0, 0.5)',
-              backdropFilter: 'blur(10px)',
-              color: 'white',
-              fontSize: '24px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.3s ease',
-              zIndex: 10,
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(0, 0, 0, 0.8)';
-              e.currentTarget.style.borderColor = 'rgba(220, 38, 38, 0.8)';
-              e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(0, 0, 0, 0.5)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-              e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
-            }}
-          >
-            ‹
-          </button>
-
-          <button
-            onClick={() => {
-              setIsTransitioning(true);
-              setTimeout(() => {
-                const nextIndex = (currentHeroIndex + 1) % topTitles.length;
-                setCurrentHeroIndex(nextIndex);
-                setHeroTitle(topTitles[nextIndex]);
-                setIsTransitioning(false);
-              }, 300);
-            }}
-            style={{
-              position: 'absolute',
-              right: '20px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              width: '50px',
-              height: '50px',
-              borderRadius: '50%',
-              border: '2px solid rgba(255, 255, 255, 0.3)',
-              background: 'rgba(0, 0, 0, 0.5)',
-              backdropFilter: 'blur(10px)',
-              color: 'white',
-              fontSize: '24px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.3s ease',
-              zIndex: 10,
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(0, 0, 0, 0.8)';
-              e.currentTarget.style.borderColor = 'rgba(220, 38, 38, 0.8)';
-              e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(0, 0, 0, 0.5)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-              e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
-            }}
-          >
-            ›
-          </button>
+          {/* Botões de Navegação (Only visible on hover) */}
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-between px-4 md:px-8">
+            <button
+              className="pointer-events-auto w-12 h-12 rounded-full bg-black/30 backdrop-blur-md border border-white/10 text-white flex items-center justify-center opacity-0 group-hover/hero:opacity-100 transition-all hover:bg-black/50 hover:border-white/30 hover:scale-110 active:scale-95"
+              onClick={() => {
+                setIsTransitioning(true);
+                setTimeout(() => {
+                  const prevIndex = (currentHeroIndex - 1 + topTitles.length) % topTitles.length;
+                  setCurrentHeroIndex(prevIndex);
+                  setHeroTitle(topTitles[prevIndex]);
+                  setIsTransitioning(false);
+                }, 300);
+              }}
+            >
+              ‹
+            </button>
+            <button
+              className="pointer-events-auto w-12 h-12 rounded-full bg-black/30 backdrop-blur-md border border-white/10 text-white flex items-center justify-center opacity-0 group-hover/hero:opacity-100 transition-all hover:bg-black/50 hover:border-white/30 hover:scale-110 active:scale-95"
+              onClick={() => {
+                setIsTransitioning(true);
+                setTimeout(() => {
+                  const nextIndex = (currentHeroIndex + 1) % topTitles.length;
+                  setCurrentHeroIndex(nextIndex);
+                  setHeroTitle(topTitles[nextIndex]);
+                  setIsTransitioning(false);
+                }, 300);
+              }}
+            >
+              ›
+            </button>
+          </div>
         </div>
       )}
 
       {/* Content */}
-      <div style={{ paddingTop: '2rem', paddingBottom: '4rem' }}>
+      <div className="relative z-10 -mt-20 pb-20 space-y-8 md:space-y-12 bg-gradient-to-b from-transparent via-black to-black">
         {/* Continuar Assistindo */}
         {continueWatching.length > 0 && (
           <div id="continue-watching">
@@ -366,8 +283,8 @@ export default function HomeClientNew2({
 
         {/* Adicionados Recentemente */}
         {recentTitles.length > 0 && (
-          <PremiumTitleRow 
-            title="🆕 Adicionados Recentemente" 
+          <PremiumTitleRow
+            title="🆕 Adicionados Recentemente"
             titles={recentTitles.map(t => ({
               ...t,
               slug: t.id,
@@ -384,8 +301,9 @@ export default function HomeClientNew2({
 
         {/* Gêneros */}
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="text-white text-xl">Carregando...</div>
+          <div className="flex flex-col items-center justify-center py-32 gap-4">
+            <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin" />
+            <p className="text-zinc-500 animate-pulse">Carregando catálogo...</p>
           </div>
         ) : (
           genres.map((genre) => (

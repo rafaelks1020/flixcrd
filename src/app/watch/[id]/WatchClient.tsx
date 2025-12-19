@@ -1,25 +1,43 @@
 "use client";
 
 import Hls from "hls.js";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { type MouseEvent, type SyntheticEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Play,
+  Pause,
+  RotateCcw,
+  RotateCw,
+  Volume2,
+  VolumeX,
+  Maximize,
+  Minimize,
+  ChevronLeft,
+  Settings2,
+  Subtitles,
+  SkipForward,
+  Keyboard,
+  Info,
+  AlertCircle,
+  Clock,
+  Zap,
+  Loader2,
+  Lock,
+  Check
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 // Tipos para eventos HLS
-interface HlsLevelData {
-  level: number;
-}
-
-interface HlsManifestData {
-  levels: Array<{ height?: number; bitrate?: number }>;
-}
-
+interface HlsLevelData { level: number; }
+interface HlsManifestData { levels: Array<{ height?: number; bitrate?: number }>; }
 interface HlsErrorData {
   type: string;
   details: string;
   fatal?: boolean;
   response?: { code?: number };
 }
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { type MouseEvent, type SyntheticEvent, useCallback, useEffect, useRef, useState } from "react";
 
 type TitleType = "MOVIE" | "SERIES" | "ANIME" | "OTHER";
 
@@ -43,23 +61,11 @@ interface PlaybackResponse {
   title: TitleData;
   expiresAt?: number | null;
   protected?: boolean;
-  subtitles?: Array<{
-    label: string;
-    language?: string | null;
-    url: string;
-  }>;
+  subtitles?: Array<{ label: string; language?: string | null; url: string; }>;
 }
 
-interface QualityLevelInfo {
-  index: number;
-  height?: number;
-  bitrate?: number;
-}
-
-interface WatchClientProps {
-  titleId: string;
-  episodeId?: string;
-}
+interface QualityLevelInfo { index: number; height?: number; bitrate?: number; }
+interface WatchClientProps { titleId: string; episodeId?: string; }
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return "0:00";
@@ -67,11 +73,7 @@ function formatTime(seconds: number): string {
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
   const secs = total % 60;
-
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  }
-
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
@@ -84,7 +86,7 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const [currentTime, setCurrentTime] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
-  const [isHovering, setIsHovering] = useState(false);
+  const [isHovering, setIsHovering] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [qualityLevels, setQualityLevels] = useState<QualityLevelInfo[]>([]);
@@ -103,6 +105,8 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const [isProtectedStream, setIsProtectedStream] = useState(false);
   const [bufferedPercent, setBufferedPercent] = useState(0);
   const [bufferHealth, setBufferHealth] = useState<"low" | "medium" | "high">("medium");
+  const [showQualityMenu, setShowQualityMenu] = useState(false);
+  const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const wakeLockRef = useRef<any>(null);
@@ -114,12 +118,12 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
   const lastSyncedPositionRef = useRef<number>(-1);
   const pendingProgressRef = useRef<{ positionSeconds: number; durationSeconds: number } | null>(null);
   const tokenRenewalTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isLoadingPlaybackRef = useRef<boolean>(false); // Evitar chamadas duplicadas
-  const isRenewingTokenRef = useRef<boolean>(false); // Evitar renovações duplicadas
-  const savedPositionRef = useRef<number>(0); // Salvar posição ao renovar token
-  const currentStreamUrlRef = useRef<string | null>(null); // URL atual do stream (para renovação silenciosa)
+  const isLoadingPlaybackRef = useRef<boolean>(false);
+  const isRenewingTokenRef = useRef<boolean>(false);
+  const savedPositionRef = useRef<number>(0);
+  const currentStreamUrlRef = useRef<string | null>(null);
   const bufferIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const hasRestoredProgressRef = useRef<boolean>(false); // Evitar múltiplas restaurações de progresso
+  const hasRestoredProgressRef = useRef<boolean>(false);
   const router = useRouter();
 
   const flushProgressQueue = useCallback(async () => {
@@ -127,10 +131,8 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     if (!profileId) return;
     const pending = pendingProgressRef.current;
     if (!pending) return;
-
     progressSyncInFlightRef.current = true;
     pendingProgressRef.current = null;
-
     try {
       await fetch(`/api/titles/${titleId}/progress`, {
         method: "POST",
@@ -143,14 +145,11 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
         }),
         keepalive: true,
       });
-
       lastSyncedPositionRef.current = pending.positionSeconds;
     } catch {
     } finally {
       progressSyncInFlightRef.current = false;
-      if (pendingProgressRef.current) {
-        void flushProgressQueue();
-      }
+      if (pendingProgressRef.current) void flushProgressQueue();
     }
   }, [episodeId, profileId, titleId]);
 
@@ -158,13 +157,10 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     (positionSeconds: number, durationSeconds: number) => {
       if (!profileId) return;
       if (!durationSeconds || !Number.isFinite(durationSeconds)) return;
-
       const pos = Math.max(0, Math.floor(positionSeconds));
       const dur = Math.max(0, Math.floor(durationSeconds));
-
       const lastPos = lastSyncedPositionRef.current;
       if (lastPos >= 0 && Math.abs(pos - lastPos) < 3) return;
-
       pendingProgressRef.current = { positionSeconds: pos, durationSeconds: dur };
       void flushProgressQueue();
     },
@@ -173,47 +169,25 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
     const flush = () => {
-      const videoEl = videoRef.current;
-      if (!videoEl) return;
-
-      const total = videoEl.duration || duration;
-      if (!profileId) return;
-      if (!total || !Number.isFinite(total)) return;
-
-      const pos = videoEl.currentTime;
-      const payload = JSON.stringify({
-        positionSeconds: pos,
-        durationSeconds: total,
-        episodeId: episodeId ?? null,
-        profileId,
-      });
-
+      const v = videoRef.current;
+      if (!v) return;
+      const total = v.duration || duration;
+      if (!profileId || !total || !Number.isFinite(total)) return;
+      const pos = v.currentTime;
+      const payload = JSON.stringify({ positionSeconds: pos, durationSeconds: total, episodeId: episodeId ?? null, profileId });
       if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
         try {
-          navigator.sendBeacon(
-            `/api/titles/${titleId}/progress`,
-            new Blob([payload], { type: "application/json" }),
-          );
+          navigator.sendBeacon(`/api/titles/${titleId}/progress`, new Blob([payload], { type: "application/json" }));
           lastSyncedPositionRef.current = Math.max(0, Math.floor(pos));
           return;
-        } catch {
-        }
+        } catch { }
       }
-
       queueProgressSync(pos, total);
     };
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        flush();
-      }
-    };
-
+    const onVisibilityChange = () => { if (document.visibilityState === "hidden") flush(); };
     window.addEventListener("beforeunload", flush);
     document.addEventListener("visibilitychange", onVisibilityChange);
-
     return () => {
       window.removeEventListener("beforeunload", flush);
       document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -222,17 +196,14 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
 
   const titleMeta = data?.title;
   const mediaTitle = titleMeta?.episodeName || titleMeta?.name || "Pflix";
-  const mediaSubtitle =
-    typeof titleMeta?.seasonNumber === "number" && typeof titleMeta?.episodeNumber === "number"
-      ? `S${String(titleMeta.seasonNumber).padStart(2, "0")}E${String(titleMeta.episodeNumber).padStart(2, "0")}`
-      : undefined;
+  const mediaSubtitle = (typeof titleMeta?.seasonNumber === "number" && typeof titleMeta?.episodeNumber === "number")
+    ? `S${String(titleMeta.seasonNumber).padStart(2, "0")}E${String(titleMeta.episodeNumber).padStart(2, "0")}`
+    : undefined;
 
   useEffect(() => {
-    if (typeof navigator === "undefined") return;
+    if (typeof navigator === "undefined" || !titleMeta) return;
     const ms = (navigator as any).mediaSession;
     if (!ms) return;
-    if (!titleMeta) return;
-
     try {
       const MediaMetadataCtor = (window as any).MediaMetadata;
       if (typeof MediaMetadataCtor === "function") {
@@ -240,206 +211,70 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
           title: mediaTitle,
           artist: mediaSubtitle || "",
           album: "Pflix",
-          artwork: titleMeta.posterUrl
-            ? [
-                { src: titleMeta.posterUrl, sizes: "512x512", type: "image/png" },
-                { src: titleMeta.posterUrl, sizes: "384x384", type: "image/png" },
-                { src: titleMeta.posterUrl, sizes: "192x192", type: "image/png" },
-              ]
-            : undefined,
+          artwork: titleMeta.posterUrl ? [{ src: titleMeta.posterUrl, sizes: "512x512", type: "image/png" }] : undefined,
         });
       }
-    } catch {
-    }
-
-    const safeSetHandler = (action: string, handler: any) => {
-      try {
-        ms.setActionHandler?.(action, handler);
-      } catch {
-      }
-    };
-
-    safeSetHandler("play", async () => {
-      const v = videoRef.current;
-      if (!v) return;
-      await v.play().catch(() => {});
-    });
-    safeSetHandler("pause", () => {
-      const v = videoRef.current;
-      if (!v) return;
-      v.pause();
-    });
+    } catch { }
+    const safeSetHandler = (action: string, handler: any) => { try { ms.setActionHandler?.(action, handler); } catch { } };
+    safeSetHandler("play", async () => { const v = videoRef.current; if (v) await v.play().catch(() => { }); });
+    safeSetHandler("pause", () => { videoRef.current?.pause(); });
     safeSetHandler("seekbackward", (details: any) => {
-      const v = videoRef.current;
-      if (!v) return;
-      const offset = Number(details?.seekOffset ?? 10);
-      v.currentTime = Math.max(0, (v.currentTime || 0) - offset);
+      const v = videoRef.current; if (!v) return;
+      v.currentTime = Math.max(0, (v.currentTime || 0) - Number(details?.seekOffset ?? 10));
     });
     safeSetHandler("seekforward", (details: any) => {
-      const v = videoRef.current;
-      if (!v) return;
-      const offset = Number(details?.seekOffset ?? 10);
-      v.currentTime = Math.min(v.duration || Infinity, (v.currentTime || 0) + offset);
+      const v = videoRef.current; if (!v) return;
+      v.currentTime = Math.min(v.duration || Infinity, (v.currentTime || 0) + Number(details?.seekOffset ?? 10));
     });
     safeSetHandler("seekto", (details: any) => {
-      const v = videoRef.current;
-      if (!v) return;
-      const t = Number(details?.seekTime);
-      if (!Number.isFinite(t)) return;
-      v.currentTime = t;
+      const v = videoRef.current; if (!v || !Number.isFinite(details?.seekTime)) return;
+      v.currentTime = Number(details.seekTime);
     });
   }, [mediaSubtitle, mediaTitle, titleMeta]);
 
   useEffect(() => {
-    if (typeof navigator === "undefined") return;
-    const ms = (navigator as any).mediaSession;
-    if (!ms?.setPositionState) return;
-    if (!Number.isFinite(duration) || duration <= 0) return;
-
-    try {
-      const v = videoRef.current;
-      const rate = v?.playbackRate ?? 1;
-      ms.setPositionState({
-        duration,
-        position: Math.max(0, Math.min(duration, currentTime || 0)),
-        playbackRate: rate,
-      });
-    } catch {
-    }
-  }, [currentTime, duration]);
-
-  useEffect(() => {
-    if (typeof navigator === "undefined") return;
-    if (typeof document === "undefined") return;
-
-    const release = async () => {
-      try {
-        await wakeLockRef.current?.release?.();
-      } catch {
-      } finally {
-        wakeLockRef.current = null;
-      }
-    };
-
+    if (typeof navigator === "undefined" || typeof document === "undefined") return;
+    const release = async () => { try { await wakeLockRef.current?.release?.(); } catch { } finally { wakeLockRef.current = null; } };
     const request = async () => {
-      if (!isPlaying) return;
-      if (document.visibilityState !== "visible") return;
-      if (!(navigator as any).wakeLock?.request) return;
-      if (wakeLockRef.current) return;
-
+      if (!isPlaying || document.visibilityState !== "visible" || !(navigator as any).wakeLock?.request || wakeLockRef.current) return;
       try {
         wakeLockRef.current = await (navigator as any).wakeLock.request("screen");
-        wakeLockRef.current?.addEventListener?.("release", () => {
-          wakeLockRef.current = null;
-        });
-      } catch {
-      }
+        wakeLockRef.current?.addEventListener?.("release", () => { wakeLockRef.current = null; });
+      } catch { }
     };
-
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") {
-        void request();
-      } else {
-        void release();
-      }
-    };
-
+    const onVisibility = () => { if (document.visibilityState === "visible") void request(); else void release(); };
     document.addEventListener("visibilitychange", onVisibility);
     void request();
-
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      void release();
-    };
+    return () => { document.removeEventListener("visibilitychange", onVisibility); void release(); };
   }, [isPlaying]);
 
-  // Detectar tipo de dispositivo para ajustar buffer
   const getDeviceType = useCallback((): "xbox" | "mobile" | "tv" | "desktop" => {
     if (typeof navigator === "undefined") return "desktop";
-    
     const ua = navigator.userAgent.toLowerCase();
-    
-    // Xbox tem memória limitada - buffer pequeno
-    if (ua.includes("xbox") || ua.includes("xboxone") || ua.includes("xbox series")) {
-      return "xbox";
-    }
-    
-    // Smart TVs geralmente têm memória limitada
-    if (ua.includes("smart-tv") || ua.includes("smarttv") || ua.includes("webos") || 
-        ua.includes("tizen") || ua.includes("roku") || ua.includes("firetv") ||
-        ua.includes("appletv") || ua.includes("chromecast")) {
-      return "tv";
-    }
-    
-    // Mobile também tem limitações
-    if (/android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(ua)) {
-      return "mobile";
-    }
-    
+    if (ua.includes("xbox")) return "xbox";
+    if (ua.includes("smart-tv") || ua.includes("webos") || ua.includes("tizen")) return "tv";
+    if (/android|iphone|ipad/i.test(ua)) return "mobile";
     return "desktop";
   }, []);
 
-  // Medir velocidade de download para ajustar buffer
   const measureNetworkSpeed = useCallback(async (): Promise<number> => {
     if (typeof navigator !== "undefined" && "connection" in navigator) {
       const conn = (navigator as any).connection;
-      if (conn?.downlink) {
-        // downlink está em Mbps
-        return conn.downlink;
-      }
+      if (conn?.downlink) return conn.downlink;
     }
-    
-    // Fallback: assumir velocidade média
-    return 10; // 10 Mbps default
+    return 10;
   }, []);
 
-  // Calcular configuração de buffer baseado no dispositivo e velocidade
   const getBufferConfig = useCallback((deviceType: string, speedMbps: number) => {
-    // Configurações base por dispositivo (em segundos)
     const configs = {
-      // Xbox: buffer pequeno para evitar travamentos de memória
-      xbox: {
-        maxBufferLength: 30,        // Máximo 30s de buffer
-        maxMaxBufferLength: 60,     // Nunca mais que 60s
-        backBufferLength: 10,       // Manter só 10s atrás
-      },
-      // TV: buffer moderado
-      tv: {
-        maxBufferLength: 45,
-        maxMaxBufferLength: 90,
-        backBufferLength: 15,
-      },
-      // Mobile: buffer médio
-      mobile: {
-        maxBufferLength: 60,
-        maxMaxBufferLength: 120,
-        backBufferLength: 20,
-      },
-      // Desktop: buffer grande se a internet permitir
-      desktop: {
-        maxBufferLength: 120,       // 2 minutos de buffer
-        maxMaxBufferLength: 300,    // Até 5 minutos se internet boa
-        backBufferLength: 30,       // Manter 30s atrás
-      },
+      xbox: { maxBufferLength: 30, maxMaxBufferLength: 60, backBufferLength: 10 },
+      tv: { maxBufferLength: 45, maxMaxBufferLength: 90, backBufferLength: 15 },
+      mobile: { maxBufferLength: 60, maxMaxBufferLength: 120, backBufferLength: 20 },
+      desktop: { maxBufferLength: 120, maxMaxBufferLength: 300, backBufferLength: 30 },
     };
-
     const baseConfig = configs[deviceType as keyof typeof configs] || configs.desktop;
-    
-    // Ajustar baseado na velocidade da internet
-    let multiplier = 1;
-    if (speedMbps < 5) {
-      multiplier = 0.5; // Internet lenta: reduzir buffer
-    } else if (speedMbps < 15) {
-      multiplier = 0.75; // Internet média
-    } else if (speedMbps > 50) {
-      multiplier = 1.5; // Internet rápida: aumentar buffer
-    }
-    
-    // Para Xbox, nunca aumentar além do limite
-    if (deviceType === "xbox") {
-      multiplier = Math.min(multiplier, 1);
-    }
-
+    let multiplier = speedMbps < 5 ? 0.5 : speedMbps < 15 ? 0.75 : speedMbps > 50 ? 1.5 : 1;
+    if (deviceType === "xbox") multiplier = Math.min(multiplier, 1);
     return {
       maxBufferLength: Math.round(baseConfig.maxBufferLength * multiplier),
       maxMaxBufferLength: Math.round(baseConfig.maxMaxBufferLength * multiplier),
@@ -447,70 +282,38 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
     };
   }, []);
 
-  // Carrega o profileId ativo salvo pelo fluxo de perfis
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem("activeProfileId");
-    setProfileId(stored ?? null);
+    setProfileId(window.localStorage.getItem("activeProfileId"));
   }, []);
 
   useEffect(() => {
     async function testarVelocidadeCloudflare(): Promise<number> {
-      // Testa a velocidade do Cloudflare Worker (Wasabi)
-      // Se der erro ou demorar muito, usa direto
-      if (typeof performance === "undefined" || typeof fetch === "undefined") {
-        return Infinity;
-      }
-
+      if (typeof performance === "undefined" || typeof fetch === "undefined") return Infinity;
       const inicio = performance.now();
       try {
-        // Tenta acessar a API de status do Cloudflare
         const res = await fetch("/api/status/cloudflare", { cache: "no-store" });
         if (!res.ok) return Infinity;
-      } catch {
-        return Infinity; // Erro = Cloudflare offline/inacessível
-      }
+      } catch { return Infinity; }
       return performance.now() - inicio;
     }
-
     async function loadPlayback() {
-      // Evitar chamadas duplicadas (React Strict Mode)
-      if (isLoadingPlaybackRef.current) {
-        console.log("[WatchClient] loadPlayback já em execução, ignorando...");
-        return;
-      }
+      if (isLoadingPlaybackRef.current) return;
       isLoadingPlaybackRef.current = true;
-      
       setLoading(true);
       setError(null);
       setSubscriptionBlocked(false);
-      
       try {
-        // 0) Verificar assinatura antes de carregar o vídeo
         const subRes = await fetch('/api/subscription/check');
         const subData = await subRes.json();
-        
-        if (!subData.canWatch) {
-          setSubscriptionBlocked(true);
-          setLoading(false);
-          return;
-        }
-        
-        // 1) Buscar configuração do perfil
+        if (!subData.canWatch) { setSubscriptionBlocked(true); setLoading(false); return; }
         let proxyFlag = false;
         if (profileId) {
           try {
-            const profileRes = await fetch(
-              `/api/profiles/${encodeURIComponent(profileId)}`,
-              { cache: "no-store" },
-            );
+            const profileRes = await fetch(`/api/profiles/${encodeURIComponent(profileId)}`, { cache: "no-store" });
             if (profileRes.status === 404) {
-              if (typeof window !== "undefined") {
-                window.localStorage.removeItem("activeProfileId");
-              }
+              window.localStorage.removeItem("activeProfileId");
               setProfileId(null);
-              setError("Seu perfil selecionado não existe mais. Escolha um perfil novamente.");
-              setLoading(false);
               router.push("/profiles");
               return;
             }
@@ -518,1418 +321,482 @@ export default function WatchClient({ titleId, episodeId }: WatchClientProps) {
               const profileJson = await profileRes.json();
               proxyFlag = Boolean(profileJson?.useCloudflareProxy);
             }
-          } catch {
-            proxyFlag = false;
-          }
+          } catch { }
         }
         setUseCloudflareProxy(proxyFlag);
-
-        // 2) Decidir origem: SEMPRE Cloudflare primeiro se o toggle estiver ativo
-        let source: "direct" | "cloudflare" = "direct";
-        if (proxyFlag) {
-          // Testa se Cloudflare está respondendo bem
-          const tempo = await testarVelocidadeCloudflare();
-          const limite = 300; // ms - se demorar mais ou falhar, usa acesso direto
-          if (tempo <= limite) {
-            source = "cloudflare"; // Cloudflare OK, usa ele
-          } else {
-            source = "direct"; // Cloudflare lento/off, usa direto
-          }
-        }
-
-        const baseUrl = episodeId
-          ? `/api/episodes/${episodeId}/playback`
-          : `/api/titles/${titleId}/playback`;
-        const sep = baseUrl.includes("?") ? "&" : "?";
-        const url = `${baseUrl}${sep}source=${source}`;
-
-        const res = await fetch(url);
+        const source = proxyFlag && (await testarVelocidadeCloudflare()) <= 300 ? "cloudflare" : "direct";
+        const baseUrl = episodeId ? `/api/episodes/${episodeId}/playback` : `/api/titles/${titleId}/playback`;
+        const res = await fetch(`${baseUrl}${baseUrl.includes("?") ? "&" : "?"}source=${source}`);
         const json = await res.json();
-
-        if (!res.ok) {
-          if (res.status === 401) {
-            setError("Você precisa estar logado para assistir.");
-          } else {
-            setError(json?.error ?? "Erro ao carregar playback.");
-          }
-          setLoading(false);
-          return;
-        }
-
-        const playbackData = json as PlaybackResponse;
-        setData(playbackData);
-        
-        // Configurar renovação de token se for streaming protegido
-        if (playbackData.protected && playbackData.expiresAt) {
-          setIsProtectedStream(true);
-          setTokenExpiresAt(playbackData.expiresAt);
-        }
+        if (!res.ok) { setError(json?.error ?? "Erro ao carregar playback."); setLoading(false); return; }
+        setData(json);
+        if (json.protected && json.expiresAt) { setIsProtectedStream(true); setTokenExpiresAt(json.expiresAt); }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Erro ao carregar playback.");
-      } finally {
-        setLoading(false);
-        // Não resetar isLoadingPlaybackRef aqui para evitar re-chamadas
-      }
+        setError(err instanceof Error ? err.message : "Erro crítico.");
+      } finally { setLoading(false); }
     }
-
     loadPlayback();
-    
-    // Cleanup: resetar flags quando componente desmontar ou deps mudarem
-    return () => {
-      isLoadingPlaybackRef.current = false;
-      hasRestoredProgressRef.current = false; // Resetar para permitir nova restauração
-    };
-  }, [titleId, episodeId, profileId]);
+    return () => { isLoadingPlaybackRef.current = false; hasRestoredProgressRef.current = false; };
+  }, [titleId, episodeId, profileId, router]);
 
-  // Função para renovar token silenciosamente (SEM recarregar o player)
-  // A nova estratégia: apenas atualizar a referência da URL para uso futuro
-  // O HLS.js continua usando os segmentos já carregados no buffer
-  // Só recarrega se houver erro 403 (token expirado no meio do stream)
   const renewTokenAndUpdatePlayer = useCallback(async (forceReload = false) => {
-    if (isRenewingTokenRef.current) {
-      console.log("[WatchClient] Renovação já em andamento, ignorando...");
-      return;
-    }
-    
+    if (isRenewingTokenRef.current) return;
     isRenewingTokenRef.current = true;
-    
     try {
-      console.log("[WatchClient] Renovando token de streaming...");
-      
       const contentType = episodeId ? "episode" : "title";
       const contentId = episodeId || titleId;
-      
-      const res = await fetch("/api/stream/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contentType, contentId }),
-      });
-
-      if (!res.ok) {
-        console.error("[WatchClient] Erro ao renovar token:", res.status);
-        return;
-      }
-
+      const res = await fetch("/api/stream/token", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contentType, contentId }) });
+      if (!res.ok) return;
       const newData = await res.json();
-      
       if (newData.streamUrl && newData.expiresAt) {
-        const expiresInMinutes = Math.round((newData.expiresAt - Date.now()) / 1000 / 60);
-        console.log("[WatchClient] Token renovado com sucesso, expira em", expiresInMinutes, "minutos (", Math.round(expiresInMinutes / 60 * 10) / 10, "horas)");
-        
-        // Atualizar expiração
         setTokenExpiresAt(newData.expiresAt);
-        
-        // Guardar nova URL para referência (usada se precisar recarregar)
         currentStreamUrlRef.current = newData.streamUrl;
-        
-        // IMPORTANTE: NÃO recarregar o source automaticamente!
-        // O buffer do HLS.js já tem segmentos suficientes para continuar
-        // Só recarrega se forceReload=true (chamado quando dá erro 403)
         if (forceReload && hlsRef.current && videoRef.current) {
           const currentPos = videoRef.current.currentTime;
           const wasPlaying = !videoRef.current.paused;
-          
-          console.log("[WatchClient] Recarregando source com novo token (posição:", currentPos, ")");
-          
-          // Salvar posição para restaurar
           savedPositionRef.current = currentPos;
-          
-          // Recarregar source com nova URL
           hlsRef.current.loadSource(newData.streamUrl);
-          
-          // Atualizar estado
           setData(prev => prev ? { ...prev, playbackUrl: newData.streamUrl } : prev);
-          
-          // Restaurar playback após manifest ser carregado
           if (wasPlaying) {
             let restored = false;
-            const onManifestParsed = () => {
-              if (restored) return;
+            hlsRef.current.on(Hls.Events.MANIFEST_PARSED, () => {
+              if (restored || !videoRef.current) return;
               restored = true;
-              if (videoRef.current) {
-                videoRef.current.currentTime = savedPositionRef.current;
-                videoRef.current.play().catch(() => {});
-                savedPositionRef.current = 0;
-              }
-            };
-            hlsRef.current.on(Hls.Events.MANIFEST_PARSED, onManifestParsed);
+              videoRef.current.currentTime = savedPositionRef.current;
+              videoRef.current.play().catch(() => { });
+              savedPositionRef.current = 0;
+            });
           }
-        } else {
-          // Renovação silenciosa: apenas log, sem interromper playback
-          console.log("[WatchClient] Token renovado silenciosamente (sem reload)");
         }
       }
     } catch (err) {
-      console.error("[WatchClient] Erro ao renovar token:", err);
-    } finally {
-      isRenewingTokenRef.current = false;
-    }
+      console.error(err);
+    } finally { isRenewingTokenRef.current = false; }
   }, [episodeId, titleId]);
 
-  // Renovação automática de token para streaming protegido
-  // Token agora dura 3 HORAS no Worker, então renovamos a cada 2.5 horas (bem antes de expirar)
-  // Na prática, a maioria dos filmes/episódios termina antes disso
   useEffect(() => {
     if (!isProtectedStream || !data) return;
-
-    // Limpar interval anterior
-    if (tokenRenewalTimeoutRef.current) {
-      clearInterval(tokenRenewalTimeoutRef.current);
-    }
-
-    // Token dura 3 horas no Worker, renovar a cada 2.5 horas (150 minutos)
-    // Isso dá 30 minutos de margem antes de expirar
-    const RENEWAL_INTERVAL = 150 * 60 * 1000; // 2.5 horas = 150 minutos
-    
-    console.log("[WatchClient] Token válido por 3 horas. Renovação agendada para 2.5 horas (se necessário)");
-
-    // Agendar renovação periódica (silenciosa, sem reload)
-    // Na prática, raramente vai executar pois filmes duram menos que 2.5h
-    tokenRenewalTimeoutRef.current = setInterval(() => {
-      console.log("[WatchClient] Renovação periódica do token (2.5h)...");
-      renewTokenAndUpdatePlayer(false); // false = não forçar reload
-    }, RENEWAL_INTERVAL);
-
-    return () => {
-      if (tokenRenewalTimeoutRef.current) {
-        clearInterval(tokenRenewalTimeoutRef.current);
-      }
-    };
+    if (tokenRenewalTimeoutRef.current) clearInterval(tokenRenewalTimeoutRef.current);
+    tokenRenewalTimeoutRef.current = setInterval(() => { renewTokenAndUpdatePlayer(false); }, 150 * 60 * 1000); // 2.5h
+    return () => { if (tokenRenewalTimeoutRef.current) clearInterval(tokenRenewalTimeoutRef.current); };
   }, [isProtectedStream, data, renewTokenAndUpdatePlayer]);
 
-  // Buscar próximo episódio se for série/anime
   useEffect(() => {
     async function fetchNextEpisode() {
       if (!episodeId || !data) return;
-      
       try {
         const res = await fetch(`/api/titles/${titleId}/seasons`);
         if (!res.ok) return;
-        
-        interface EpisodeInfo {
-          id: string;
-          name: string;
-          episodeNumber: number;
+        const seasons = await res.json();
+        let curSeason: any = null, curEp: any = null;
+        for (const s of seasons) {
+          const ep = s.episodes?.find((e: any) => e.id === episodeId);
+          if (ep) { curSeason = s; curEp = ep; break; }
         }
-        interface SeasonInfo {
-          seasonNumber: number;
-          episodes?: EpisodeInfo[];
-        }
-        const seasons: SeasonInfo[] = await res.json();
-        
-        // Encontrar episódio atual
-        let currentSeason: SeasonInfo | null = null;
-        let currentEp: EpisodeInfo | null = null;
-        
-        for (const season of seasons) {
-          const ep = season.episodes?.find((e) => e.id === episodeId);
-          if (ep) {
-            currentSeason = season;
-            currentEp = ep;
-            break;
-          }
-        }
-        
-        if (!currentEp || !currentSeason) return;
-        
-        // Buscar próximo episódio na mesma temporada
-        const nextEpInSeason = currentSeason.episodes?.find(
-          (e) => e.episodeNumber === currentEp!.episodeNumber + 1
-        );
-        
-        if (nextEpInSeason) {
-          setNextEpisode({
-            id: nextEpInSeason.id,
-            name: nextEpInSeason.name,
-            episodeNumber: nextEpInSeason.episodeNumber,
-            seasonNumber: currentSeason.seasonNumber,
-          });
+        if (!curEp || !curSeason) return;
+        const nextInSeason = curSeason.episodes?.find((e: any) => e.episodeNumber === curEp!.episodeNumber + 1);
+        if (nextInSeason) {
+          setNextEpisode({ id: nextInSeason.id, name: nextInSeason.name, episodeNumber: nextInSeason.episodeNumber, seasonNumber: curSeason.seasonNumber });
           return;
         }
-        
-        // Se não houver, buscar primeiro episódio da próxima temporada
-        const nextSeason = seasons.find(
-          (s) => s.seasonNumber === currentSeason!.seasonNumber + 1
-        );
-        
-        if (nextSeason && nextSeason.episodes?.length && nextSeason.episodes.length > 0) {
-          const firstEp = nextSeason.episodes[0];
-          setNextEpisode({
-            id: firstEp.id,
-            name: firstEp.name,
-            episodeNumber: firstEp.episodeNumber,
-            seasonNumber: nextSeason.seasonNumber,
-          });
+        const nextSeason = seasons.find((s: any) => s.seasonNumber === curSeason!.seasonNumber + 1);
+        if (nextSeason?.episodes?.length) {
+          const first = nextSeason.episodes[0];
+          setNextEpisode({ id: first.id, name: first.name, episodeNumber: first.episodeNumber, seasonNumber: nextSeason.seasonNumber });
         }
-      } catch (err) {
-        console.error('Erro ao buscar próximo episódio:', err);
-      }
+      } catch { }
     }
-    
     fetchNextEpisode();
   }, [titleId, episodeId, data]);
 
-  // Countdown e autoplay para próximo episódio
   useEffect(() => {
     if (!showNextEpisodeCountdown || !nextEpisode) return;
-    
-    if (countdown === 0) {
-      // Ir para próximo episódio
-      router.push(`/watch/${titleId}?episodeId=${nextEpisode.id}`);
-      return;
-    }
-    
-    const timer = setTimeout(() => {
-      setCountdown(prev => prev - 1);
-    }, 1000);
-    
+    if (countdown === 0) { router.push(`/watch/${titleId}?episodeId=${nextEpisode.id}`); return; }
+    const timer = setTimeout(() => { setCountdown(prev => prev - 1); }, 1000);
     return () => clearTimeout(timer);
   }, [showNextEpisodeCountdown, countdown, nextEpisode, titleId, router]);
 
   useEffect(() => {
-    function handleFullscreenChange() {
-      setIsFullscreen(Boolean(document.fullscreenElement));
-    }
-
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => {
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
-    };
+    const vc = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", vc);
+    return () => document.removeEventListener("fullscreenchange", vc);
   }, []);
 
   const showControlsTemporarily = useCallback(() => {
-    setIsHovering((prev) => {
-      if (prev) return prev; // Já está true, não precisa atualizar
-      return true;
-    });
-    
-    if (hideControlsTimeoutRef.current) {
-      clearTimeout(hideControlsTimeoutRef.current);
-    }
-    
+    setIsHovering(true);
+    if (hideControlsTimeoutRef.current) clearTimeout(hideControlsTimeoutRef.current);
     if (isPlaying) {
       hideControlsTimeoutRef.current = setTimeout(() => {
         setIsHovering(false);
-      }, 3000);
+        setShowQualityMenu(false);
+        setShowSubtitleMenu(false);
+      }, 3500);
     }
   }, [isPlaying]);
 
   const handleTrackLoad = (event: SyntheticEvent<HTMLTrackElement>) => {
     const video = videoRef.current;
     if (!video) return;
-
     const tracks = Array.from(video.textTracks || []);
-     
-    console.log("[WatchClient] track load", {
-      loadedLabel: event.currentTarget.label,
-      loadedSrc: event.currentTarget.src,
-      tracks: tracks.map((t) => ({
-        label: t.label,
-        language: t.language,
-        kind: t.kind,
-        mode: t.mode,
-        cues: t.cues?.length ?? 0,
-      })),
-    });
-
     let defaultIndex: number | null = null;
-    if (tracks.length === 1) {
-      defaultIndex = 0;
-    } else {
-      const ptIndex = tracks.findIndex((t) => {
-        const lang = (t.language || "").toLowerCase();
-        const label = (t.label || "").toLowerCase();
-        return lang.startsWith("pt") || label.includes("pt");
-      });
-      if (ptIndex >= 0) {
-        defaultIndex = ptIndex;
-      }
+    if (tracks.length === 1) defaultIndex = 0;
+    else {
+      const ptIndex = tracks.findIndex(t => (t.language || "").toLowerCase().startsWith("pt") || (t.label || "").toLowerCase().includes("pt"));
+      if (ptIndex >= 0) defaultIndex = ptIndex;
     }
-
-    tracks.forEach((track, index) => {
-       
-      track.mode = defaultIndex !== null && index === defaultIndex ? "showing" : "hidden";
-    });
-
+    tracks.forEach((t, i) => { t.mode = defaultIndex !== null && i === defaultIndex ? "showing" : "hidden"; });
     setSubtitleTracks(tracks);
     setCurrentSubtitleIndex(defaultIndex);
   };
 
-  const handleMouseMove = () => {
-    showControlsTemporarily();
-  };
-
-  const handleMouseLeave = () => {
-    if (hideControlsTimeoutRef.current) {
-      clearTimeout(hideControlsTimeoutRef.current);
-    }
-    setIsHovering(false);
-  };
-
   useEffect(() => {
     if (!data?.playbackUrl || !videoRef.current) return;
-
     const video = videoRef.current;
-    const src = data.playbackUrl;
-    const kind = data.kind ?? "hls";
+    const { playbackUrl: src, kind = "hls" } = data;
+    if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+    const restorePosition = () => { if (savedPositionRef.current > 0) { video.currentTime = savedPositionRef.current; savedPositionRef.current = 0; } };
 
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
-
-    // Restaurar posição salva se houver (após renovação de token)
-    const restorePosition = () => {
-      if (savedPositionRef.current > 0) {
-        console.log("[WatchClient] Restaurando posição:", savedPositionRef.current);
-        video.currentTime = savedPositionRef.current;
-        savedPositionRef.current = 0;
-      }
-    };
-
-    console.log("[WatchClient] Tipo de stream:", kind, "| HLS.js suportado:", Hls.isSupported());
-    
     if (kind === "mp4") {
       video.src = src;
       video.addEventListener("loadedmetadata", restorePosition, { once: true });
-       
-      video.play().catch(() => {});
+      video.play().catch(() => { });
     } else if (Hls.isSupported()) {
-      // PRIORIZAR HLS.js para ter controle do buffer
-      console.log("%c[HLS] INICIANDO PLAYER HLS", "color: yellow; font-size: 20px; font-weight: bold");
-      
-      // Função para atualizar informações do buffer
-      const updateBufferInfo = () => {
-        const dur = video.duration;
-        if (!dur || !Number.isFinite(dur) || dur === 0) return;
-        
-        const buffered = video.buffered;
-        if (buffered.length > 0) {
-          const bufferedEnd = buffered.end(buffered.length - 1);
-          const pct = (bufferedEnd / dur) * 100;
-          const ahead = bufferedEnd - video.currentTime;
-          
-          // Log para debug
-          console.log(`[BUFFER] ${pct.toFixed(1)}% | ${ahead.toFixed(0)}s ahead`);
-          
-          setBufferedPercent(Math.min(100, pct));
-          setBufferHealth(ahead < 10 ? "low" : ahead < 30 ? "medium" : "high");
-        }
-      };
-      
-      // Monitorar buffer via eventos do vídeo
-      console.log("[WatchClient] Adicionando listeners de buffer");
-      video.addEventListener("progress", updateBufferInfo);
-      video.addEventListener("timeupdate", updateBufferInfo);
-      
-      // Limpar interval anterior
-      if (bufferIntervalRef.current) {
-        clearInterval(bufferIntervalRef.current);
-      }
-      
-      // Atualizar buffer a cada 500ms
+      const h = new Hls({ maxBufferLength: 60, maxMaxBufferLength: 120, backBufferLength: 30, abrEwmaDefaultEstimate: 5000000, startLevel: -1 });
+      hlsRef.current = h;
+      h.on(Hls.Events.MANIFEST_PARSED, (_e, d: any) => {
+        setQualityLevels(d.levels.map((l: any, i: number) => ({ index: i, height: l.height, bitrate: l.bitrate })));
+        setCurrentLevelIndex(h.currentLevel);
+        setAutoQuality(h.autoLevelEnabled);
+        restorePosition();
+      });
+      h.on(Hls.Events.LEVEL_SWITCHED, (_e, d: any) => setCurrentLevelIndex(d.level));
+      h.on(Hls.Events.ERROR, (_e, d: any) => {
+        if (d.response?.code === 403) renewTokenAndUpdatePlayer(true);
+        else if (d.fatal) { if (d.type === Hls.ErrorTypes.NETWORK_ERROR) h.startLoad(); else if (d.type === Hls.ErrorTypes.MEDIA_ERROR) h.recoverMediaError(); }
+      });
+      h.loadSource(src);
+      h.attachMedia(video);
+      if (bufferIntervalRef.current) clearInterval(bufferIntervalRef.current);
       bufferIntervalRef.current = setInterval(() => {
-        const dur = video.duration;
-        if (!dur || !Number.isFinite(dur) || dur === 0) return;
-        
-        const buffered = video.buffered;
-        if (buffered.length > 0) {
-          const bufferedEnd = buffered.end(buffered.length - 1);
-          const pct = (bufferedEnd / dur) * 100;
-          const ahead = bufferedEnd - video.currentTime;
-          
-          console.log(`%c[BUFFER] ${ahead.toFixed(0)}s à frente | ${pct.toFixed(1)}% total`, 'color: lime; font-weight: bold');
-          
-          setBufferedPercent(Math.min(100, pct));
+        if (!video.duration) return;
+        const b = video.buffered;
+        if (b.length > 0) {
+          const ahead = b.end(b.length - 1) - video.currentTime;
+          setBufferedPercent((b.end(b.length - 1) / video.duration) * 100);
           setBufferHealth(ahead < 10 ? "low" : ahead < 30 ? "medium" : "high");
         }
       }, 1000);
-
-      // Detectar dispositivo e velocidade para configurar buffer adaptativo
-      const deviceType = getDeviceType();
-      
-      const initHls = async () => {
-        const speedMbps = await measureNetworkSpeed();
-        const bufferConfig = getBufferConfig(deviceType, speedMbps);
-        
-        console.log("[WatchClient] Buffer adaptativo:", {
-          dispositivo: deviceType,
-          velocidade: `${speedMbps} Mbps`,
-          config: bufferConfig,
-        });
-
-        const hls = new Hls({
-          // === BUFFER CONFIG ===
-          // Buffer moderado para evitar problemas de memória
-          maxBufferLength: 60,           // 1 minuto de buffer à frente
-          maxMaxBufferLength: 120,       // Máximo 2 minutos
-          backBufferLength: 30,          // Manter 30s atrás
-          maxBufferSize: 60 * 1000 * 1000, // 60MB de buffer
-          maxBufferHole: 0.5,
-          
-          // === ABR (Adaptive Bitrate) - ESTABILIDADE ===
-          // Configurações conservadoras para evitar trocas frequentes de qualidade
-          abrEwmaDefaultEstimate: 3000000,  // Assumir 3Mbps inicial (conservador)
-          abrBandWidthFactor: 0.7,          // Usar 70% da banda medida (margem de segurança)
-          abrBandWidthUpFactor: 0.5,        // Só sobe de qualidade se tiver 50% de margem
-          abrMaxWithRealBitrate: true,      // Considerar bitrate real do segmento
-          
-          // Evitar trocas de qualidade quando buffer está baixo
-          // Só permite trocar se tiver pelo menos 10s de buffer
-          startLevel: -1,                   // Auto-detectar nível inicial
-          
-          // === RETRY CONFIG ===
-          fragLoadingMaxRetry: 6,
-          fragLoadingRetryDelay: 500,
-          fragLoadingMaxRetryTimeout: 8000,
-          levelLoadingMaxRetry: 4,
-          manifestLoadingMaxRetry: 4,
-          
-          // === OUTRAS CONFIGS ===
-          startPosition: -1,
-          lowLatencyMode: false,            // Priorizar estabilidade sobre latência
-          progressive: true,
-          
-          // Capstone: não abortar carregamento de fragmento ao trocar de nível
-          // Isso evita o "flash" da capa quando troca de qualidade
-          nextLoadLevel: -1,
-        });
-        hlsRef.current = hls;
-        
-        console.log("[HLS] Iniciado com ABR conservador (estabilidade > qualidade)");
-
-        // Log de trocas de qualidade para debug
-        hls.on(Hls.Events.LEVEL_SWITCHING, (_event, data) => {
-          const levelData = data as HlsLevelData;
-          console.log(`%c[HLS] Trocando para nível ${levelData.level}`, 'color: orange; font-weight: bold');
-        });
-
-
-        // Log de buffering (menos verbose)
-        let lastBufferLog = 0;
-        hls.on(Hls.Events.FRAG_BUFFERED, () => {
-          const now = Date.now();
-          if (now - lastBufferLog < 5000) return; // Log a cada 5s no máximo
-          lastBufferLog = now;
-          
-          const buffered = videoRef.current?.buffered;
-          if (buffered && buffered.length > 0) {
-            const ahead = buffered.end(buffered.length - 1) - (videoRef.current?.currentTime || 0);
-            console.log(`[HLS] Buffer: ${ahead.toFixed(0)}s à frente`);
-          }
-        });
-
-        hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
-          const parsedData = data as HlsManifestData;
-          const levelsArray = Array.isArray(parsedData?.levels) ? parsedData.levels : [];
-          const mapped: QualityLevelInfo[] = levelsArray.map((level: { height?: number; bitrate?: number }, index: number) => ({
-            index,
-            height: typeof level?.height === "number" ? level.height : undefined,
-            bitrate: typeof level?.bitrate === "number" ? level.bitrate : undefined,
-          }));
-          setQualityLevels(mapped);
-          if (hls.currentLevel >= 0) {
-            setCurrentLevelIndex(hls.currentLevel);
-          } else {
-            setCurrentLevelIndex(null);
-          }
-          setAutoQuality(Boolean(hls.autoLevelEnabled));
-          
-          // Restaurar posição após manifest parsed
-          restorePosition();
-        });
-
-        hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
-          const switchedData = data as HlsLevelData;
-          if (typeof switchedData?.level === "number") {
-            console.log(`%c[HLS] Qualidade alterada para nível ${switchedData.level}`, 'color: green; font-weight: bold');
-            setCurrentLevelIndex(switchedData.level);
-          }
-        });
-
-        // Handler de erro para detectar 403 (token expirado) e renovar
-        hls.on(Hls.Events.ERROR, (_event, data) => {
-          const errorData = data as HlsErrorData;
-          console.log("[WatchClient] HLS Error:", errorData.type, errorData.details, errorData.response?.code);
-          
-          // Verificar se é erro 403 (token expirado)
-          if (errorData.response?.code === 403 || 
-              (errorData.type === Hls.ErrorTypes.NETWORK_ERROR && 
-               errorData.details === Hls.ErrorDetails.FRAG_LOAD_ERROR &&
-               errorData.response?.code === 403)) {
-            console.log("[WatchClient] Token expirado detectado (403), renovando COM reload...");
-            
-            // Salvar posição atual antes de renovar
-            if (video.currentTime > 0) {
-              savedPositionRef.current = video.currentTime;
-            }
-            
-            // Renovar token E forçar reload (true) porque o token atual expirou
-            renewTokenAndUpdatePlayer(true);
-            return;
-          }
-          
-          // Para outros erros fatais, mostrar erro
-          if (errorData.fatal) {
-            switch (errorData.type) {
-              case Hls.ErrorTypes.NETWORK_ERROR:
-                console.error("[WatchClient] Erro de rede fatal, tentando recuperar...");
-                hls.startLoad();
-                break;
-              case Hls.ErrorTypes.MEDIA_ERROR:
-                console.error("[WatchClient] Erro de mídia fatal, tentando recuperar...");
-                hls.recoverMediaError();
-                break;
-              default:
-                console.error("[WatchClient] Erro fatal não recuperável:", errorData);
-                setError("Erro ao reproduzir o vídeo. Tente recarregar a página.");
-                break;
-            }
-          }
-        });
-
-        hls.loadSource(src);
-        hls.attachMedia(video);
-      };
-
-      // Inicializar HLS de forma assíncrona
-      initHls();
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      // Fallback para HLS nativo (Safari/iOS)
-      console.log("[WatchClient] Usando HLS nativo");
-      video.src = src;
-      video.addEventListener("loadedmetadata", restorePosition, { once: true });
-      video.play().catch(() => {});
-    } else {
-      setError("Seu navegador não suporta HLS.");
+      video.src = src; video.addEventListener("loadedmetadata", restorePosition, { once: true }); video.play().catch(() => { });
     }
-
-    return () => {
-      // Limpar interval de buffer
-      if (bufferIntervalRef.current) {
-        clearInterval(bufferIntervalRef.current);
-        bufferIntervalRef.current = null;
-      }
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-      // Limpar estados de buffer
-      setBufferedPercent(0);
-      setBufferHealth("medium");
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.playbackUrl]);
+    return () => { if (bufferIntervalRef.current) clearInterval(bufferIntervalRef.current); if (hlsRef.current) hlsRef.current.destroy(); };
+  }, [data?.playbackUrl, renewTokenAndUpdatePlayer]);
 
   useEffect(() => {
-    return () => {
-      if (hideControlsTimeoutRef.current) {
-        clearTimeout(hideControlsTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      const video = videoRef.current;
-      if (!video) return;
-
-      const target = event.target as HTMLElement | null;
-      if (target) {
-        const tag = target.tagName;
-        const editable = target.getAttribute("contenteditable");
-        if (
-          tag === "INPUT" ||
-          tag === "TEXTAREA" ||
-          editable === "" ||
-          editable === "true"
-        ) {
-          return;
-        }
-      }
-
-      const key = event.key;
-
-      if (key === " " || key === "k" || key === "K") {
-        event.preventDefault();
-        if (video.paused || video.ended) {
-           
-          video.play().catch(() => {});
-        } else {
-          video.pause();
-        }
-        return;
-      }
-
-      if (key === "ArrowLeft" || key === "j" || key === "J") {
-        event.preventDefault();
-        if (duration) {
-          const t = Math.max(0, (video.currentTime || 0) - 10);
-          video.currentTime = t;
-          setCurrentTime(t);
-        }
-        return;
-      }
-
-      if (key === "ArrowRight" || key === "l" || key === "L") {
-        event.preventDefault();
-        if (duration) {
-          const t = Math.min(duration, (video.currentTime || 0) + 10);
-          video.currentTime = t;
-          setCurrentTime(t);
-        }
-        return;
-      }
-
-      if (key === "ArrowUp") {
-        event.preventDefault();
-        const next = Math.min(1, volume + 0.05);
-        video.volume = next;
-        video.muted = next === 0;
-        setVolume(next);
-        setIsMuted(next === 0);
-        return;
-      }
-
-      if (key === "ArrowDown") {
-        event.preventDefault();
-        const next = Math.max(0, volume - 0.05);
-        video.volume = next;
-        video.muted = next === 0;
-        setVolume(next);
-        setIsMuted(next === 0);
-        return;
-      }
-
-      if (key === "m" || key === "M") {
-        event.preventDefault();
-        const newMuted = !isMuted;
-        video.muted = newMuted;
-        if (!newMuted && video.volume === 0) {
-          const restored = volume || 0.5;
-          video.volume = restored;
-          setVolume(restored);
-        }
-        setIsMuted(newMuted);
-        return;
-      }
-
-      if (key === "f" || key === "F") {
-        event.preventDefault();
-        const container = playerRef.current;
-        if (!container) return;
-        if (!document.fullscreenElement) {
-          container.requestFullscreen?.();
-        } else {
-          document.exitFullscreen?.();
-        }
-        return;
-      }
-
-      if (key >= "0" && key <= "9") {
-        if (!duration) return;
-        event.preventDefault();
-        const digit = Number(key);
-        const targetPercent = digit * 10;
-        const newTime = (targetPercent / 100) * duration;
-        video.currentTime = newTime;
-        setCurrentTime(newTime);
-        return;
-      }
-
-      if (key === "?" || key === "h" || key === "H") {
-        event.preventDefault();
-        setShowShortcuts((prev) => !prev);
-      }
+    function handleKeyDown(e: KeyboardEvent) {
+      const v = videoRef.current; if (!v || ["INPUT", "TEXTAREA"].includes((e.target as any).tagName)) return;
+      const k = e.key.toLowerCase();
+      if (k === " " || k === "k") { e.preventDefault(); v.paused ? v.play().catch(() => { }) : v.pause(); }
+      else if (k === "arrowleft" || k === "j") { e.preventDefault(); v.currentTime = Math.max(0, v.currentTime - 10); }
+      else if (k === "arrowright" || k === "l") { e.preventDefault(); v.currentTime = Math.min(v.duration, v.currentTime + 10); }
+      else if (k === "arrowup") { e.preventDefault(); const n = Math.min(1, volume + 0.1); v.volume = n; setVolume(n); setIsMuted(n === 0); }
+      else if (k === "arrowdown") { e.preventDefault(); const n = Math.max(0, volume - 0.1); v.volume = n; setVolume(n); setIsMuted(n === 0); }
+      else if (k === "m") { e.preventDefault(); v.muted = !isMuted; setIsMuted(!isMuted); }
+      else if (k === "f") { e.preventDefault(); document.fullscreenElement ? document.exitFullscreen?.() : playerRef.current?.requestFullscreen?.(); }
+      else if (k === "?" || k === "h") { e.preventDefault(); setShowShortcuts(p => !p); }
+      else if (k >= "0" && k <= "9") { e.preventDefault(); v.currentTime = (Number(e.key) * 10 / 100) * v.duration; }
+      showControlsTemporarily();
     }
-
     window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [duration, volume, isMuted]);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [volume, isMuted, showControlsTemporarily]);
 
-  const handleTogglePlay = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (video.paused || video.ended) {
-       
-      video.play().catch(() => {});
-    } else {
-      video.pause();
-    }
-  };
-
-  const handleVolumeChange = (value: number) => {
-    const video = videoRef.current;
-    const vol = Math.min(1, Math.max(0, value));
-
-    if (video) {
-      video.volume = vol;
-      video.muted = vol === 0;
-    }
-
-    setVolume(vol);
-    setIsMuted(vol === 0);
-  };
-
-  const handleToggleMute = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const mute = !isMuted;
-    video.muted = mute;
-
-    if (!mute && video.volume === 0) {
-      video.volume = volume || 0.5;
-      setVolume(video.volume);
-    }
-
-    setIsMuted(mute);
-  };
-
-  const handleSeekBarClick = (event: MouseEvent<HTMLDivElement>) => {
-    if (!duration || !videoRef.current) return;
-
-    const rect = event.currentTarget.getBoundingClientRect();
-    const percent = ((event.clientX - rect.left) / rect.width) * 100;
-    const clamped = Math.min(100, Math.max(0, percent));
-    const newTime = (clamped / 100) * duration;
-
-    videoRef.current.currentTime = newTime;
-    setCurrentTime(newTime);
-  };
-
-  const handleFullscreenToggle = () => {
-    const container = playerRef.current;
-    if (!container) return;
-
-    if (!document.fullscreenElement) {
-      container.requestFullscreen?.();
-    } else {
-      document.exitFullscreen?.();
-    }
-  };
-
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-black text-zinc-200">
-        Carregando player...
+  if (loading) return (
+    <div className="flex min-h-screen flex-col items-center justify-center bg-black gap-6">
+      <div className="relative">
+        <div className="w-24 h-24 border-4 border-primary/20 rounded-full animate-spin border-t-primary" />
+        <Zap className="absolute inset-0 m-auto text-primary animate-pulse" size={32} />
       </div>
-    );
-  }
+      <p className="text-zinc-500 font-black uppercase tracking-[0.4em] text-[10px] animate-pulse">Iniciando Cinema Experience v4</p>
+    </div>
+  );
 
-  if (error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-black px-4 text-center text-sm text-red-300">
-        {error}
+  if (error) return (
+    <div className="flex min-h-screen items-center justify-center bg-black p-6">
+      <div className="glass-card bg-zinc-900/60 p-12 rounded-[40px] border border-white/10 text-center space-y-6 max-w-md">
+        <AlertCircle className="mx-auto text-primary" size={64} />
+        <h2 className="text-2xl font-black tracking-tight">Ops! Algo deu errado</h2>
+        <p className="text-zinc-500 font-medium">{error}</p>
+        <button onClick={() => window.location.reload()} className="w-full py-4 bg-white text-black font-black uppercase tracking-widest text-xs rounded-2xl hover:bg-zinc-200 transition-all">Tentar Novamente</button>
       </div>
-    );
-  }
+    </div>
+  );
 
-  // Tela de bloqueio por falta de assinatura
-  if (subscriptionBlocked) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-black to-gray-900 px-4">
-        <div className="max-w-md w-full text-center">
-          <div className="mb-8">
-            <div className="w-24 h-24 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg className="w-12 h-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m0 0v2m0-2h2m-2 0H10m5-6a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
-              </svg>
-            </div>
-            <h1 className="text-2xl font-bold text-white mb-3">Assinatura Necessária</h1>
-            <p className="text-gray-400 mb-6">
-              Para assistir este conteúdo, você precisa ter uma assinatura ativa do FlixCRD.
-            </p>
-          </div>
-
-          <div className="bg-gray-800/50 backdrop-blur rounded-xl p-6 mb-6 border border-gray-700">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-white font-medium">Plano Básico</span>
-              <span className="text-2xl font-bold text-white">R$ 10<span className="text-sm text-gray-400">/mês</span></span>
-            </div>
-            <ul className="text-left text-sm text-gray-300 space-y-2 mb-4">
-              <li className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Acesso a todos os filmes e séries
-              </li>
-              <li className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Qualidade HD
-              </li>
-              <li className="flex items-center gap-2">
-                <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Sem anúncios
-              </li>
-            </ul>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <button
-              onClick={() => router.push('/subscribe')}
-              className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
-            >
-              Assinar Agora
-            </button>
-            <button
-              onClick={() => router.back()}
-              className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors"
-            >
-              Voltar
-            </button>
-          </div>
+  if (subscriptionBlocked) return (
+    <div className="flex min-h-screen items-center justify-center bg-black relative p-6">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-primary/10 via-black to-black opacity-50" />
+      <div className="relative glass-card bg-zinc-900/40 p-10 md:p-16 rounded-[48px] border border-white/5 text-center max-w-2xl space-y-10 shadow-2xl">
+        <Lock className="mx-auto text-primary" size={80} strokeWidth={1} />
+        <div className="space-y-4">
+          <h1 className="text-4xl md:text-5xl font-black tracking-tight">Área Restrita</h1>
+          <p className="text-zinc-500 text-lg font-medium leading-relaxed">Para acessar nosso catálogo premium, você precisa de uma assinatura ativa.</p>
+        </div>
+        <div className="flex flex-col md:flex-row gap-4">
+          <button onClick={() => router.push('/subscribe')} className="flex-1 py-5 bg-primary text-white font-black uppercase tracking-widest text-xs rounded-[24px] shadow-xl shadow-primary/20 hover:scale-105 transition-all">Assinar Agora</button>
+          <button onClick={() => router.back()} className="flex-1 py-5 bg-white/5 border border-white/10 text-white font-black uppercase tracking-widest text-xs rounded-[24px] hover:bg-white/10 transition-all">Voltar</button>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 
-  if (!data) {
-    return null;
-  }
-
+  if (!data) return null;
   const { title } = data;
-  const year = title.releaseDate ? title.releaseDate.slice(0, 4) : null;
+  const yearStr = title.releaseDate?.slice(0, 4);
   const displayName = title.episodeName || title.name;
-  const episodeLabel =
-    typeof title.seasonNumber === "number" && typeof title.episodeNumber === "number"
-      ? `S${String(title.seasonNumber).padStart(2, "0")}E${String(
-          title.episodeNumber,
-        ).padStart(2, "0")}`
-      : null;
+  const episodeLabel = (typeof title.seasonNumber === "number" && typeof title.episodeNumber === "number")
+    ? `S${String(title.seasonNumber).padStart(2, "0")}E${String(title.episodeNumber).padStart(2, "0")}` : null;
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="fixed inset-0 bg-black text-zinc-50">
-      <div
-        ref={playerRef}
-        className="group relative flex h-full w-full items-center justify-center bg-black"
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-      >
-        {title.backdropUrl && (
-          <div className="pointer-events-none absolute inset-0">
-            <img
-              src={title.backdropUrl}
-              alt={title.name}
-              className="h-full w-full object-cover opacity-25"
-            />
-          </div>
-        )}
+    <div className="fixed inset-0 bg-black text-white select-none overflow-hidden font-sans">
+      <div ref={playerRef} className="group relative w-full h-full flex items-center justify-center cursor-none group-hover:cursor-auto"
+        onMouseMove={() => { showControlsTemporarily(); playerRef.current!.style.cursor = 'default'; }}
+        onMouseLeave={() => { setIsHovering(false); playerRef.current!.style.cursor = 'none'; }}>
 
-        <video
-          ref={videoRef}
-          className="relative z-0 h-full w-full bg-black object-contain"
-          poster={title.posterUrl ?? undefined}
-          muted={isMuted}
-          crossOrigin="anonymous"
-          onLoadedMetadata={(event) => {
-            const videoEl = event.currentTarget;
-            const loadedDuration = videoEl.duration || 0;
-            setDuration(loadedDuration);
-            setVolume(videoEl.volume ?? 1);
+        {/* Ambient Mood Layer */}
+        {title.backdropUrl && <div className="absolute inset-0 pointer-events-none transition-opacity duration-1000"><img src={title.backdropUrl} className="w-full h-full object-cover opacity-10 blur-2xl scale-125" /></div>}
 
-            const tracks = Array.from(event.currentTarget.textTracks || []);
-            // Debug rápido para garantir que as tracks estão sendo detectadas
-             
-            console.log("[WatchClient] textTracks", tracks.map((t) => ({
-              label: t.label,
-              language: t.language,
-              kind: t.kind,
-              mode: t.mode,
-              cues: t.cues?.length ?? 0,
-            })));
-
-            let defaultIndex: number | null = null;
-            if (tracks.length === 1) {
-              defaultIndex = 0;
-            } else if (tracks.length > 1) {
-              const ptIndex = tracks.findIndex((t) => {
-                const lang = (t.language || "").toLowerCase();
-                const label = (t.label || "").toLowerCase();
-                return lang.startsWith("pt") || label.includes("pt");
-              });
-              if (ptIndex >= 0) {
-                defaultIndex = ptIndex;
-              }
-            }
-
-            tracks.forEach((track, index) => {
-              // Mantém legendas ocultas por padrão, mas se houver apenas uma faixa, já a exibe.
-               
-              track.mode = defaultIndex !== null && index === defaultIndex ? "showing" : "hidden";
-            });
-            setSubtitleTracks(tracks);
-            setCurrentSubtitleIndex(defaultIndex);
-
-            // Buscar progresso salvo para Continuar assistindo
-            // Primeiro verifica localStorage (mais recente), depois servidor
-            // IMPORTANTE: Só fazer isso UMA VEZ para evitar loops
+        <video ref={videoRef} className="z-0 w-full h-full bg-black object-contain" poster={title.posterUrl || undefined} muted={isMuted} crossOrigin="anonymous"
+          onLoadedMetadata={(e) => {
+            setDuration(e.currentTarget.duration); setVolume(e.currentTarget.volume); handleTrackLoad(e as any);
             if (profileId && !hasRestoredProgressRef.current) {
-              hasRestoredProgressRef.current = true; // Marcar como já restaurado
-               
+              hasRestoredProgressRef.current = true;
               (async () => {
                 try {
-                  let resume = 0;
-                  let total = loadedDuration;
-
-                  // 1. Verificar localStorage primeiro (progresso local mais recente)
-                  const progressKey = `progress_${episodeId || titleId}_${profileId}`;
-                  const localProgress = localStorage.getItem(progressKey);
-                  if (localProgress) {
-                    try {
-                      const parsed = JSON.parse(localProgress);
-                      // Usar local se for recente (menos de 1 hora)
-                      if (parsed.timestamp && Date.now() - parsed.timestamp < 3600000) {
-                        resume = Number(parsed.positionSeconds ?? 0);
-                        total = Number(parsed.durationSeconds ?? loadedDuration);
-                      }
-                    } catch {
-                      // JSON inválido, ignorar
-                    }
-                  }
-
-                  // 2. Se não tiver local recente, buscar do servidor
-                  if (resume === 0) {
-                    const baseUrl = episodeId
-                      ? `/api/titles/${titleId}/progress?episodeId=${encodeURIComponent(episodeId)}`
-                      : `/api/titles/${titleId}/progress`;
-
-                    const sep = baseUrl.includes("?") ? "&" : "?";
-                    const progressUrl = `${baseUrl}${sep}profileId=${encodeURIComponent(profileId)}`;
-
-                    const res = await fetch(progressUrl);
-                    if (res.ok) {
-                      const json = await res.json();
-                      resume = Number(json?.positionSeconds ?? 0);
-                      total = Number(json?.durationSeconds ?? loadedDuration ?? 0);
-                    }
-                  }
-
-                  const effectiveDuration = total || loadedDuration;
-                  if (
-                    Number.isFinite(resume) &&
-                    resume > 0 &&
-                    effectiveDuration &&
-                    resume < effectiveDuration - 5
-                  ) {
-                    videoEl.currentTime = resume;
-                    setCurrentTime(resume);
-                  }
-                } catch {
-                  // ignora erros de progresso
-                }
+                  const res = await fetch(`/api/titles/${titleId}/progress?${episodeId ? `episodeId=${episodeId}&` : ''}profileId=${profileId}`);
+                  if (res.ok) { const j = await res.json(); if (j.positionSeconds > 0) { e.currentTarget.currentTime = j.positionSeconds; setCurrentTime(j.positionSeconds); } }
+                } catch { }
               })();
             }
           }}
-          onTimeUpdate={(event) => {
-            const videoEl = event.currentTarget;
-            const newTime = videoEl.currentTime;
-            const total = videoEl.duration || duration;
-            setCurrentTime(newTime);
-
-            // Salvar progresso localmente com alta frequência (para precisão)
-            const progressKey = `progress_${episodeId || titleId}_${profileId}`;
-            localStorage.setItem(progressKey, JSON.stringify({
-              positionSeconds: newTime,
-              durationSeconds: total,
-              timestamp: Date.now(),
-            }));
-
-            // Sincronizar com servidor apenas a cada 30 segundos (economiza requests)
-            const now = Date.now();
-            if (
-              profileId &&
-              total &&
-              Number.isFinite(total) &&
-              now - lastProgressSyncRef.current > 60000
-            ) {
-              lastProgressSyncRef.current = now;
-
-              queueProgressSync(newTime, total);
-            }
-          }}
-          onSeeked={(event) => {
-            const videoEl = event.currentTarget;
-            const total = videoEl.duration || duration;
-            const pos = videoEl.currentTime;
-            if (!total || !Number.isFinite(total)) return;
-            if (!profileId) return;
-
-            queueProgressSync(pos, total);
-          }}
-          onPlay={() => setIsPlaying(true)}
-          onPause={(event) => {
-            setIsPlaying(false);
-            const videoEl = event.currentTarget;
-            const total = videoEl.duration || duration;
-            const pos = videoEl.currentTime;
-            if (!total || !Number.isFinite(total)) return;
-            if (!profileId) return;
-
-            queueProgressSync(pos, total);
-          }}
-          onWaiting={() => setIsBuffering(true)}
-          onPlaying={() => setIsBuffering(false)}
-          onEnded={(event) => {
-            setIsPlaying(false);
-            const videoEl = event.currentTarget;
-            const total = videoEl.duration || duration;
-            if (!total || !Number.isFinite(total)) return;
-            if (!profileId) return;
-
-            queueProgressSync(total, total);
-            
-            // Mostrar countdown para próximo episódio
-            if (nextEpisode) {
-              setShowNextEpisodeCountdown(true);
-              setCountdown(10);
-            }
-          }}
+          onTimeUpdate={(e) => { setCurrentTime(e.currentTarget.currentTime); queueProgressSync(e.currentTarget.currentTime, e.currentTarget.duration); }}
+          onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onWaiting={() => setIsBuffering(true)} onPlaying={() => setIsBuffering(false)}
+          onEnded={() => { setIsPlaying(false); queueProgressSync(duration, duration); if (nextEpisode) { setShowNextEpisodeCountdown(true); setCountdown(10); } }}
         >
-          {data.subtitles?.map((sub, index) => (
-            <track
-               
-              key={`${sub.url}-${index}`}
-              kind="subtitles"
-              src={sub.url}
-              srcLang={sub.language ?? undefined}
-              label={sub.label}
-              default={index === 0}
-              onLoad={handleTrackLoad}
-            />
-          ))}
+          {data.subtitles?.map((s, i) => <track key={i} kind="subtitles" src={s.url} srcLang={s.language || undefined} label={s.label} default={i === 0} onLoad={handleTrackLoad} />)}
         </video>
 
-        {/* Top bar: voltar + título */}
-        <div
-          className={`pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between px-4 py-3 text-xs md:px-6 md:text-sm transition-opacity ${
-            isHovering || !isPlaying ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="pointer-events-auto rounded-full bg-black/60 px-3 py-1 text-xs text-zinc-100 hover:bg-black/80"
-          >
-            ← Voltar
-          </button>
-          <div className="pointer-events-none flex-1 text-center text-[11px] font-medium md:text-xs">
-            <span className="opacity-80">
-              {year && `${year} · `}
-            </span>
-            <span>
-              {episodeLabel ? `${episodeLabel} · ${displayName}` : displayName}
-            </span>
-          </div>
-          <div className="w-16" />
-        </div>
-
-        {/* Buffering indicator */}
-        {isBuffering && (
-          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
-            <div className="h-10 w-10 animate-spin rounded-full border-2 border-zinc-500 border-t-transparent" />
-          </div>
-        )}
-
-        {/* Countdown Overlay para Próximo Episódio */}
-        {showNextEpisodeCountdown && nextEpisode && (
-          <div className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-            <div className="text-center">
-              <div className="mb-6">
-                <div className="text-6xl font-bold text-white mb-4">{countdown}</div>
-                <p className="text-xl text-zinc-300 mb-2">Próximo episódio em...</p>
-                <p className="text-lg text-zinc-400">
-                  S{nextEpisode.seasonNumber.toString().padStart(2, '0')}E{nextEpisode.episodeNumber.toString().padStart(2, '0')} - {nextEpisode.name}
-                </p>
+        {/* HUD: Top Bar */}
+        <AnimatePresence>
+          {(isHovering || !isPlaying) && !showNextEpisodeCountdown && (
+            <motion.div initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -40, opacity: 0 }}
+              className="absolute inset-x-0 top-0 z-50 p-6 md:p-10 flex items-center justify-between bg-gradient-to-b from-black/80 via-black/40 to-transparent">
+              <div className="flex items-center gap-6">
+                <button onClick={() => router.back()} className="w-12 h-12 rounded-2xl bg-white/10 hover:bg-primary hover:scale-110 transition-all flex items-center justify-center backdrop-blur-xl border border-white/5">
+                  <ChevronLeft size={24} />
+                </button>
+                <div className="space-y-0.5">
+                  <h1 className="text-xl md:text-2xl font-black tracking-tight drop-shadow-lg">{displayName}</h1>
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                    {yearStr && <span>{yearStr}</span>}
+                    {yearStr && <span>•</span>}
+                    {episodeLabel && <span className="text-primary">{episodeLabel}</span>}
+                    {episodeLabel && <span>•</span>}
+                    <span className="flex items-center gap-1"><Zap size={10} className="text-yellow-400" /> ULTRA HD</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex gap-4 justify-center">
-                <button
-                  onClick={() => router.push(`/watch/${titleId}?episodeId=${nextEpisode.id}`)}
-                  className="rounded-lg bg-emerald-600 px-6 py-3 text-sm font-semibold text-white hover:bg-emerald-700 flex items-center gap-2"
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M8 5v14l11-7z" />
+              <div className="flex items-center gap-3">
+                <div className="hidden md:flex flex-col items-end">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Perfil Ativo</span>
+                  <span className="text-xs font-bold text-white uppercase tracking-tighter">Master Access</span>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-xl">👤</div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* HUD: Buffering */}
+        <AnimatePresence>
+          {isBuffering && (
+            <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
+              className="absolute z-20 flex flex-col items-center gap-4">
+              <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-primary drop-shadow-lg">Buffering Experience</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* HUD: Central Play Action */}
+        <AnimatePresence>
+          {(isHovering || !isPlaying) && !showNextEpisodeCountdown && !isBuffering && (
+            <motion.button initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }}
+              onClick={() => setIsPlaying(!videoRef.current?.paused)}
+              className="absolute z-40 w-24 h-24 rounded-full bg-white/5 backdrop-blur-2xl border border-white/10 flex items-center justify-center hover:scale-110 active:scale-95 transition-all text-white shadow-2xl group/play">
+              <div className="w-20 h-20 rounded-full bg-primary flex items-center justify-center shadow-lg group-hover/play:shadow-primary/40">
+                {videoRef.current?.paused ? <Play size={40} fill="currentColor" className="ml-2" /> : <Pause size={40} fill="currentColor" />}
+              </div>
+            </motion.button>
+          )}
+        </AnimatePresence>
+
+        {/* HUD: Next Episode Countdown */}
+        <AnimatePresence>
+          {showNextEpisodeCountdown && nextEpisode && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 z-[60] bg-black/90 backdrop-blur-2xl flex items-center justify-center">
+              <div className="max-w-xl w-full text-center space-y-12 p-10">
+                <div className="space-y-4">
+                  <p className="text-primary font-black uppercase tracking-[0.4em] text-xs">Próxima Parada</p>
+                  <h2 className="text-5xl md:text-6xl font-black tracking-tight line-clamp-2">{nextEpisode.name}</h2>
+                  <p className="text-zinc-500 font-bold tracking-widest uppercase">S{nextEpisode.seasonNumber.toString().padStart(2, '0')} · E{nextEpisode.episodeNumber.toString().padStart(2, '0')}</p>
+                </div>
+                <div className="relative w-32 h-32 mx-auto flex items-center justify-center">
+                  <svg className="absolute inset-0 w-full h-full -rotate-90">
+                    <circle cx="64" cy="64" r="60" className="stroke-zinc-800 fill-none" strokeWidth="8" />
+                    <motion.circle cx="64" cy="64" r="60" className="stroke-primary fill-none" strokeWidth="8"
+                      initial={{ pathLength: 1 }} animate={{ pathLength: 0 }} transition={{ duration: 10, ease: "linear" }} />
                   </svg>
-                  Assistir Agora
-                </button>
-                <button
-                  onClick={() => {
-                    setShowNextEpisodeCountdown(false);
-                    setCountdown(10);
-                  }}
-                  className="rounded-lg bg-zinc-700 px-6 py-3 text-sm font-semibold text-white hover:bg-zinc-600"
-                >
-                  Cancelar
-                </button>
+                  <span className="text-4xl font-black">{countdown}</span>
+                </div>
+                <div className="flex gap-4">
+                  <button onClick={() => router.push(`/watch/${titleId}?episodeId=${nextEpisode.id}`)}
+                    className="flex-1 py-5 bg-white text-black font-black uppercase tracking-widest text-xs rounded-2xl flex items-center justify-center gap-3 hover:bg-zinc-200 transition-all">
+                    Assistir Agora <SkipForward size={18} />
+                  </button>
+                  <button onClick={() => { setShowNextEpisodeCountdown(false); setCountdown(10); videoRef.current?.play(); }}
+                    className="flex-1 py-5 bg-zinc-900 border border-white/10 text-white font-black uppercase tracking-widest text-xs rounded-2xl hover:bg-zinc-800 transition-all">
+                    Cancelar
+                  </button>
+                </div>
               </div>
-            </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        {/* Play/Pause central */}
-        {!loading && !error && (!isPlaying || isHovering) && !showNextEpisodeCountdown && (
-          <button
-            type="button"
-            onClick={handleTogglePlay}
-            className="pointer-events-auto absolute inset-0 z-30 m-auto flex h-16 w-16 items-center justify-center rounded-full bg-black/60 text-3xl font-semibold text-zinc-50 shadow-xl transition hover:bg-black/80"
-          >
-            {isPlaying ? "❚❚" : "▶"}
-          </button>
-        )}
+        {/* HUD: Bottom Controls */}
+        <AnimatePresence>
+          {(isHovering || !isPlaying) && !showNextEpisodeCountdown && (
+            <motion.div initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }}
+              className="absolute inset-x-0 bottom-0 z-50 p-6 md:p-10 space-y-6 pt-20 bg-gradient-to-t from-black via-black/80 to-transparent">
 
-        {/* Controles inferiores */}
-        <div
-          className={`pointer-events-auto absolute inset-x-0 bottom-0 z-20 px-4 pb-4 pt-6 text-xs md:px-6 md:text-sm transition-opacity ${
-            isHovering || !isPlaying ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          {/* Barra de progresso com buffer */}
-          <div
-            className="mb-2 h-1.5 w-full cursor-pointer rounded-full bg-zinc-700/80 relative overflow-hidden"
-            onClick={handleSeekBarClick}
-          >
-            {/* Buffer carregado (cinza claro) */}
-            <div
-              className="absolute h-full rounded-full bg-zinc-500/60 transition-all duration-300"
-              style={{ width: `${bufferedPercent}%` }}
-            />
-            {/* Progresso atual (vermelho) */}
-            <div
-              className="absolute h-full rounded-full bg-red-600"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                if (!videoRef.current) return;
-                const t = Math.max(0, videoRef.current.currentTime - 10);
-                videoRef.current.currentTime = t;
-                setCurrentTime(t);
-              }}
-              className="rounded-full bg-black/60 px-2 py-1 text-xs text-zinc-100 hover:bg-black/80"
-            >
-              ↺ 10s
-            </button>
-
-            <button
-              type="button"
-              onClick={handleTogglePlay}
-              className="flex items-center gap-2 rounded-md bg-zinc-50 px-3 py-1.5 text-xs font-semibold text-zinc-900 hover:bg-white md:text-sm"
-            >
-              {isPlaying ? "Pausar" : "Assistir"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (!videoRef.current || !duration) return;
-                const t = Math.min(duration, videoRef.current.currentTime + 10);
-                videoRef.current.currentTime = t;
-                setCurrentTime(t);
-              }}
-              className="rounded-full bg-black/60 px-2 py-1 text-xs text-zinc-100 hover:bg-black/80"
-            >
-              10s ↻
-            </button>
-
-            <span className="tabular-nums text-[11px] text-zinc-200 md:text-xs">
-              {formatTime(currentTime)} / {formatTime(duration)}
-            </span>
-
-            {/* Indicador de saúde do buffer */}
-            {bufferedPercent > 0 && (
-              <div 
-                className="flex items-center gap-1 text-[10px] text-zinc-400"
-                title={`Buffer: ${Math.round(bufferedPercent)}% carregado`}
-              >
-                <div 
-                  className={`w-2 h-2 rounded-full ${
-                    bufferHealth === "high" 
-                      ? "bg-green-500" 
-                      : bufferHealth === "medium" 
-                        ? "bg-yellow-500" 
-                        : "bg-red-500"
-                  }`}
-                />
-                <span className="hidden md:inline">
-                  {bufferHealth === "high" ? "Buffer OK" : bufferHealth === "medium" ? "Carregando..." : "Buffer baixo"}
-                </span>
+              {/* Futuristic Progress Slider */}
+              <div className="relative group/seeker">
+                <div className="absolute -top-10 left-0 w-full flex justify-between px-2 text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                  <span className="text-white bg-black/40 px-2 py-0.5 rounded-md border border-white/5 backdrop-blur-md">{formatTime(currentTime)}</span>
+                  <span className="opacity-0 group-hover/seeker:opacity-100 transition-opacity">Saltar para Aqui</span>
+                  <span>{formatTime(duration)}</span>
+                </div>
+                <div className="relative h-1.5 w-full bg-white/5 rounded-full cursor-pointer overflow-hidden backdrop-blur-sm border border-white/5"
+                  onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); const nt = ((e.clientX - r.left) / r.width) * duration; videoRef.current!.currentTime = nt; }}>
+                  <div className="absolute h-full bg-zinc-700/40 rounded-full transition-all duration-300" style={{ width: `${bufferedPercent}%` }} />
+                  <motion.div className="h-full bg-primary relative" style={{ width: `${progressPercent}%` }}>
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-[0_0_15px_rgba(229,9,20,0.8)] scale-0 group-hover/seeker:scale-100 transition-transform" />
+                  </motion.div>
+                </div>
               </div>
-            )}
 
-            {/* Botão Próximo Episódio */}
-            {nextEpisode && (
-              <button
-                type="button"
-                onClick={() => router.push(`/watch/${titleId}?episodeId=${nextEpisode.id}`)}
-                className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 md:text-sm flex items-center gap-2"
-                title={`S${nextEpisode.seasonNumber.toString().padStart(2, '0')}E${nextEpisode.episodeNumber.toString().padStart(2, '0')} - ${nextEpisode.name}`}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M8 5v14l11-7z" />
-                  <path d="M19 5v14" strokeWidth="2" stroke="currentColor" />
-                </svg>
-                Próximo
-              </button>
-            )}
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4 md:gap-8">
+                  <div className="flex items-center gap-4">
+                    <button onClick={() => videoRef.current!.currentTime -= 10} className="p-2 text-zinc-400 hover:text-white transition-colors"><RotateCcw size={24} /></button>
+                    <button onClick={() => videoRef.current!.paused ? videoRef.current!.play() : videoRef.current!.pause()} className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 transition-all shadow-xl">
+                      {videoRef.current?.paused ? <Play size={24} fill="currentColor" className="ml-1" /> : <Pause size={24} fill="currentColor" />}
+                    </button>
+                    <button onClick={() => videoRef.current!.currentTime += 10} className="p-2 text-zinc-400 hover:text-white transition-colors"><RotateCw size={24} /></button>
+                  </div>
 
-            <div className="ml-4 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleToggleMute}
-                className="rounded-full bg-black/60 px-2 py-1 text-xs text-zinc-100 hover:bg-black/80"
-              >
-                {isMuted || volume === 0 ? "🔇" : "🔊"}
-              </button>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={Math.round(volume * 100)}
-                onChange={(event) =>
-                  handleVolumeChange(Number(event.target.value) / 100)
-                }
-                className="h-1 w-24 cursor-pointer accent-red-600"
-              />
-            </div>
+                  <div className="flex items-center gap-4 group/volume">
+                    <button onClick={() => { videoRef.current!.muted = !isMuted; setIsMuted(!isMuted); }} className="text-zinc-400 hover:text-white transition-colors cursor-pointer">
+                      {isMuted || volume === 0 ? <VolumeX size={24} /> : <Volume2 size={24} />}
+                    </button>
+                    <div className="w-0 group-hover/volume:w-24 overflow-hidden transition-all duration-500 ease-out flex items-center">
+                      <input type="range" min={0} max={100} value={volume * 100} onChange={(e) => { const v = +e.target.value / 100; videoRef.current!.volume = v; setVolume(v); setIsMuted(v === 0); }}
+                        className="w-20 accent-primary bg-zinc-800 rounded-lg cursor-pointer h-1" />
+                    </div>
+                  </div>
 
-            {qualityLevels.length > 0 && hlsRef.current && (
-              <select
-                value={autoQuality ? "auto" : String(currentLevelIndex ?? -1)}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  const hls = hlsRef.current;
-                  if (!hls) return;
-                  if (value === "auto") {
-                    hls.currentLevel = -1;
-                     
-                    hls.autoLevelEnabled = true;
-                    setAutoQuality(true);
-                    return;
-                  }
-                  const levelIndex = Number(value);
-                  if (Number.isNaN(levelIndex)) return;
-                  hls.currentLevel = levelIndex;
-                   
-                  hls.autoLevelEnabled = false;
-                  setCurrentLevelIndex(levelIndex);
-                  setAutoQuality(false);
-                }}
-                className="ml-3 rounded-md border border-zinc-700 bg-black/60 px-2 py-1 text-[11px] text-zinc-100 outline-none focus:border-zinc-500"
-              >
-                {qualityLevels.length > 1 && <option value="auto">Auto</option>}
-                {qualityLevels.map((level) => {
-                  const labelParts: string[] = [];
-                  if (typeof level.height === "number" && level.height > 0) {
-                    labelParts.push(`${level.height}p`);
-                  }
-                  if (typeof level.bitrate === "number" && level.bitrate > 0) {
-                    const mbps = level.bitrate / 1000000;
-                    labelParts.push(`${mbps.toFixed(1)} Mbps`);
-                  }
-                  const label = labelParts.length > 0 ? labelParts.join(" · ") : "Qualidade";
-                  return (
-                    <option key={level.index} value={level.index}>
-                      {label}
-                    </option>
-                  );
-                })}
-              </select>
-            )}
+                  <div className="hidden lg:flex items-center gap-2 text-zinc-500 text-[10px] font-black uppercase tracking-widest border-l border-white/10 pl-8">
+                    <div className={cn("w-2 h-2 rounded-full", bufferHealth === "high" ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" : bufferHealth === "medium" ? "bg-yellow-500" : "bg-red-500 animate-pulse")} />
+                    {bufferHealth === "high" ? "Stable Connection" : bufferHealth === "medium" ? "Optimizing..." : "Weak Signal"}
+                  </div>
+                </div>
 
-            {subtitleTracks.length > 0 && (
-              <select
-                value={currentSubtitleIndex ?? -1}
-                onChange={(event) => {
-                  const index = Number(event.target.value);
-                  const tracks = subtitleTracks;
-                  tracks.forEach((track, i) => {
-                     
-                    track.mode = i === index ? "showing" : "hidden";
-                  });
-                  setCurrentSubtitleIndex(Number.isNaN(index) || index < 0 ? null : index);
-                }}
-                className="ml-3 rounded-md border border-zinc-700 bg-black/60 px-2 py-1 text-[11px] text-zinc-100 outline-none focus:border-zinc-500"
-              >
-                <option value={-1}>Sem legendas</option>
-                {subtitleTracks.map((track, index) => {
-                  const label = track.label || track.language || `Legenda ${index + 1}`;
-                  return (
-                     
-                    <option key={index} value={index}>
-                      {label}
-                    </option>
-                  );
-                })}
-              </select>
-            )}
+                <div className="flex items-center gap-6">
+                  <div className="relative">
+                    <button onClick={() => { setShowSubtitleMenu(!showSubtitleMenu); setShowQualityMenu(false); }} className={cn("flex items-center gap-2 p-2 rounded-xl transition-all", showSubtitleMenu ? "bg-primary text-white" : "text-zinc-400 hover:text-white")}>
+                      <Subtitles size={24} />
+                    </button>
+                    {showSubtitleMenu && subtitleTracks.length > 0 && (
+                      <div className="absolute bottom-16 right-0 w-56 glass-card bg-zinc-900/90 p-4 rounded-3xl border border-white/10 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-4 px-2">Legendas</p>
+                        <div className="space-y-1">
+                          <button onClick={() => { subtitleTracks.forEach(t => t.mode = "hidden"); setCurrentSubtitleIndex(null); }} className={cn("w-full text-left px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-between", currentSubtitleIndex === null ? "bg-primary text-white" : "hover:bg-white/5")}>Desativadas {currentSubtitleIndex === null && <Check size={14} />}</button>
+                          {subtitleTracks.map((t, i) => (
+                            <button key={i} onClick={() => { subtitleTracks.forEach((tr, id) => tr.mode = id === i ? "showing" : "hidden"); setCurrentSubtitleIndex(i); }} className={cn("w-full text-left px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-between", currentSubtitleIndex === i ? "bg-primary text-white" : "hover:bg-white/5")}>{t.label || t.language || `Track ${i + 1}`} {currentSubtitleIndex === i && <Check size={14} />}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-            <button
-              type="button"
-              onClick={handleFullscreenToggle}
-              className="ml-auto rounded-full bg-black/60 px-2 py-1 text-xs text-zinc-100 hover:bg-black/80"
-            >
-              {isFullscreen ? "⤢" : "⛶"}
-            </button>
-          </div>
-        </div>
+                  <div className="relative">
+                    <button onClick={() => { setShowQualityMenu(!showQualityMenu); setShowSubtitleMenu(false); }} className={cn("flex items-center gap-2 p-2 rounded-xl transition-all", showQualityMenu ? "bg-primary text-white" : "text-zinc-400 hover:text-white")}>
+                      <Settings2 size={24} />
+                    </button>
+                    {showQualityMenu && qualityLevels.length > 0 && (
+                      <div className="absolute bottom-16 right-0 w-56 glass-card bg-zinc-900/90 p-4 rounded-3xl border border-white/10 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-4 px-2">Definição</p>
+                        <div className="space-y-1">
+                          <button onClick={() => { hlsRef.current!.currentLevel = -1; setAutoQuality(true); }} className={cn("w-full text-left px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-between", autoQuality ? "bg-primary text-white" : "hover:bg-white/5")}>Auto Discovery {autoQuality && <Check size={14} />}</button>
+                          {qualityLevels.map((l) => (
+                            <button key={l.index} onClick={() => { hlsRef.current!.currentLevel = l.index; setAutoQuality(false); setCurrentLevelIndex(l.index); }} className={cn("w-full text-left px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-between", !autoQuality && currentLevelIndex === l.index ? "bg-primary text-white" : "hover:bg-white/5")}>{l.height}p Ultra {!autoQuality && currentLevelIndex === l.index && <Check size={14} />}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-        {showShortcuts && (
-          <div className="pointer-events-none absolute inset-0 z-30 flex items-start justify-end p-4">
-            <div className="pointer-events-auto max-w-xs rounded-md bg-black/80 p-3 text-[11px] text-zinc-200 shadow-lg">
-              <div className="mb-1 flex items-center justify-between">
-                <span className="font-semibold">Atalhos do player</span>
-                <button
-                  type="button"
-                  onClick={() => setShowShortcuts(false)}
-                  className="ml-2 rounded px-1 text-[11px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-                >
-                  fechar
-                </button>
+                  <button onClick={() => setShowShortcuts(!showShortcuts)} className="text-zinc-400 hover:text-white transition-colors p-2"><Keyboard size={24} /></button>
+                  <button onClick={() => document.fullscreenElement ? document.exitFullscreen?.() : playerRef.current?.requestFullscreen?.()} className="text-zinc-400 hover:text-white transition-colors p-2">{isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}</button>
+                </div>
               </div>
-              <ul className="space-y-0.5">
-                <li>
-                  <span className="font-mono">Barra de espaço / K</span> – play / pause
-                </li>
-                <li>
-                  <span className="font-mono">← / J</span> – voltar 10s
-                </li>
-                <li>
-                  <span className="font-mono">→ / L</span> – avançar 10s
-                </li>
-                <li>
-                  <span className="font-mono">↑ / ↓</span> – volume ±
-                </li>
-                <li>
-                  <span className="font-mono">M</span> – mutar / desmutar
-                </li>
-                <li>
-                  <span className="font-mono">F</span> – fullscreen
-                </li>
-                <li>
-                  <span className="font-mono">0–9</span> – ir para 0–90% do vídeo
-                </li>
-                <li>
-                  <span className="font-mono">?/H</span> – mostrar/ocultar esta ajuda
-                </li>
-              </ul>
-            </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* HUD: Keyboard Shortcuts Help */}
+        <AnimatePresence>
+          {showShortcuts && (
+            <motion.div initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 100 }}
+              className="absolute right-10 top-1/2 -translate-y-1/2 z-50 glass-card bg-zinc-900/80 backdrop-blur-3xl border border-white/10 rounded-[40px] p-10 w-80 shadow-2xl">
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-xl font-black italic tracking-tighter">Command Unit</h3>
+                <button onClick={() => setShowShortcuts(false)} className="text-zinc-500 hover:text-white transition-colors"><X size={20} /></button>
+              </div>
+              <div className="space-y-6">
+                {[{ k: "SPACE / K", d: "Neural Play/Pause" }, { k: "J / L", d: "Temporal Jump ±10s" }, { k: "UP / DOWN", d: "Amplitude Volume" }, { k: "M", d: "Silent Protocol" }, { k: "F", d: "Total Immersion" }].map((s, i) => (
+                  <div key={i} className="flex flex-col gap-1">
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">{s.k}</span>
+                    <span className="text-sm font-medium text-white">{s.d}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-10 pt-6 border-t border-white/5">
+                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Pflix Control Interface v4.2.0</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+function X({ size, className }: { size?: number, className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+    </svg>
   );
 }

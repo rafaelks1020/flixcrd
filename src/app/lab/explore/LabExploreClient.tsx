@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { cn } from "@/lib/utils";
 import PremiumNavbar from "@/components/ui/PremiumNavbar";
-import TitleRow from "@/components/ui/TitleRow";
+import PremiumTitleRow from "@/components/ui/PremiumTitleRow";
+import BrowseHero from "@/components/ui/BrowseHero";
 import { getLabContinue, getLabMyList, getLabWatchLater } from "../labStorage";
 
 type Category = "movie" | "serie" | "anime";
@@ -46,115 +48,7 @@ function dedupeLabTitles(list: LabTitle[]) {
   return out;
 }
 
-function ExploreHeroSection({
-  title,
-  onPlay,
-  onMore,
-}: {
-  title: LabTitle | null;
-  onPlay: () => void;
-  onMore: () => void;
-}) {
-  if (!title) return null;
-
-  const year = title.releaseDate ? new Date(title.releaseDate).getFullYear() : null;
-
-  return (
-    <section className="relative h-[85vh] min-h-[600px] w-full overflow-hidden bg-black pt-16">
-      <div className="absolute inset-0">
-        {title.backdropUrl && (
-          <>
-            <img
-              src={title.backdropUrl}
-              alt={title.name}
-              className="h-full w-full object-cover"
-              loading="eager"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-transparent to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black to-transparent" />
-          </>
-        )}
-      </div>
-
-      <div className="relative z-10 flex h-full flex-col justify-end px-4 pb-24 md:px-12 md:pb-32">
-        <div className="max-w-2xl space-y-4 animate-fade-in">
-          <h1 className="text-4xl font-extrabold tracking-tight text-white drop-shadow-2xl md:text-6xl lg:text-7xl">
-            {title.name}
-          </h1>
-
-          <div className="flex items-center gap-3 text-sm text-zinc-200 md:text-base">
-            {year && <span className="font-semibold">{year}</span>}
-            {title.voteAverage ? (
-              <>
-                <span>•</span>
-                <div className="flex items-center gap-1">
-                  <span className="text-yellow-400">★</span>
-                  <span className="font-semibold">{title.voteAverage.toFixed(1)}</span>
-                </div>
-              </>
-            ) : null}
-            <>
-              <span>•</span>
-              <span className="rounded bg-zinc-800/80 backdrop-blur-sm px-2 py-0.5 text-xs font-semibold uppercase">
-                {title.type === "MOVIE" ? "Filme" : "Série"}
-              </span>
-            </>
-          </div>
-
-          {title.overview ? (
-            <p className="line-clamp-3 text-sm text-zinc-200 drop-shadow-lg md:text-base lg:line-clamp-4">
-              {title.overview}
-            </p>
-          ) : null}
-
-          <div className="flex flex-wrap items-center gap-3 pt-4">
-            <button
-              onClick={onPlay}
-              className="flex items-center gap-3 rounded-full bg-gradient-to-r from-red-600 to-red-500 px-8 py-3 text-sm font-semibold text-white shadow-xl hover:from-red-500 hover:to-red-400 transition-all hover:scale-105"
-            >
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
-                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              </span>
-              <span>Assistir</span>
-            </button>
-
-            <button
-              onClick={onMore}
-              className="flex items-center gap-2 rounded-full border border-zinc-500 bg-zinc-900/70 px-7 py-3 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition-all hover:border-white hover:bg-zinc-800/80"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="16" x2="12" y2="12" />
-                <line x1="12" y1="8" x2="12.01" y2="8" />
-              </svg>
-              <span>Mais informações</span>
-            </button>
-
-            <div className="ml-auto flex gap-2">
-              <Link
-                href="/lab"
-                className="rounded-full bg-zinc-900/70 border border-zinc-700 px-5 py-2 text-sm font-semibold text-white hover:bg-zinc-800/80"
-              >
-                Voltar
-              </Link>
-              <Link
-                href="/lab/calendario"
-                className="rounded-full bg-zinc-900/70 border border-zinc-700 px-5 py-2 text-sm font-semibold text-white hover:bg-zinc-800/80"
-              >
-                Calendário
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-black to-transparent" />
-    </section>
-  );
-}
+// ExploreHeroSection removed (replaced by BrowseHero)
 
 export default function LabExploreClient({
   isLoggedIn,
@@ -402,10 +296,10 @@ export default function LabExploreClient({
       sort === "most_watched"
         ? "Mais assistidos"
         : sort === "most_liked"
-        ? "Melhor avaliados"
-        : sort === "most_voted"
-        ? "Mais votados"
-        : "Mais recentes";
+          ? "Melhor avaliados"
+          : sort === "most_voted"
+            ? "Mais votados"
+            : "Mais recentes";
     return `${catLabel} • ${sortLabel}`;
   }, [category, sort]);
 
@@ -427,24 +321,37 @@ export default function LabExploreClient({
     : "pt-20 space-y-8 pb-16 px-4";
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-black font-sans selection:bg-red-500/30">
       <PremiumNavbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
 
-      <ExploreHeroSection title={heroTitle} onPlay={openHero} onMore={openHero} />
+      {heroTitle && (
+        <BrowseHero
+          title={{
+            id: String(heroTitle.tmdbId || heroTitle.id),
+            name: heroTitle.name,
+            backdropUrl: heroTitle.backdropUrl,
+            overview: heroTitle.overview,
+            type: heroTitle.type,
+            voteAverage: heroTitle.voteAverage,
+            releaseDate: heroTitle.releaseDate
+          }}
+        />
+      )}
 
       <div className={contentContainerClass}>
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-[1800px] mx-auto">
           {!searchMode && (
-            <>
+            <div className="space-y-12">
               {trendingError ? <div className="text-red-400">{trendingError}</div> : null}
               {trending.length > 0 && (
-                <TitleRow
+                <PremiumTitleRow
                   title="🔥 Em alta no LAB"
                   titles={trending.map((t) => ({
-                    id: labTitleKey(t),
+                    id: String(t.tmdbId || t.id),
                     name: t.name,
                     href: t.tmdbId ? `/lab/title/${t.tmdbId}?type=${t.type === "MOVIE" ? "movie" : "tv"}` : "/lab",
                     posterUrl: t.posterUrl,
+                    backdropUrl: t.backdropUrl,
                     type: t.type,
                     voteAverage: t.voteAverage,
                     releaseDate: t.releaseDate,
@@ -454,133 +361,140 @@ export default function LabExploreClient({
 
               {recommendationsError ? <div className="text-red-400">{recommendationsError}</div> : null}
               {recommendations.length > 0 && (
-                <TitleRow
+                <PremiumTitleRow
                   title="✨ Recomendados pra você"
                   titles={recommendations.map((t) => ({
-                    id: labTitleKey(t),
+                    id: String(t.tmdbId || t.id),
                     name: t.name,
                     href: t.tmdbId ? `/lab/title/${t.tmdbId}?type=${t.type === "MOVIE" ? "movie" : "tv"}` : "/lab",
                     posterUrl: t.posterUrl,
+                    backdropUrl: t.backdropUrl,
                     type: t.type,
                     voteAverage: t.voteAverage,
                     releaseDate: t.releaseDate,
                   }))}
                 />
               )}
-            </>
+            </div>
           )}
 
-          <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap gap-2">
+          {/* Filters Section - Glassmorphism */}
+          <div className="mt-12 mb-8 sticky top-24 z-40 bg-black/50 backdrop-blur-xl border border-white/5 rounded-2xl p-6 shadow-2xl flex flex-col xl:flex-row gap-8 items-center justify-between">
+            <div className="flex flex-col gap-4 w-full xl:w-auto">
+              <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-2">
                 <button
                   type="button"
                   onClick={() => resetAndLoad("movie", sort)}
-                  className={`px-4 py-2 rounded-full text-sm font-semibold border ${category === "movie" ? "bg-red-600 border-red-500 text-white" : "bg-zinc-900/60 border-zinc-700 text-zinc-200 hover:bg-zinc-800/70"}`}
+                  className={cn("px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border", category === "movie" ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/20" : "bg-zinc-900/50 text-zinc-400 border-white/5 hover:bg-zinc-800 hover:text-white")}
                 >
                   Filmes
                 </button>
                 <button
                   type="button"
                   onClick={() => resetAndLoad("serie", sort)}
-                  className={`px-4 py-2 rounded-full text-sm font-semibold border ${category === "serie" ? "bg-red-600 border-red-500 text-white" : "bg-zinc-900/60 border-zinc-700 text-zinc-200 hover:bg-zinc-800/70"}`}
+                  className={cn("px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border", category === "serie" ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/20" : "bg-zinc-900/50 text-zinc-400 border-white/5 hover:bg-zinc-800 hover:text-white")}
                 >
                   Séries
                 </button>
                 <button
                   type="button"
                   onClick={() => resetAndLoad("anime", sort)}
-                  className={`px-4 py-2 rounded-full text-sm font-semibold border ${category === "anime" ? "bg-red-600 border-red-500 text-white" : "bg-zinc-900/60 border-zinc-700 text-zinc-200 hover:bg-zinc-800/70"}`}
+                  className={cn("px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border", category === "anime" ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/20" : "bg-zinc-900/50 text-zinc-400 border-white/5 hover:bg-zinc-800 hover:text-white")}
                 >
                   Animes
                 </button>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-2">
                 {([
-                  ["most_watched", "Mais assistidos"],
-                  ["most_liked", "Melhor avaliados"],
-                  ["most_voted", "Mais votados"],
-                  ["newest", "Mais recentes"],
+                  ["most_watched", "Mais Vistos"],
+                  ["most_liked", "Melhores"],
+                  ["most_voted", "Populares"],
+                  ["newest", "Novidades"],
                 ] as Array<[Sort, string]>).map(([key, label]) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => resetAndLoad(category, key)}
-                    className={`px-4 py-2 rounded-full text-sm font-semibold border ${sort === key ? "bg-white text-black border-white" : "bg-zinc-900/60 border-zinc-700 text-zinc-200 hover:bg-zinc-800/70"}`}
+                    className={cn("px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border whitespace-nowrap", sort === key ? "bg-white text-black border-white" : "bg-zinc-900/50 text-zinc-500 border-white/5 hover:bg-zinc-800 hover:text-white")}
                   >
                     {label}
                   </button>
                 ))}
               </div>
+            </div>
 
-              <div className="flex flex-col md:flex-row gap-3 md:items-center">
-                <input
-                  value={year}
-                  onChange={(e) => {
-                    setYear(e.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Ano (ex: 2024)"
-                  className="w-full md:w-44 px-4 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:border-red-500"
-                />
+            <div className="flex flex-col md:flex-row gap-4 w-full xl:w-auto items-center">
+              <input
+                value={year}
+                onChange={(e) => {
+                  setYear(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="ANO (EX: 2024)"
+                className="w-full md:w-32 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:border-primary/50 outline-none transition-all font-bold uppercase tracking-wider placeholder:text-zinc-600 text-center"
+              />
 
-                <select
-                  value={genre}
-                  onChange={(e) => {
-                    setGenre(e.target.value);
-                    setPage(1);
-                  }}
-                  className="w-full md:w-64 px-4 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-white focus:outline-none focus:border-red-500"
+              <select
+                value={genre}
+                onChange={(e) => {
+                  setGenre(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full md:w-48 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:border-primary/50 outline-none transition-all font-bold uppercase tracking-wider appearance-none cursor-pointer hover:bg-white/5"
+              >
+                <option value="">Gênero (Todos)</option>
+                {genres.map((g) => (
+                  <option key={g.id} value={String(g.id)} className="bg-black text-zinc-300">
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="w-10 h-10 rounded-xl bg-zinc-900/80 border border-white/10 text-white flex items-center justify-center hover:bg-white hover:text-black transition-all disabled:opacity-30 disabled:hover:bg-zinc-900/80 disabled:hover:text-white"
                 >
-                  <option value="">Gênero (Todos)</option>
-                  {genres.map((g) => (
-                    <option key={g.id} value={String(g.id)}>
-                      {g.name}
-                    </option>
-                  ))}
-                </select>
-
-                <div className="ml-auto flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page <= 1}
-                    className="px-4 py-2 rounded-lg bg-zinc-900/80 border border-zinc-700 text-white disabled:opacity-50"
-                  >
-                    ←
-                  </button>
-                  <span className="text-zinc-400 text-sm">Página {page}</span>
-                  <button
-                    type="button"
-                    onClick={() => setPage((p) => p + 1)}
-                    disabled={!hasMore || loading}
-                    className="px-4 py-2 rounded-lg bg-zinc-900/80 border border-zinc-700 text-white disabled:opacity-50"
-                  >
-                    →
-                  </button>
-                </div>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+                </button>
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 w-20 text-center">Página {page}</span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={!hasMore || loading}
+                  className="w-10 h-10 rounded-xl bg-zinc-900/80 border border-white/10 text-white flex items-center justify-center hover:bg-white hover:text-black transition-all disabled:opacity-30 disabled:hover:bg-zinc-900/80 disabled:hover:text-white"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+                </button>
               </div>
             </div>
           </div>
 
-          <div className="mt-6">
+          <div className="mt-6 min-h-[400px]">
             {loading && !searchMode ? (
-              <div className="text-zinc-400">Carregando...</div>
+              <div className="flex items-center justify-center h-64">
+                <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+              </div>
             ) : searchMode ? (
               searchError ? (
                 <div className="text-red-400">{searchError}</div>
               ) : searchResults.length === 0 && !searching ? (
-                <div className="text-zinc-400">Nenhum resultado para “{urlQuery}”.</div>
+                <div className="text-center py-20">
+                  <p className="text-zinc-500 font-bold uppercase tracking-widest">Nenhum resultado para “{urlQuery}”</p>
+                </div>
               ) : (
                 <>
-                  <TitleRow
+                  <PremiumTitleRow
                     title={`🔍 Resultados para "${urlQuery}"`}
                     titles={searchResults.map((t) => ({
-                      id: labTitleKey(t),
+                      id: String(t.tmdbId || t.id),
                       name: t.name,
                       href: t.tmdbId ? `/lab/title/${t.tmdbId}?type=${t.type === "MOVIE" ? "movie" : "tv"}` : "/lab",
                       posterUrl: t.posterUrl,
+                      backdropUrl: t.backdropUrl,
                       type: t.type,
                       voteAverage: t.voteAverage,
                       releaseDate: t.releaseDate,
@@ -588,29 +502,34 @@ export default function LabExploreClient({
                   />
 
                   {searchHasMore && (
-                    <button
-                      type="button"
-                      onClick={loadMoreSearch}
-                      disabled={searching}
-                      className="mt-6 rounded-full bg-white/5 border border-white/10 px-6 py-3 text-sm font-semibold text-white hover:bg-white/10 disabled:opacity-40"
-                    >
-                      {searching ? "Carregando..." : "Carregar mais"}
-                    </button>
+                    <div className="flex justify-center mt-12 pb-12">
+                      <button
+                        type="button"
+                        onClick={loadMoreSearch}
+                        disabled={searching}
+                        className="px-8 py-4 rounded-full bg-white/5 border border-white/10 text-xs font-black uppercase tracking-[0.2em] text-white hover:bg-white hover:text-black transition-all disabled:opacity-40"
+                      >
+                        {searching ? "Carregando..." : "Carregar mais"}
+                      </button>
+                    </div>
                   )}
                 </>
               )
             ) : error ? (
               <div className="text-red-400">{error}</div>
             ) : results.length === 0 ? (
-              <div className="text-zinc-400">Nenhum item encontrado com esses filtros.</div>
+              <div className="text-center py-20">
+                <p className="text-zinc-500 font-bold uppercase tracking-widest">Nenhum item encontrado com esses filtros</p>
+              </div>
             ) : (
-              <TitleRow
+              <PremiumTitleRow
                 title={titleForRow}
                 titles={results.map((t) => ({
-                  id: labTitleKey(t),
+                  id: String(t.tmdbId || t.id),
                   name: t.name,
                   href: t.tmdbId ? `/lab/title/${t.tmdbId}?type=${t.type === "MOVIE" ? "movie" : "tv"}` : "/lab",
                   posterUrl: t.posterUrl,
+                  backdropUrl: t.backdropUrl,
                   type: t.type,
                   voteAverage: t.voteAverage,
                   releaseDate: t.releaseDate,
