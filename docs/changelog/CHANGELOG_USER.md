@@ -6,6 +6,15 @@
 
 Este arquivo registra mudanças que afetam diretamente quem assiste (web/app).
 
+## 2025-12-18
+
+### O que há de novo
+
+- **Recomendados pela IA (LAB)** – no LAB (`/lab`) agora você pode escrever o que gosta (ex.: "comédia romântica + John Wick") e receber recomendações parecidas dentro do catálogo do LAB.
+- **Limite mensal** – para manter o custo baixo, a geração por IA no LAB pode ser feita **1 vez por mês**.
+- **Melhorias de exibição** – os recomendados pela IA agora aparecem em **formato de catálogo (grid)** e com mais variedade.
+- **Melhorias de precisão** – a IA passou a respeitar melhor o tipo (filme vs série) e filtros de gosto (gêneros/ano).
+
 ## 2025-12-17
 
 ### O que há de novo

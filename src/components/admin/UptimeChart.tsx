@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Activity, Clock, ShieldCheck, AlertCircle, TrendingUp } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ServiceSnapshot {
   id: string;
@@ -35,8 +38,7 @@ export default function UptimeChart() {
   useEffect(() => {
     loadCurrentSnapshot();
     loadHistory();
-
-    const interval = setInterval(loadCurrentSnapshot, 60000); // Atualiza snapshot vivo
+    const interval = setInterval(loadCurrentSnapshot, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -49,7 +51,7 @@ export default function UptimeChart() {
         setServices(data.services || []);
       }
     } catch (error) {
-      console.error("Erro ao carregar uptime:", error);
+      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -63,7 +65,7 @@ export default function UptimeChart() {
         setHistory(data.data || []);
       }
     } catch (error) {
-      console.error("Erro ao carregar histórico de uptime:", error);
+      console.error(error);
     } finally {
       setHistoryLoading(false);
     }
@@ -71,124 +73,133 @@ export default function UptimeChart() {
 
   const orderedHistory = useMemo(
     () => [...history].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
-    [history],
+    [history]
   );
 
   if (loading && historyLoading) {
     return (
-      <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
-        <p className="text-xs text-zinc-500">Carregando status e histórico de uptime...</p>
+      <div className="rounded-[32px] border border-white/5 bg-zinc-900/20 p-8 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-600">Syncing Node Status</p>
+        </div>
       </div>
     );
   }
 
-  if (!summary) {
-    return (
-      <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
-        <p className="text-xs text-zinc-500">Não foi possível carregar o status dos serviços.</p>
-      </div>
-    );
-  }
+  if (!summary) return null;
 
   const healthyLabel = summary.allHealthy
-    ? "Todos os serviços online"
-    : `${summary.healthy} de ${summary.total} serviços online`;
-
-  const latestHistory = history[0];
+    ? "Operational"
+    : `${summary.healthy}/${summary.total} Running`;
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 space-y-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-zinc-100">Status dos serviços</h3>
-          <p className="text-xs text-zinc-500">
-            Snapshot em tempo real + histórico das últimas {orderedHistory.length || 0} checagens
-          </p>
+    <div className="rounded-[40px] border border-white/5 bg-zinc-900/20 backdrop-blur-3xl p-8 md:p-10 space-y-10 shadow-2xl relative overflow-hidden">
+      {/* Background Decor */}
+      <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -translate-y-16 translate-x-16" />
+
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between relative z-10">
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 text-primary mb-2">
+            <Activity size={20} className="animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-[0.4em]">System Nodes</span>
+          </div>
+          <h3 className="text-3xl font-black tracking-tighter text-white">Service Health</h3>
+          <p className="text-zinc-500 text-xs font-medium">Real-time status protocols and node availability metrics.</p>
         </div>
-        <span
-          className={`text-xs font-semibold ${
-            summary.allHealthy
-              ? "text-emerald-400"
-              : summary.healthy > 0
-              ? "text-yellow-400"
-              : "text-red-400"
-          }`}
-        >
-          {healthyLabel}
-        </span>
+
+        <div className={cn(
+          "px-6 py-3 rounded-2xl flex items-center gap-3 border shadow-xl transition-all",
+          summary.allHealthy
+            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+            : summary.healthy > 0
+              ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-400"
+              : "bg-red-500/10 border-red-500/20 text-red-400"
+        )}>
+          <div className={cn("w-2 h-2 rounded-full", summary.allHealthy ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
+          <span className="text-xs font-black uppercase tracking-widest">{healthyLabel}</span>
+        </div>
       </div>
 
-      <ul className="space-y-1 text-xs">
+      {/* Services List HUD */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {services.map((service) => (
-          <li
+          <div
             key={service.id}
-            className="flex items-center justify-between rounded-md bg-zinc-900/60 px-2 py-1.5"
+            className="group flex items-center justify-between rounded-2xl bg-black/40 border border-white/5 p-4 hover:border-white/10 transition-all duration-300"
           >
-            <div className="flex items-center gap-2">
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  service.ok ? "bg-emerald-400" : "bg-red-500"
-                }`}
-              />
-              <span className="text-zinc-200">{service.name}</span>
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "w-1.5 h-6 rounded-full",
+                service.ok ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" : "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]"
+              )} />
+              <div className="space-y-0.5">
+                <p className="text-xs font-black text-white group-hover:text-primary transition-colors">{service.name}</p>
+                <p className="text-[9px] font-bold text-zinc-600 uppercase tracking-tighter">{service.details || (service.ok ? "Connected" : "Disconnected")}</p>
+              </div>
             </div>
-            <span className="text-zinc-500">
-              {service.details || (service.ok ? "OK" : "Problema")}
-            </span>
-          </li>
+            {service.ok ? <ShieldCheck size={16} className="text-zinc-800" /> : <AlertCircle size={16} className="text-red-500" />}
+          </div>
         ))}
-      </ul>
+      </div>
 
-      <div className="rounded-md border border-zinc-900/80 bg-black/20 p-3">
-        <div className="flex items-center justify-between text-xs text-zinc-400 mb-2">
-          <span>Histórico recente</span>
-          {latestHistory ? (
-            <span>
-              Último snapshot salvo:{" "}
-              {new Date(latestHistory.createdAt).toLocaleString("pt-BR", {
-                hour: "2-digit",
-                minute: "2-digit",
-                day: "2-digit",
-                month: "2-digit",
-              })}
-            </span>
-          ) : (
-            <span>Nenhum snapshot registrado ainda</span>
-          )}
+      {/* History Matrix */}
+      <div className="space-y-4 pt-6 mt-6 border-t border-white/5">
+        <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">
+          <div className="flex items-center gap-2">
+            <TrendingUp size={14} />
+            <span>Uptime Matrix (Last 24h)</span>
+          </div>
+          <span className="flex items-center gap-2">
+            <Clock size={12} />
+            Live Sync: {new Date(summary.lastCheckAt).toLocaleTimeString("pt-BR")}
+          </span>
         </div>
 
-        {historyLoading ? (
-          <p className="text-xs text-zinc-500">Carregando histórico...</p>
-        ) : orderedHistory.length === 0 ? (
-          <p className="text-xs text-zinc-500">Sem histórico registrado (cron aguardando primeira execução).</p>
-        ) : (
-          <div className="grid grid-cols-12 gap-1">
-            {orderedHistory.map((snapshot) => (
-              <div key={snapshot.id} className="relative group">
-                <div
-                  className={`h-6 rounded-sm ${
-                    snapshot.allHealthy
-                      ? "bg-emerald-500/80"
-                      : snapshot.healthy > 0
-                      ? "bg-yellow-400/80"
-                      : "bg-red-500/80"
-                  }`}
-                />
-                <div className="invisible absolute bottom-full left-1/2 z-10 mb-1 w-40 -translate-x-1/2 rounded-md bg-zinc-900 p-2 text-[10px] text-zinc-100 opacity-0 transition group-hover:visible group-hover:opacity-100">
-                  <p>
-                    {snapshot.healthy}/{snapshot.total} OK
-                  </p>
-                  <p>{new Date(snapshot.createdAt).toLocaleString("pt-BR")}</p>
+        <div className="grid grid-cols-24 gap-1.5 h-12">
+          {historyLoading ? (
+            <div className="col-span-full flex items-center justify-center opacity-30"><Loader2 className="animate-spin" /></div>
+          ) : orderedHistory.length === 0 ? (
+            <div className="col-span-full h-full bg-zinc-900 animate-pulse rounded-xl" />
+          ) : orderedHistory.map((snapshot) => (
+            <motion.div
+              key={snapshot.id}
+              initial={{ opacity: 0, scaleY: 0 }}
+              animate={{ opacity: 1, scaleY: 1 }}
+              className="relative group"
+            >
+              <div className={cn(
+                "h-full w-full rounded-md transition-all duration-300 cursor-help",
+                snapshot.allHealthy ? "bg-emerald-500/40 hover:bg-emerald-500" :
+                  snapshot.healthy > 0 ? "bg-yellow-500/40 hover:bg-yellow-500" :
+                    "bg-red-500/40 hover:bg-red-500"
+              )} />
+
+              {/* Tooltip HUD */}
+              <div className="invisible absolute bottom-full left-1/2 z-50 mb-4 w-48 -translate-x-1/2 p-4 rounded-2xl bg-zinc-950 border border-white/10 shadow-2xl opacity-0 transition-all group-hover:visible group-hover:opacity-100 group-hover:translate-y-0 translate-y-2 pointer-events-none">
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Availability</span>
+                    <span className="text-[10px] font-bold text-white">{Math.round((snapshot.healthy / snapshot.total) * 100)}%</span>
+                  </div>
+                  <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                    <div className="h-full bg-primary" style={{ width: `${(snapshot.healthy / snapshot.total) * 100}%` }} />
+                  </div>
+                  <p className="text-[10px] text-zinc-500 font-medium">{new Date(snapshot.createdAt).toLocaleString("pt-BR")}</p>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+            </motion.div>
+          ))}
+        </div>
       </div>
-
-      <p className="text-[10px] text-zinc-500">
-        Última checagem em tempo real: {new Date(summary.lastCheckAt).toLocaleTimeString("pt-BR")}
-      </p>
     </div>
+  );
+}
+
+function Loader2({ className }: { className?: string }) {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </svg>
   );
 }

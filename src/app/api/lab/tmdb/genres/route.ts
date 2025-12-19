@@ -36,6 +36,12 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await res.json();
+
+    // Filtra o gênero "Terror" (ID 27 no TMDB)
+    if (data && Array.isArray(data.genres)) {
+      data.genres = data.genres.filter((g: any) => g.id !== 27);
+    }
+
     return NextResponse.json(data);
   } catch (err) {
     console.error("Lab /tmdb/genres error:", err);

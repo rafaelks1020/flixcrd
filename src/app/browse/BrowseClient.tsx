@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import PremiumNavbar from "@/components/ui/PremiumNavbar";
+import PremiumTitleCard from "@/components/ui/PremiumTitleCard";
+import { Search, SlidersHorizontal, ArrowUpDown, LayoutGrid, Ghost } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Title {
   id: string;
@@ -12,6 +15,7 @@ interface Title {
   type: string;
   voteAverage?: number | null;
   releaseDate?: string | null;
+  genres?: { name: string }[];
 }
 
 interface BrowseClientProps {
@@ -32,24 +36,9 @@ export default function BrowseClient({
   const [filterType, setFilterType] = useState<string>("ALL");
   const [sortBy, setSortBy] = useState<string>("popularity");
   const [searchQuery, setSearchQuery] = useState("");
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [isMobile, setIsMobile] = useState(false);
   const observerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(max-width: 768px)");
-    const update = () => setIsMobile(Boolean(mq.matches));
-    update();
-    if (typeof mq.addEventListener === "function") {
-      mq.addEventListener("change", update);
-      return () => mq.removeEventListener("change", update);
-    }
-    mq.addListener(update);
-    return () => mq.removeListener(update);
-  }, []);
 
   const loadTitles = useCallback(async (pageToLoad: number, reset: boolean) => {
     setLoading(true);
@@ -81,12 +70,10 @@ export default function BrowseClient({
     }
   }, [filterType, sortBy, searchQuery]);
 
-  // Carrega a primeira página sempre que filtros/ordenação/busca mudarem
   useEffect(() => {
     loadTitles(1, true);
   }, [loadTitles]);
 
-  // Observer para infinite scroll
   useEffect(() => {
     if (!hasMore || loading) return;
 
@@ -99,7 +86,7 @@ export default function BrowseClient({
           loadTitles(page + 1, false);
         }
       },
-      { threshold: 0.2 }
+      { threshold: 0.1 }
     );
 
     observer.observe(node);
@@ -109,160 +96,149 @@ export default function BrowseClient({
     };
   }, [hasMore, loading, page, loadTitles]);
 
-  const selectStyle: React.CSSProperties = {
-    background: '#1a1a1a',
-    border: '1px solid #333',
-    borderRadius: '4px',
-    padding: '10px 16px',
-    color: '#fff',
-    fontSize: '14px',
-    cursor: 'pointer',
-    outline: 'none',
-  };
-
   return (
-    <div style={{ minHeight: '100vh', background: '#000', color: '#fff' }}>
+    <div className="min-h-screen bg-black text-white selection:bg-primary/30">
       <PremiumNavbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
 
-      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: isMobile ? '78px 16px 44px' : '100px 4% 60px' }}>
-        {/* Header */}
-        <div style={{ marginBottom: isMobile ? '24px' : '40px' }}>
-          <h1 style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', fontWeight: 700, marginBottom: '24px' }}>
-            Catálogo
-          </h1>
+      <main className="max-w-[1700px] mx-auto px-4 md:px-12 pt-28 pb-20">
+        {/* Header Section */}
+        <header className="mb-10 space-y-8">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div>
+              <h1 className="text-4xl md:text-6xl font-black tracking-tighter mb-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-zinc-500">
+                Catálogo
+              </h1>
+              <p className="text-zinc-500 max-w-xl font-medium">
+                Explore nossa biblioteca completa de filmes, séries e animes.
+                Filtre por categoria ou popularidade para encontrar sua próxima obsessão.
+              </p>
+            </div>
 
-          {/* Search */}
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{ position: 'relative', maxWidth: '500px' }}>
+            <div className="flex items-center gap-3 text-sm font-bold text-zinc-500 bg-zinc-900/50 backdrop-blur-md px-4 py-2 rounded-full border border-white/5 shadow-xl">
+              <LayoutGrid size={16} className="text-primary" />
+              <span>{titles.length} Títulos Disponíveis</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
+            {/* Search Input */}
+            <div className="relative w-full lg:max-w-md group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-primary transition-colors" size={20} />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar títulos..."
-                style={{
-                  width: '100%',
-                  padding: '14px 20px',
-                  paddingLeft: '50px',
-                  background: '#1a1a1a',
-                  border: '1px solid #333',
-                  borderRadius: '4px',
-                  color: '#fff',
-                  fontSize: '15px',
-                  outline: 'none',
-                }}
-                onFocus={(e) => e.currentTarget.style.borderColor = '#e50914'}
-                onBlur={(e) => e.currentTarget.style.borderColor = '#333'}
+                placeholder="Buscar por nome, elenco ou gênero..."
+                className="w-full bg-zinc-900/50 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white placeholder:text-zinc-600 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all backdrop-blur-md shadow-2xl"
               />
-              <svg
-                style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', width: '20px', height: '20px', color: 'rgba(255,255,255,0.5)' }}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+            </div>
+
+            {/* Filters Row */}
+            <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+              <div className="relative group">
+                <SlidersHorizontal className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="bg-zinc-900/50 border border-white/10 rounded-xl py-3.5 pl-11 pr-10 text-sm font-semibold text-white focus:outline-none focus:border-primary/50 transition-all appearance-none cursor-pointer backdrop-blur-md hover:bg-zinc-800/80"
+                >
+                  <option value="ALL">Todos os Tipos</option>
+                  <option value="MOVIE">Filmes</option>
+                  <option value="SERIES">Séries</option>
+                  <option value="ANIME">Animes</option>
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" size={16} />
+              </div>
+
+              <div className="relative group">
+                <ArrowUpDown className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="bg-zinc-900/50 border border-white/10 rounded-xl py-3.5 pl-11 pr-10 text-sm font-semibold text-white focus:outline-none focus:border-primary/50 transition-all appearance-none cursor-pointer backdrop-blur-md hover:bg-zinc-800/80"
+                >
+                  <option value="popularity">Mais Populares</option>
+                  <option value="recent">Mais Recentes</option>
+                  <option value="rating">Melhor Avaliados</option>
+                  <option value="name">Nome (A-Z)</option>
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" size={16} />
+              </div>
             </div>
           </div>
+        </header>
 
-          {/* Filters */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px' }}>
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              style={selectStyle}
-            >
-              <option value="ALL">Todos os Tipos</option>
-              <option value="MOVIE">Filmes</option>
-              <option value="SERIES">Séries</option>
-              <option value="ANIME">Animes</option>
-            </select>
-
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              style={selectStyle}
-            >
-              <option value="popularity">Mais Populares</option>
-              <option value="recent">Mais Recentes</option>
-              <option value="rating">Melhor Avaliados</option>
-              <option value="name">Nome (A-Z)</option>
-            </select>
-
-            <span style={{ marginLeft: isMobile ? 0 : 'auto', width: isMobile ? '100%' : undefined, fontSize: '14px', color: 'rgba(255,255,255,0.5)' }}>
-              {titles.length} título{titles.length !== 1 ? "s" : ""}
-            </span>
-          </div>
-        </div>
-
-        {/* Grid */}
-        {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(140px, 1fr))' : 'repeat(auto-fill, minmax(180px, 1fr))', gap: isMobile ? '14px' : '20px' }}>
-            {[...Array(18)].map((_, i) => (
-              <div key={i} style={{ aspectRatio: '2/3', background: '#1a1a1a', borderRadius: '4px', animation: 'pulse 2s infinite' }} />
-            ))}
-          </div>
-        ) : titles.length > 0 ? (
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(140px, 1fr))' : 'repeat(auto-fill, minmax(180px, 1fr))', gap: isMobile ? '14px' : '20px' }}>
+        {/* Content Grid */}
+        {titles.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-x-4 gap-y-10 md:gap-x-6 md:gap-y-14">
             {titles.map((title) => (
-              <Link
+              <PremiumTitleCard
                 key={title.id}
-                href={`/title/${title.id}`}
-                onMouseEnter={() => setHoveredId(title.id)}
-                onMouseLeave={() => setHoveredId(null)}
-                style={{
-                  display: 'block',
-                  borderRadius: '4px',
-                  overflow: 'hidden',
-                  background: '#141414',
-                  textDecoration: 'none',
-                  color: '#fff',
-                  transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-                  transform: !isMobile && hoveredId === title.id ? 'scale(1.05)' : 'scale(1)',
-                  boxShadow: hoveredId === title.id ? '0 10px 30px rgba(0,0,0,0.5)' : 'none',
-                }}
-              >
-                <div style={{ position: 'relative' }}>
-                  {title.posterUrl ? (
-                    <img src={title.posterUrl} alt={title.name} style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover' }} />
-                  ) : (
-                    <div style={{ width: '100%', aspectRatio: '2/3', background: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '48px' }}>🎬</div>
-                  )}
-                  
-                  {/* Rating Badge */}
-                  {title.voteAverage && (
-                    <div style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.8)', padding: '4px 8px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
-                      <span style={{ color: '#ffd700' }}>★</span>
-                      <span>{title.voteAverage.toFixed(1)}</span>
-                    </div>
-                  )}
-
-                  {/* Hover Overlay */}
-                  {hoveredId === title.id && (
-                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px', background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, transparent 100%)' }}>
-                      <p style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{title.name}</p>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>
-                        {title.releaseDate && <span>{new Date(title.releaseDate).getFullYear()}</span>}
-                        <span style={{ textTransform: 'uppercase' }}>{title.type === 'MOVIE' ? 'Filme' : title.type === 'SERIES' ? 'Série' : title.type}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </Link>
+                id={title.id}
+                name={title.name}
+                posterUrl={title.posterUrl}
+                type={title.type}
+                rating={title.voteAverage || undefined}
+                year={title.releaseDate ? new Date(title.releaseDate).getFullYear() : undefined}
+                genres={title.genres?.map(g => g.name)}
+              />
             ))}
           </div>
-        ) : (
-          <div style={{ textAlign: 'center', padding: '80px 0' }}>
-            <div style={{ fontSize: '64px', marginBottom: '16px', opacity: 0.3 }}>🎬</div>
-            <h3 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '8px' }}>Nenhum título encontrado</h3>
-            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '14px' }}>Tente ajustar os filtros ou fazer uma nova busca</p>
+        ) : !loading ? (
+          <div className="flex flex-col items-center justify-center py-40 text-center animate-fade-in">
+            <div className="w-24 h-24 bg-zinc-900 rounded-full flex items-center justify-center mb-6 border border-white/5 shadow-2xl">
+              <Ghost size={48} className="text-zinc-700" />
+            </div>
+            <h3 className="text-2xl font-bold text-white mb-2">Nenhum título encontrado</h3>
+            <p className="text-zinc-500 max-w-md">
+              Não conseguimos encontrar nada com esses filtros.
+              Tente buscar por termos mais genéricos ou mudar a categoria.
+            </p>
+            <button
+              onClick={() => { setSearchQuery(""); setFilterType("ALL"); }}
+              className="mt-8 px-6 py-2 bg-white text-black rounded-lg font-bold hover:bg-zinc-200 transition-colors"
+            >
+              Limpar Filtros
+            </button>
+          </div>
+        ) : null}
+
+        {/* Loading State Skeleton Grid */}
+        {loading && titles.length === 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-4 md:gap-6">
+            {[...Array(14)].map((_, i) => (
+              <div key={i} className="space-y-4">
+                <div className="aspect-[2/3] bg-zinc-900 rounded-lg animate-pulse" />
+                <div className="h-4 bg-zinc-900 rounded w-3/4 animate-pulse" />
+                <div className="h-4 bg-zinc-900 rounded w-1/2 animate-pulse" />
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Infinite scroll trigger */}
-        {hasMore && !loading && (
-          <div ref={observerRef} style={{ height: 1 }} />
+        {/* More loader for infinite scroll */}
+        {hasMore && (
+          <div ref={observerRef} className="h-20 flex items-center justify-center mt-10">
+            {loading && (
+              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            )}
+          </div>
         )}
-      </div>
+      </main>
     </div>
+  );
+}
+
+function ChevronDown({ className, size }: { className?: string, size?: number }) {
+  return (
+    <svg
+      className={className}
+      width={size} height={size}
+      viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
   );
 }

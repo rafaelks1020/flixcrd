@@ -137,7 +137,7 @@ export default function HomeClient({
     }
 
     loadData();
-  }, [isLoggedIn, activeProfileId]);
+  }, [isLoggedIn, activeProfileId, handleProfileNotFound]);
 
   const handleAddFavorite = async (titleId: string) => {
     if (!activeProfileId) {
@@ -171,7 +171,7 @@ export default function HomeClient({
   return (
     <div className="min-h-screen bg-black">
       <Toast />
-      
+
       {/* Navbar */}
       <Navbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
 
@@ -213,7 +213,7 @@ export default function HomeClient({
             {genres.slice(0, 6).map((genre) => {
               const titles = titlesByGenre[genre.id];
               if (!titles || titles.length === 0) return null;
-              
+
               return (
                 <TitleRow
                   key={genre.id}

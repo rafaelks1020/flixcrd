@@ -2,18 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Base Styles */
+@layer base {
+  :root {
+    --background: 0 0% 0%;
+    /* #000000 */
+    --foreground: 0 0% 100%;
+    /* #ffffff */
+
+    --card: 0 0% 3%;
+    /* #080808 */
+    --card-foreground: 0 0% 100%;
+
+    --popover: 0 0% 3%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 348 93% 47%;
+    /* #e50914 Netflix Red */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 348 93% 47%;
+
+    --radius: 0.5rem;
+  }
+}
+
 html {
   scroll-behavior: smooth;
   width: 100%;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background-color: #000;
-  color: #fff;
+  @apply bg-background text-foreground;
   width: 100%;
   overflow-x: hidden;
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+/* Glassmorphism Utilities */
+.glass {
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
 /* Scrollbar hide utility */
@@ -28,13 +82,27 @@ body {
 
 /* Animations */
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .animate-fade-in {
@@ -72,7 +140,9 @@ button:focus-visible {
 }
 
 /* Transição suave para todos elementos focáveis */
-a, button, [tabindex]:not([tabindex="-1"]) {
+a,
+button,
+[tabindex]:not([tabindex="-1"]) {
   transition: transform 0.2s ease, outline 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -82,19 +152,21 @@ a, button, [tabindex]:not([tabindex="-1"]) {
   scroll-behavior: smooth;
 }
 
-.tv-carousel > * {
+.tv-carousel>* {
   scroll-snap-align: start;
 }
 
 /* Aumentar área de toque/clique para TV */
 @media (min-width: 1280px) and (pointer: coarse),
-       (min-width: 1280px) and (hover: none) {
+(min-width: 1280px) and (hover: none) {
+
   /* TV mode - botões maiores */
-  button, a {
+  button,
+  a {
     min-height: 48px;
     min-width: 48px;
   }
-  
+
   /* Texto maior para TV */
   body {
     font-size: 18px;
@@ -114,8 +186,15 @@ a, button, [tabindex]:not([tabindex="-1"]) {
 
 /* Animação de foco pulsante para TV */
 @keyframes tv-focus-pulse {
-  0%, 100% { box-shadow: 0 0 20px rgba(229, 9, 20, 0.5); }
-  50% { box-shadow: 0 0 30px rgba(229, 9, 20, 0.8); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(229, 9, 20, 0.5);
+  }
+
+  50% {
+    box-shadow: 0 0 30px rgba(229, 9, 20, 0.8);
+  }
 }
 
 .tv-mode *:focus-visible {

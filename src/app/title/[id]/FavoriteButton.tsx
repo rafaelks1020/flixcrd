@@ -2,15 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Plus, Check, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface FavoriteButtonProps {
   titleId: string;
   initialIsFavorite: boolean;
+  className?: string;
 }
 
 export default function FavoriteButton({
   titleId,
   initialIsFavorite,
+  className,
 }: FavoriteButtonProps) {
   const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
   const [loading, setLoading] = useState(false);
@@ -31,14 +35,17 @@ export default function FavoriteButton({
     setProfileId(stored);
   }, []);
 
-  async function handleToggle() {
+  async function handleToggle(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+
     if (loading) return;
     setLoading(true);
     setError(null);
 
     try {
       if (!profileId) {
-        setError("Selecione um perfil para usar Minha lista.");
+        setError("Selecione um perfil.");
         router.push("/profiles");
         return;
       }
@@ -57,7 +64,7 @@ export default function FavoriteButton({
           window.localStorage.removeItem("activeProfileId");
         }
         setProfileId(null);
-        setError("Seu perfil selecionado não existe mais. Escolha um perfil novamente.");
+        setError("Perfil não existe mais.");
         router.push("/profiles");
         return;
       }
@@ -69,35 +76,41 @@ export default function FavoriteButton({
       setIsFavorite(!isFavorite);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao atualizar Minha lista.");
+      setError(err instanceof Error ? err.message : "Erro ao atualizar.");
+      console.error(err);
     } finally {
       setLoading(false);
     }
   }
 
-  const baseClasses =
-    "rounded-md border px-4 py-2 text-xs font-semibold transition disabled:opacity-60";
-  const activeClasses =
-    "border-emerald-500 bg-emerald-900/40 text-emerald-200 hover:bg-emerald-900/60";
-  const inactiveClasses =
-    "border-zinc-600 bg-zinc-900/60 text-zinc-100 hover:bg-zinc-800";
-
-  const label = isFavorite ? "Remover da Minha lista" : "Adicionar à Minha lista";
-
   return (
-    <div className="flex flex-col gap-1">
+    <div className="relative group/fav">
       <button
         type="button"
         onClick={handleToggle}
         disabled={loading}
-        className={`${baseClasses} ${isFavorite ? activeClasses : inactiveClasses}`}
+        className={cn(
+          "flex items-center justify-center w-[58px] h-[58px] rounded-xl border-2 transition-all transform hover:scale-105 active:scale-95 shadow-xl backdrop-blur-md",
+          isFavorite
+            ? "bg-primary border-primary text-white shadow-primary/20"
+            : "bg-black/40 border-zinc-500/50 text-white hover:border-white hover:bg-black/60",
+          className
+        )}
+        title={isFavorite ? "Remover da Minha Lista" : "Adicionar à Minha Lista"}
       >
-        {loading ? "Atualizando..." : label}
+        {loading ? (
+          <Loader2 size={24} className="animate-spin" />
+        ) : isFavorite ? (
+          <Check size={28} />
+        ) : (
+          <Plus size={28} />
+        )}
       </button>
+
       {error && (
-        <p className="text-[11px] text-red-400">
+        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-max max-w-[200px] bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-xl animate-fade-in z-50">
           {error}
-        </p>
+        </div>
       )}
     </div>
   );
