@@ -129,6 +129,26 @@ model Payment {
   @@index([subscriptionId])
 }
 
+model PixPayment {
+  id                String        @id @default(cuid())
+  userId            String        @map("user_id")
+  subscriptionId    String?       @map("subscription_id")
+  txid              String        @unique
+  valor             Float
+  status            PixPaymentStatus
+  createdAt         DateTime      @default(now()) @map("created_at")
+  paidAt            DateTime?     @map("paid_at")
+  rawWebhookPayload Json?         @map("raw_webhook_payload")
+  User              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  Subscription      Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("pix_payments")
+}
+
 model PlaybackProgress {
   id              String   @id @default(cuid())
   profileId       String
@@ -180,9 +200,28 @@ model PushToken {
   @@index([userId])
 }
 
+model WebPushSubscription {
+  id             String   @id @default(cuid())
+  userId         String
+  endpoint       String   @unique
+  p256dh         String
+  auth           String
+  expirationTime DateTime?
+  userAgent      String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  User           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([endpoint])
+ }
+
 model Request {
   id               String               @id @default(cuid())
   userId           String
+  assignedAdminId  String?
+  assignedAt       DateTime?
   imdbId           String?
   title            String
   type             RequestType
@@ -197,6 +236,7 @@ model Request {
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   User             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  AssignedAdmin    User?                @relation("RequestAssignedAdmin", fields: [assignedAdminId], references: [id])
   RequestFollower  RequestFollower[]
   RequestHistory   RequestHistory[]
   RequestUpload    RequestUpload?
@@ -205,6 +245,7 @@ model Request {
   @@index([imdbId])
   @@index([status])
   @@index([type])
+  @@index([assignedAdminId])
 }
 
 model RequestFollower {
@@ -273,6 +314,23 @@ model ServiceStatusSnapshot {
   @@index([createdAt])
 }
 
+model UserPresenceSession {
+  id         String   @id @default(cuid())
+  userId     String
+  sessionId  String   @unique
+  deviceId   String?
+  platform   String   @default("web")
+  userAgent  String?
+  startedAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  endedAt    DateTime?
+  User       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([lastSeenAt])
+  @@index([endedAt])
+}
+
 model Settings {
   id                         String   @id @default(cuid())
   siteName                   String   @default("Pflix")
@@ -282,6 +340,7 @@ model Settings {
   maxUploadSize              Int      @default(10)
   transcoderCrf              Int      @default(20)
   deleteSourceAfterTranscode Boolean  @default(true)
+  labEnabled                 Boolean  @default(false)
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
 }
@@ -300,6 +359,7 @@ model Subscription {
   asaasSubscriptionId String?
   price               Float     @default(10.00)
   Payment             Payment[]
+  PixPayment          PixPayment[]
   User                User      @relation(fields: [userId], references: [id])
 }
 
@@ -369,8 +429,28 @@ model User {
   PasswordResetToken     PasswordResetToken[]
   Profile                Profile[]
   PushToken              PushToken[]
+  WebPushSubscription     WebPushSubscription[]
   Request                Request[]
+  AssignedRequests       Request[]              @relation("RequestAssignedAdmin")
   Subscription           Subscription?
+  PixPayment             PixPayment[]
+  PresenceSessions       UserPresenceSession[]
+  AiLabRecommendations    AiLabRecommendation[]
+}
+
+model AiLabRecommendation {
+  id           String   @id @default(cuid())
+  userId       String
+  queryText    String
+  model        String
+  parsed       Json?
+  seedsResolved Json?
+  results      Json
+  createdAt    DateTime @default(now())
+
+  User User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model UserFavorite {
@@ -402,41 +482,34 @@ model Video {
 }
 
 model EmailLog {
-  id                String      @id @default(cuid())
-  status            EmailStatus
-  provider          String      @default("mailjet")
-  providerMessageId String?
-  template          String?
-  to                String
-  subject           String
-  fromEmail         String?
-  fromName          String?
-  reason            String?
-  tags              String[]    @default([])
-  userId            String?
-  profileId         String?
-  requestId         String?
-  subscriptionId    String?
-  paymentId         String?
-  metadata          Json?
-  context           Json?
-  payload           Json?
-  providerResponse  Json?
-  errorMessage      String?
-  errorCode         String?
-  createdAt         DateTime    @default(now())
+  id               String      @id
+  status           EmailStatus
+  to               String
+  subject          String
+  fromEmail        String?
+  fromName         String?
+  reason           String?
+  context          Json?
+  providerResponse Json?
+  errorMessage     String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime
 
-  @@index([status, createdAt])
-  @@index([provider, createdAt])
+  @@index([createdAt])
   @@index([reason])
-  @@index([userId])
-  @@index([requestId])
+  @@index([status])
 }
 
 enum ApprovalStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum PixPaymentStatus {
+  PENDING
+  PAID
+  EXPIRED
 }
 
 enum RequestHistoryAction {

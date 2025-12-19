@@ -34,26 +34,25 @@ const authMiddleware = withAuth(
   function middleware(req) {
     const token = req.nextauth.token;
     const path = req.nextUrl.pathname;
-    
+
     // Se não é admin e não está aprovado, redirecionar para pending-approval
     // Exceto se já está na página pending-approval ou em rotas públicas
     if (token && (token as ExtendedToken).role !== "ADMIN") {
       const approvalStatus = (token as ExtendedToken).approvalStatus;
       const isApproved = approvalStatus === "APPROVED";
       const isPendingPage = path === "/pending-approval";
-      const isSubscribePage = path === "/subscribe";
-      
+
       // Se não está aprovado e não está na página de pending, redirecionar
       if (!isApproved && !isPendingPage) {
         return NextResponse.redirect(new URL("/pending-approval", req.url));
       }
-      
+
       // Se está aprovado mas está na página pending, redirecionar para subscribe
       if (isApproved && isPendingPage) {
         return NextResponse.redirect(new URL("/subscribe", req.url));
       }
     }
-    
+
     return NextResponse.next();
   },
   {

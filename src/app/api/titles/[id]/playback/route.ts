@@ -54,6 +54,27 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
     }
 
+    if (user.role !== "ADMIN") {
+      const subscription = await prisma.subscription.findUnique({
+        where: { userId: user.id },
+      });
+
+      const now = new Date();
+      const isActive = Boolean(
+        subscription &&
+          subscription.status === "ACTIVE" &&
+          subscription.currentPeriodEnd &&
+          subscription.currentPeriodEnd > now,
+      );
+
+      if (!isActive) {
+        return NextResponse.json(
+          { error: "Assinatura necessária para assistir." },
+          { status: 403 },
+        );
+      }
+    }
+
     if (!WASABI_CDN_BASE) {
       return NextResponse.json(
         { error: "WASABI_CDN_URL não configurado." },

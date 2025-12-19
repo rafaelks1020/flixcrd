@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 // ============================================================================
@@ -26,12 +26,13 @@ interface UploadFile {
   seasonNumber?: number;
   episodeNumber?: number;
   progress: number;
-  status: "pending" | "uploading" | "completed" | "error";
+  status: "pending" | "uploading" | "completed" | "error" | "cancelled";
   error?: string;
   uploadSpeed?: number; // bytes per second
   uploadedBytes?: number;
   startTime?: number;
   estimatedTimeLeft?: number; // seconds
+  retryCount?: number;
 }
 
 interface CreatedTitle {
@@ -39,6 +40,16 @@ interface CreatedTitle {
   name: string;
   slug: string;
   type: TitleType;
+}
+
+type EpisodeHlsStatus = "none" | "uploaded" | "hls_ready" | "error";
+
+interface EpisodeSummaryForUpload {
+  id: string;
+  seasonNumber: number;
+  episodeNumber: number;
+  name: string;
+  hlsStatus: EpisodeHlsStatus;
 }
 
 // Usar multipart para qualquer tamanho de arquivo. Mantido como constante para facilitar ajuste futuro.
@@ -338,15 +349,206 @@ export default function UploadV2Page() {
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Episodes / status
+  const [episodes, setEpisodes] = useState<EpisodeSummaryForUpload[]>([]);
+  const [loadingEpisodes, setLoadingEpisodes] = useState(false);
+
   // Options
   const [autoTranscode, setAutoTranscode] = useState(true);
   const [deleteSource, setDeleteSource] = useState(true);
   const [crf, setCrf] = useState(20);
+  const [notifyOnComplete, setNotifyOnComplete] = useState(false);
+  const [queueUploads, setQueueUploads] = useState(true);
 
   // Status
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [aiDetectingId, setAiDetectingId] = useState<string | null>(null);
+  const [previousSessionSummary, setPreviousSessionSummary] = useState<
+    | {
+        titleName: string | null;
+        total: number;
+        pending: number;
+        completed: number;
+        savedAt?: string;
+      }
+    | null
+  >(null);
+  const [linkedRequestId, setLinkedRequestId] = useState<string | null>(null);
+  const uploadXhrs = useRef<Record<string, XMLHttpRequest | null>>({});
+  const uploadAbortControllers = useRef<Record<string, AbortController | null>>({});
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
+
+  function canUseNotifications() {
+    return typeof window !== "undefined" && "Notification" in window;
+  }
+
+  async function ensureNotificationPermission(): Promise<boolean> {
+    if (!canUseNotifications()) return false;
+
+    if (Notification.permission === "granted") {
+      return true;
+    }
+
+    if (Notification.permission === "denied") {
+      return false;
+    }
+
+    try {
+      const result = await Notification.requestPermission();
+      return result === "granted";
+    } catch {
+      return false;
+    }
+  }
+
+  function showNotification(title: string, options?: NotificationOptions) {
+    if (!canUseNotifications()) return;
+    if (Notification.permission !== "granted") return;
+
+    try {
+      // eslint-disable-next-line no-new
+      new Notification(title, options);
+    } catch {
+      // Ignore notification errors
+    }
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (folderInputRef.current) {
+      folderInputRef.current.setAttribute("webkitdirectory", "true");
+      folderInputRef.current.setAttribute("directory", "true");
+    }
+  }, []);
+
+  function appendUploadLog(entry: {
+    fileName: string;
+    fileSize: number;
+    status: "completed" | "error" | "cancelled";
+    errorMessage?: string | null;
+    seasonNumber?: number;
+    episodeNumber?: number;
+  }) {
+    if (typeof window === "undefined") return;
+
+    try {
+      const raw = window.localStorage.getItem("flixcrd:upload-logs");
+      const existing = raw ? (JSON.parse(raw) as any[]) : [];
+      const now = new Date().toISOString();
+
+      const record = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        timestamp: now,
+        titleId: createdTitle?.id ?? null,
+        titleName: createdTitle?.name ?? null,
+        ...entry,
+      };
+
+      const next = [record, ...existing].slice(0, 200);
+      window.localStorage.setItem("flixcrd:upload-logs", JSON.stringify(next));
+    } catch {
+      // ignore log persistence errors
+    }
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const raw = window.localStorage.getItem("flixcrd:upload-v2:session");
+      if (!raw) return;
+
+      const data = JSON.parse(raw) as {
+        createdTitle?: CreatedTitle | null;
+        uploadFiles?: Array<{
+          name: string;
+          size: number;
+          seasonNumber?: number;
+          episodeNumber?: number;
+          status?: UploadFile["status"];
+        }>;
+        savedAt?: string;
+      };
+
+      const files = Array.isArray(data.uploadFiles) ? data.uploadFiles : [];
+      if (files.length === 0) {
+        window.localStorage.removeItem("flixcrd:upload-v2:session");
+        return;
+      }
+
+      const total = files.length;
+      const completed = files.filter((f) => f.status === "completed").length;
+      const pending = total - completed;
+
+      if (pending <= 0) {
+        window.localStorage.removeItem("flixcrd:upload-v2:session");
+        return;
+      }
+
+      setPreviousSessionSummary({
+        titleName: data.createdTitle?.name ?? null,
+        total,
+        completed,
+        pending,
+        savedAt: data.savedAt,
+      });
+
+      window.localStorage.removeItem("flixcrd:upload-v2:session");
+    } catch {
+      window.localStorage.removeItem("flixcrd:upload-v2:session");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const persistedFiles = uploadFiles.map((f) => ({
+        name: f.file.name,
+        size: f.file.size,
+        seasonNumber: f.seasonNumber,
+        episodeNumber: f.episodeNumber,
+        status: f.status,
+      }));
+
+      const payload = {
+        createdTitle,
+        uploadFiles: persistedFiles,
+        autoTranscode,
+        deleteSource,
+        crf,
+        notifyOnComplete,
+        queueUploads,
+        savedAt: new Date().toISOString(),
+      };
+
+      window.localStorage.setItem(
+        "flixcrd:upload-v2:session",
+        JSON.stringify(payload),
+      );
+    } catch {
+      // ignore persistence errors
+    }
+  }, [
+    uploadFiles,
+    createdTitle,
+    autoTranscode,
+    deleteSource,
+    crf,
+    notifyOnComplete,
+    queueUploads,
+  ]);
+
+  useEffect(() => {
+    const fromUrl = searchParams.get("requestId");
+    if (fromUrl && !linkedRequestId) {
+      setLinkedRequestId(fromUrl);
+    }
+  }, [searchParams, linkedRequestId]);
 
   // Carregar título diretamente quando vier de uma solicitação atendida
   useEffect(() => {
@@ -374,6 +576,93 @@ export default function UploadV2Page() {
       }
     })();
   }, [searchParams, createdTitle]);
+
+  // Carregar episódios + status HLS/upload para o título atual
+  useEffect(() => {
+    async function loadEpisodesStatusForTitle(titleId: string) {
+      try {
+        setLoadingEpisodes(true);
+        const res = await fetch(`/api/admin/titles/${titleId}/seasons`);
+        const json = await res.json();
+        if (!res.ok) {
+          throw new Error(json?.error ?? "Erro ao carregar temporadas/episódios.");
+        }
+
+        const seasonsData = (json.seasons ?? []) as Array<{
+          seasonNumber: number;
+          name: string | null;
+          episodes: Array<{
+            id: string;
+            seasonNumber: number;
+            episodeNumber: number;
+            name: string;
+          }>;
+        }>;
+
+        const flatEpisodes = seasonsData.flatMap((s) =>
+          s.episodes.map((ep) => ({
+            id: ep.id,
+            seasonNumber: ep.seasonNumber,
+            episodeNumber: ep.episodeNumber,
+            name: ep.name,
+          })),
+        );
+
+        if (flatEpisodes.length === 0) {
+          setEpisodes([]);
+          return;
+        }
+
+        const uniqueIds = Array.from(new Set(flatEpisodes.map((ep) => ep.id)));
+
+        const entries = await Promise.all(
+          uniqueIds.map(async (id) => {
+            try {
+              const r = await fetch(`/api/admin/episodes/${id}/hls-status`);
+              if (!r.ok) {
+                return [id, "error" as EpisodeHlsStatus] as const;
+              }
+              const j = await r.json();
+              const status = (j?.status as EpisodeHlsStatus) ?? "none";
+              return [id, status] as const;
+            } catch {
+              return [id, "error" as EpisodeHlsStatus] as const;
+            }
+          }),
+        );
+
+        const statusMap: Record<string, EpisodeHlsStatus> = {};
+        for (const [id, status] of entries) {
+          statusMap[id] = status;
+        }
+
+        const withStatus: EpisodeSummaryForUpload[] = flatEpisodes
+          .map((ep) => ({
+            ...ep,
+            hlsStatus: statusMap[ep.id] ?? "none",
+          }))
+          .sort((a, b) => {
+            if (a.seasonNumber !== b.seasonNumber) {
+              return a.seasonNumber - b.seasonNumber;
+            }
+            return a.episodeNumber - b.episodeNumber;
+          });
+
+        setEpisodes(withStatus);
+      } catch (e) {
+        console.error("Erro ao carregar status de episódios para upload-v2:", e);
+        setEpisodes([]);
+      } finally {
+        setLoadingEpisodes(false);
+      }
+    }
+
+    if (createdTitle?.id) {
+      loadEpisodesStatusForTitle(createdTitle.id);
+    } else {
+      setEpisodes([]);
+    }
+  }, [createdTitle?.id]);
 
   // ============================================================================
   // TMDB SEARCH
@@ -536,8 +825,37 @@ export default function UploadV2Page() {
   }, []);
 
   async function addFiles(files: File[]) {
+    const allowedExtensions = ["mkv", "mp4", "avi", "mov", "webm", "m4v"];
+
+    const validFiles: File[] = [];
+    const rejected: string[] = [];
+
+    for (const file of files) {
+      const nameLower = file.name.toLowerCase();
+      const match = nameLower.match(/\.([a-z0-9]+)$/);
+      const ext = match?.[1] ?? "";
+      const isValidExt = allowedExtensions.includes(ext);
+      const isNonEmpty = file.size > 0;
+
+      if (isValidExt && isNonEmpty) {
+        validFiles.push(file);
+      } else {
+        rejected.push(file.name);
+      }
+    }
+
+    if (rejected.length > 0) {
+      setError(
+        `Alguns arquivos foram ignorados por formato ou tamanho inválido: ${rejected.join(", ")}`,
+      );
+    }
+
+    if (validFiles.length === 0) {
+      return;
+    }
+
     // Primeiro adiciona os arquivos com status "detecting"
-    const initialFiles: UploadFile[] = files.map((file) => ({
+    const initialFiles: UploadFile[] = validFiles.map((file) => ({
       id: Math.random().toString(36).substring(7),
       file,
       seasonNumber: undefined,
@@ -565,6 +883,30 @@ export default function UploadV2Page() {
 
   function removeFile(id: string) {
     setUploadFiles((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  function handleCancelUpload(id: string) {
+    const xhr = uploadXhrs.current[id];
+    if (xhr) {
+      try {
+        xhr.abort();
+      } catch {}
+    }
+
+    const controller = uploadAbortControllers.current[id];
+    if (controller) {
+      try {
+        controller.abort();
+      } catch {}
+    }
+
+    setUploadFiles((prev) =>
+      prev.map((f) =>
+        f.id === id && f.status === "uploading"
+          ? { ...f, status: "cancelled", error: "Upload cancelado pelo usuário." }
+          : f,
+      ),
+    );
   }
 
   // Corrigir episódio manualmente
@@ -626,15 +968,45 @@ export default function UploadV2Page() {
     setError(null);
     setInfo("🚀 Iniciando uploads...");
 
-    for (const uploadFile of uploadFiles) {
-      await uploadSingleFile(uploadFile);
+    if (queueUploads) {
+      for (const uploadFile of uploadFiles) {
+        // Upload em fila (sequencial)
+        await uploadSingleFile(uploadFile);
+      }
+    } else {
+      // Upload paralelo por arquivo (mantendo retry/controle por parte)
+      await Promise.all(uploadFiles.map((uploadFile) => uploadSingleFile(uploadFile)));
     }
 
     setInfo("✅ Todos os uploads concluídos!");
 
+    if (notifyOnComplete) {
+      showNotification("Uploads concluídos", {
+        body: `${uploadFiles.length} arquivo(s) enviados para "${createdTitle.name}"`,
+      });
+    }
+
     if (autoTranscode) {
       setInfo("🎬 Iniciando transcodificação automática...");
       await startTranscoding();
+    }
+
+    if (linkedRequestId) {
+      try {
+        await fetch(`/api/admin/solicitacoes/${linkedRequestId}/upload`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            titleId: createdTitle.id,
+            completedAt: new Date().toISOString(),
+          }),
+        });
+      } catch (err) {
+        console.error(
+          "Erro ao atualizar upload da solicitação após conclusão dos uploads:",
+          err,
+        );
+      }
     }
   }
 
@@ -689,12 +1061,22 @@ export default function UploadV2Page() {
 
       // Arquivos gigantes: usar upload multipart concorrente
       if (uploadFile.file.size >= MULTIPART_THRESHOLD_BYTES) {
-        await uploadMultipartFile(uploadFile, createdTitle!.id, episodeId, startTime);
+        const result = await uploadMultipartFile(uploadFile, createdTitle!.id, episodeId, startTime);
+        if (result === "cancelled") {
+          return;
+        }
         setUploadFiles((prev) =>
           prev.map((f) =>
             f.id === uploadFile.id ? { ...f, status: "completed", progress: 100 } : f
           )
         );
+        appendUploadLog({
+          fileName: uploadFile.file.name,
+          fileSize: uploadFile.file.size,
+          seasonNumber: uploadFile.seasonNumber,
+          episodeNumber: uploadFile.episodeNumber,
+          status: "completed",
+        });
         return;
       }
 
@@ -721,6 +1103,7 @@ export default function UploadV2Page() {
         const xhr = new XMLHttpRequest();
         xhr.open("PUT", uploadUrl, true);
         xhr.setRequestHeader("Content-Type", uploadFile.file.type || "application/octet-stream");
+        uploadXhrs.current[uploadFile.id] = xhr;
 
         let lastLoaded = 0;
         let lastTime = Date.now();
@@ -761,10 +1144,35 @@ export default function UploadV2Page() {
                 f.id === uploadFile.id ? { ...f, status: "completed", progress: 100 } : f
               )
             );
+            appendUploadLog({
+              fileName: uploadFile.file.name,
+              fileSize: uploadFile.file.size,
+              seasonNumber: uploadFile.seasonNumber,
+              episodeNumber: uploadFile.episodeNumber,
+              status: "completed",
+            });
             resolve();
           } else {
             reject(new Error(`Upload falhou: ${xhr.status}`));
           }
+        };
+
+        xhr.onabort = () => {
+          setUploadFiles((prev) =>
+            prev.map((f) =>
+              f.id === uploadFile.id
+                ? { ...f, status: "cancelled", error: "Upload cancelado pelo usuário." }
+                : f,
+            ),
+          );
+          appendUploadLog({
+            fileName: uploadFile.file.name,
+            fileSize: uploadFile.file.size,
+            seasonNumber: uploadFile.seasonNumber,
+            episodeNumber: uploadFile.episodeNumber,
+            status: "cancelled",
+          });
+          resolve();
         };
 
         xhr.onerror = () => reject(new Error("Erro de rede"));
@@ -779,6 +1187,17 @@ export default function UploadV2Page() {
             : f
         )
       );
+      appendUploadLog({
+        fileName: uploadFile.file.name,
+        fileSize: uploadFile.file.size,
+        seasonNumber: uploadFile.seasonNumber,
+        episodeNumber: uploadFile.episodeNumber,
+        status: "error",
+        errorMessage: errorMsg,
+      });
+    } finally {
+      uploadXhrs.current[uploadFile.id] = null;
+      uploadAbortControllers.current[uploadFile.id] = null;
     }
   }
 
@@ -788,6 +1207,9 @@ export default function UploadV2Page() {
     episodeId: string | undefined,
     startTime: number,
   ) {
+    const controller = new AbortController();
+    uploadAbortControllers.current[uploadFile.id] = controller;
+
     const startRes = await fetch("/api/wasabi/multipart/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -797,6 +1219,7 @@ export default function UploadV2Page() {
         filename: uploadFile.file.name,
         contentType: uploadFile.file.type,
       }),
+      signal: controller.signal,
     });
 
     const startJson = await startRes.json();
@@ -825,7 +1248,9 @@ export default function UploadV2Page() {
     const worker = async () => {
       while (true) {
         const index = currentIndex;
-        if (index >= parts.length || caughtError) break;
+        if (index >= parts.length || caughtError) {
+          break;
+        }
         currentIndex += 1;
         const part = parts[index];
 
@@ -839,16 +1264,35 @@ export default function UploadV2Page() {
           while (attempt < MULTIPART_MAX_RETRIES && !success) {
             attempt += 1;
 
+            if (attempt > 1) {
+              setUploadFiles((prev) =>
+                prev.map((f) =>
+                  f.id === uploadFile.id
+                    ? {
+                        ...f,
+                        retryCount:
+                          typeof f.retryCount === "number"
+                            ? Math.max(f.retryCount, attempt)
+                            : attempt,
+                      }
+                    : f,
+                ),
+              );
+            }
+
             const partRes = await fetch("/api/wasabi/multipart/part-url", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ key, uploadId, partNumber: part.partNumber }),
+              signal: controller.signal,
             });
 
             const partJson = await partRes.json();
             if (!partRes.ok) {
               if (attempt >= MULTIPART_MAX_RETRIES) {
-                throw new Error(partJson?.error ?? `Erro ao gerar URL da parte ${part.partNumber}`);
+                throw new Error(
+                  partJson?.error ?? `Erro ao gerar URL da parte ${part.partNumber}`,
+                );
               }
               continue;
             }
@@ -858,11 +1302,14 @@ export default function UploadV2Page() {
             const putRes = await fetch(uploadUrl, {
               method: "PUT",
               body: blob,
+              signal: controller.signal,
             });
 
             if (!putRes.ok) {
               if (attempt >= MULTIPART_MAX_RETRIES) {
-                throw new Error(`Erro ao enviar parte ${part.partNumber}: ${putRes.status}`);
+                throw new Error(
+                  `Erro ao enviar parte ${part.partNumber}: ${putRes.status}`,
+                );
               }
               continue;
             }
@@ -890,12 +1337,15 @@ export default function UploadV2Page() {
                     uploadedBytes,
                     estimatedTimeLeft,
                   }
-                : f
-            )
+                : f,
+            ),
           );
         } catch (error) {
+          if (controller.signal.aborted) {
+            return;
+          }
           caughtError = error as Error;
-          break;
+          return;
         }
       }
     };
@@ -907,6 +1357,24 @@ export default function UploadV2Page() {
     }
 
     await Promise.all(workers);
+
+    if (controller.signal.aborted) {
+      setUploadFiles((prev) =>
+        prev.map((f) =>
+          f.id === uploadFile.id
+            ? { ...f, status: "cancelled", error: "Upload cancelado pelo usuário." }
+            : f,
+        ),
+      );
+      appendUploadLog({
+        fileName: uploadFile.file.name,
+        fileSize: uploadFile.file.size,
+        seasonNumber: uploadFile.seasonNumber,
+        episodeNumber: uploadFile.episodeNumber,
+        status: "cancelled",
+      });
+      return "cancelled" as const;
+    }
 
     if (caughtError) {
       throw caughtError;
@@ -920,12 +1388,15 @@ export default function UploadV2Page() {
         uploadId,
         parts: completedParts.sort((a, b) => a.partNumber - b.partNumber),
       }),
+      signal: controller.signal,
     });
 
     const completeJson = await completeRes.json();
     if (!completeRes.ok) {
       throw new Error(completeJson?.error ?? "Erro ao finalizar upload multipart");
     }
+
+    return "success" as const;
   }
 
   async function startTranscoding() {
@@ -950,6 +1421,11 @@ export default function UploadV2Page() {
 
         const jobCount = data.jobs?.length || 0;
         setInfo(`✅ Transcodificação iniciada para ${jobCount} episódio(s)!`);
+        if (notifyOnComplete) {
+          showNotification("Transcodificação iniciada", {
+            body: `${jobCount} episódio(s) enfileirado(s) para HLS em "${createdTitle.name}"`,
+          });
+        }
       } else {
         // Para filmes, usar API padrão (mas primeiro precisa definir hlsPath)
         // Primeiro atualiza o hlsPath do título
@@ -980,18 +1456,25 @@ export default function UploadV2Page() {
         }
 
         setInfo(`✅ Transcodificação iniciada! Job ID: ${data.jobId}`);
+        if (notifyOnComplete) {
+          showNotification("Transcodificação iniciada", {
+            body: `Job HLS iniciado para "${createdTitle.name}"`,
+          });
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao iniciar transcodificação");
     }
   }
 
+  const isSeriesLike = createdTitle && (createdTitle.type === "SERIES" || createdTitle.type === "ANIME");
+
   // ============================================================================
   // RENDER
   // ============================================================================
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-0">
       <div>
         <h2 className="text-2xl font-semibold">🚀 Upload Unificado</h2>
         <p className="text-zinc-400 text-sm">
@@ -1010,10 +1493,42 @@ export default function UploadV2Page() {
           {info}
         </div>
       )}
+      {previousSessionSummary && (
+        <div className="rounded-lg border border-amber-800 bg-amber-950/40 p-3 text-xs text-amber-200">
+          <p className="font-semibold">
+            Sessão anterior: {previousSessionSummary.pending} de {previousSessionSummary.total} upload(s)
+            pendente(s)
+            {previousSessionSummary.titleName ? ` para "${previousSessionSummary.titleName}"` : ""}.
+          </p>
+          {previousSessionSummary.savedAt && (
+            <p className="mt-1 text-[11px] text-amber-300/80">
+              Último registro: {new Date(previousSessionSummary.savedAt).toLocaleString()}
+            </p>
+          )}
+        </div>
+      )}
+
+      {linkedRequestId && (
+        <div className="rounded-lg border border-sky-800 bg-sky-950/40 p-3 text-xs sm:text-sm text-sky-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <span className="font-semibold">
+              Fazendo upload para solicitação #{linkedRequestId}
+            </span>
+          </div>
+          <a
+            href={`/solicitacao/${linkedRequestId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center rounded-md border border-sky-500/60 px-2 py-1 text-[11px] sm:text-xs text-sky-100 hover:bg-sky-900/60"
+          >
+            Ver solicitação →
+          </a>
+        </div>
+      )}
 
       {/* Step 1: TMDB Search */}
       {!selectedTmdb && !createdTitle && (
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-6 space-y-4">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 sm:p-6 space-y-4">
           <div>
             <h3 className="text-lg font-semibold">1️⃣ Buscar no TMDB</h3>
             <p className="text-zinc-400 text-sm">Digite o nome do filme ou série</p>
@@ -1119,7 +1634,7 @@ export default function UploadV2Page() {
 
       {/* Step 3: Upload Files */}
       {createdTitle && (
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-6 space-y-4">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 sm:p-6 space-y-4">
           <div>
             <h3 className="text-lg font-semibold">3️⃣ Adicionar Arquivos</h3>
             <p className="text-zinc-400 text-sm">
@@ -1138,6 +1653,56 @@ export default function UploadV2Page() {
               </a>
             </div>
           </div>
+          {isSeriesLike && (
+            <div className="rounded-md border border-zinc-800 bg-zinc-900/60 p-3 space-y-1 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-zinc-200">Status atual dos episódios</span>
+                {loadingEpisodes && (
+                  <span className="text-[11px] text-zinc-400">Carregando...</span>
+                )}
+              </div>
+              {!loadingEpisodes && episodes.length === 0 && (
+                <p className="text-[11px] text-zinc-500">
+                  Nenhum episódio importado ainda. Importe temporadas em /admin/catalog.
+                </p>
+              )}
+              {!loadingEpisodes && episodes.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {episodes.slice(0, 24).map((ep) => {
+                    let badgeClass = "border-zinc-700 text-zinc-300";
+                    let label = "Sem upload";
+                    if (ep.hlsStatus === "hls_ready") {
+                      badgeClass = "border-emerald-700 text-emerald-300 bg-emerald-900/40";
+                      label = "HLS pronto";
+                    } else if (ep.hlsStatus === "uploaded") {
+                      badgeClass = "border-blue-700 text-blue-300 bg-blue-900/40";
+                      label = "Upload feito";
+                    } else if (ep.hlsStatus === "error") {
+                      badgeClass = "border-red-700 text-red-300 bg-red-900/40";
+                      label = "Erro";
+                    }
+                    return (
+                      <span
+                        key={ep.id}
+                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 ${badgeClass}`}
+                      >
+                        <span>
+                          S{ep.seasonNumber.toString().padStart(2, "0")}E
+                          {ep.episodeNumber.toString().padStart(2, "0")}
+                        </span>
+                        <span className="text-[10px]">{label}</span>
+                      </span>
+                    );
+                  })}
+                  {episodes.length > 24 && (
+                    <span className="text-[11px] text-zinc-500">
+                      +{episodes.length - 24} episódio(s)
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Dropzone */}
           <div
@@ -1147,13 +1712,14 @@ export default function UploadV2Page() {
               setIsDragging(true);
             }}
             onDragLeave={() => setIsDragging(false)}
-            className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
+            className={`border-2 border-dashed rounded-lg p-8 sm:p-10 lg:p-12 text-center transition-colors ${
               isDragging
                 ? "border-emerald-600 bg-emerald-950/20"
                 : "border-zinc-700 bg-zinc-900/50"
             }`}
           >
             <input
+              ref={fileInputRef}
               type="file"
               multiple
               accept="video/*"
@@ -1161,16 +1727,108 @@ export default function UploadV2Page() {
               className="hidden"
               id="file-input"
             />
-            <label htmlFor="file-input" className="cursor-pointer">
-              <div className="text-4xl mb-4">📁</div>
-              <p className="text-lg font-semibold text-zinc-100 mb-2">
-                Arraste arquivos aqui ou clique para selecionar
-              </p>
-              <p className="text-sm text-zinc-400">
-                Aceita: .mkv, .mp4, .avi, .mov, .webm
-              </p>
-            </label>
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="video/*"
+              capture="environment"
+              onChange={handleFileInput}
+              className="hidden"
+              id="camera-input"
+            />
+            <input
+              ref={folderInputRef}
+              type="file"
+              multiple
+              accept="video/*"
+              onChange={handleFileInput}
+              className="hidden"
+              id="folder-input"
+            />
+            <div className="space-y-3">
+              <div>
+                <div className="text-3xl sm:text-4xl mb-3">📁</div>
+                <p className="text-base sm:text-lg font-semibold text-zinc-100 mb-1">
+                  Arraste arquivos aqui ou use os botões abaixo
+                </p>
+                <p className="text-xs sm:text-sm text-zinc-400">
+                  Aceita: .mkv, .mp4, .avi, .mov, .webm
+                </p>
+              </div>
+              <div className="mt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2">
+                <label
+                  htmlFor="file-input"
+                  className="cursor-pointer inline-flex items-center justify-center rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs sm:text-sm font-medium text-zinc-100 hover:bg-zinc-800"
+                >
+                  📂 Selecionar da galeria
+                </label>
+                <label
+                  htmlFor="folder-input"
+                  className="cursor-pointer inline-flex items-center justify-center rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs sm:text-sm font-medium text-zinc-100 hover:bg-zinc-800"
+                >
+                  📁 Selecionar pasta (temporada)
+                </label>
+                <label
+                  htmlFor="camera-input"
+                  className="cursor-pointer inline-flex items-center justify-center rounded-md border border-emerald-700 bg-emerald-900/40 px-3 py-2 text-xs sm:text-sm font-medium text-emerald-200 hover:bg-emerald-800/60"
+                >
+                  📷 Gravar com câmera
+                </label>
+              </div>
+            </div>
           </div>
+
+          {/* Overall Progress */}
+          {uploadFiles.length > 0 && (() => {
+            const totalFiles = uploadFiles.length;
+            const completedFiles = uploadFiles.filter((f) => f.status === "completed").length;
+            const totalBytes = uploadFiles.reduce((sum, f) => sum + f.file.size, 0);
+            const uploadedBytesTotal = uploadFiles.reduce(
+              (sum, f) => sum + f.file.size * ((f.progress || 0) / 100),
+              0,
+            );
+            const overallPercent = totalBytes > 0
+              ? Math.round((uploadedBytesTotal / totalBytes) * 100)
+              : 0;
+
+            const activeUploads = uploadFiles.filter(
+              (f) => f.status === "uploading" && f.uploadSpeed && f.uploadSpeed > 0,
+            );
+
+            let totalEtaSeconds: number | null = null;
+            if (activeUploads.length > 0 && totalBytes > 0) {
+              const avgSpeed =
+                activeUploads.reduce((sum, f) => sum + (f.uploadSpeed || 0), 0) /
+                activeUploads.length;
+              const remainingBytes = totalBytes - uploadedBytesTotal;
+              if (avgSpeed > 0 && remainingBytes > 0) {
+                totalEtaSeconds = remainingBytes / avgSpeed;
+              }
+            }
+
+            return (
+              <div className="rounded-md border border-zinc-800 bg-zinc-900/60 p-3 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-zinc-200">
+                    Progresso geral: {completedFiles} de {totalFiles} arquivo(s)
+                  </span>
+                  <span className="text-zinc-400">{overallPercent}%</span>
+                </div>
+                <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 transition-all"
+                    style={{ width: `${overallPercent}%` }}
+                  />
+                </div>
+                {totalEtaSeconds !== null && totalEtaSeconds > 0 && (
+                  <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                    <span>Tempo total estimado:</span>
+                    <span className="font-mono">~{formatTime(totalEtaSeconds)}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* File List */}
           {uploadFiles.length > 0 && (
@@ -1178,95 +1836,359 @@ export default function UploadV2Page() {
               <p className="text-sm font-semibold text-zinc-300">
                 {uploadFiles.length} arquivo(s) selecionado(s):
               </p>
-              {uploadFiles.map((f) => (
-                <div
-                  key={f.id}
-                  className="flex items-center gap-4 rounded-lg border border-zinc-700 bg-zinc-900 p-4"
-                >
-                  <div className="flex-1">
-                    <p className="font-semibold text-zinc-100">{f.file.name}</p>
-                    <div className="flex items-center gap-2 text-xs text-zinc-500">
-                      <span>{formatBytes(f.file.size)}</span>
-                      {f.seasonNumber && f.episodeNumber ? (
-                        <span className="text-emerald-400">
-                          • ✅ S{f.seasonNumber.toString().padStart(2, "0")}E
-                          {f.episodeNumber.toString().padStart(2, "0")}
-                        </span>
-                      ) : f.status === "pending" ? (
-                        <span className="text-yellow-400 animate-pulse">
-                          • 🔍 Detectando...
-                        </span>
-                      ) : (
-                        <span className="text-red-400">• ⚠️ Não detectado</span>
-                      )}
-                      {/* Botões sempre visíveis */}
-                      {f.status !== "uploading" && f.status !== "completed" && (
-                        <>
-                          <button
-                            onClick={() => fixWithAI(f)}
-                            disabled={aiDetectingId === f.id}
-                            className="text-purple-400 hover:text-purple-300 underline disabled:opacity-50"
-                          >
-                            {aiDetectingId === f.id ? "🤖 Detectando..." : "🤖 IA"}
-                          </button>
-                          <button
-                            onClick={() => {
-                              const ep = prompt("Número do episódio:", f.episodeNumber?.toString() || "1");
-                              const season = prompt("Temporada:", f.seasonNumber?.toString() || "1");
-                              if (ep && season) {
-                                updateEpisode(f.id, parseInt(season), parseInt(ep));
-                              }
-                            }}
-                            className="text-blue-400 hover:text-blue-300 underline"
-                          >
-                            ✏️ Editar
-                          </button>
-                        </>
-                      )}
-                    </div>
-                    {f.status === "uploading" && (
-                      <div className="mt-2 space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-zinc-400">
-                            {f.uploadedBytes && formatBytes(f.uploadedBytes)} / {formatBytes(f.file.size)}
-                          </span>
-                          <span className="text-emerald-400 font-mono">
-                            {f.uploadSpeed && formatSpeed(f.uploadSpeed)}
-                          </span>
-                        </div>
-                        <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-emerald-600 transition-all"
-                            style={{ width: `${f.progress}%` }}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-zinc-400">{f.progress}%</span>
-                          {f.estimatedTimeLeft && f.estimatedTimeLeft > 0 && (
-                            <span className="text-zinc-500">
-                              ~{formatTime(f.estimatedTimeLeft)} restante
+              {isSeriesLike
+                ? (() => {
+                    const bySeason = new Map<number | "none", UploadFile[]>();
+
+                    for (const file of uploadFiles) {
+                      const key = typeof file.seasonNumber === "number" ? file.seasonNumber : "none";
+                      if (!bySeason.has(key)) {
+                        bySeason.set(key, []);
+                      }
+                      bySeason.get(key)!.push(file);
+                    }
+
+                    const entries = Array.from(bySeason.entries()).sort(([a], [b]) => {
+                      if (a === "none" && b === "none") return 0;
+                      if (a === "none") return 1;
+                      if (b === "none") return -1;
+                      return a - b;
+                    });
+
+                    return entries.map(([seasonKey, files]) => {
+                      const episodeSet = new Set<number>();
+                      for (const file of files) {
+                        if (typeof file.episodeNumber === "number") {
+                          episodeSet.add(file.episodeNumber);
+                        }
+                      }
+
+                      const episodeNumbers = Array.from(episodeSet).sort((a, b) => a - b);
+                      let gapsLabel: string | null = null;
+
+                      if (episodeNumbers.length > 1) {
+                        const missing: number[] = [];
+                        const start = episodeNumbers[0];
+                        const end = episodeNumbers[episodeNumbers.length - 1];
+                        for (let n = start; n <= end; n += 1) {
+                          if (!episodeSet.has(n)) {
+                            missing.push(n);
+                          }
+                        }
+
+                        if (missing.length > 0) {
+                          const formatted = missing
+                            .map((n) => `E${n.toString().padStart(2, "0")}`)
+                            .join(", ");
+                          gapsLabel = missing.length === 1 ? `Falta ${formatted}` : `Faltam ${formatted}`;
+                        }
+                      }
+
+                      const sortedFiles = [...files].sort((a, b) => {
+                        const aHasEp = typeof a.episodeNumber === "number";
+                        const bHasEp = typeof b.episodeNumber === "number";
+                        if (aHasEp && bHasEp) {
+                          return (a.episodeNumber as number) - (b.episodeNumber as number);
+                        }
+                        if (aHasEp) return -1;
+                        if (bHasEp) return 1;
+                        return 0;
+                      });
+
+                      return (
+                        <div
+                          key={seasonKey === "none" ? "none" : seasonKey.toString()}
+                          className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 space-y-2"
+                        >
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-zinc-200">
+                              {seasonKey === "none"
+                                ? `Sem temporada (${files.length} arquivo(s))`
+                                : `Temporada ${seasonKey} (${files.length} arquivo(s))`}
                             </span>
-                          )}
+                            {gapsLabel && (
+                              <span className="text-[11px] text-amber-400">{gapsLabel}</span>
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            {sortedFiles.map((f) => {
+                              const hasEpisodeInfo =
+                                typeof f.seasonNumber === "number" &&
+                                typeof f.episodeNumber === "number";
+
+                              const matchedEpisode =
+                                isSeriesLike && hasEpisodeInfo
+                                  ? episodes.find(
+                                      (ep) =>
+                                        ep.seasonNumber === f.seasonNumber &&
+                                        ep.episodeNumber === f.episodeNumber,
+                                    )
+                                  : null;
+
+                              let episodeStatusLabel: string | null = null;
+                              let episodeStatusClass = "";
+
+                              if (matchedEpisode) {
+                                if (matchedEpisode.hlsStatus === "hls_ready") {
+                                  episodeStatusLabel = "HLS pronto";
+                                  episodeStatusClass =
+                                    "border-emerald-700 text-emerald-300 bg-emerald-900/40";
+                                } else if (matchedEpisode.hlsStatus === "uploaded") {
+                                  episodeStatusLabel = "Upload feito";
+                                  episodeStatusClass =
+                                    "border-blue-700 text-blue-300 bg-blue-900/40";
+                                } else if (matchedEpisode.hlsStatus === "none") {
+                                  episodeStatusLabel = "Sem upload";
+                                  episodeStatusClass =
+                                    "border-zinc-700 text-zinc-300 bg-zinc-900/60";
+                                } else if (matchedEpisode.hlsStatus === "error") {
+                                  episodeStatusLabel = "Erro";
+                                  episodeStatusClass =
+                                    "border-red-700 text-red-300 bg-red-900/40";
+                                }
+                              }
+
+                              return (
+                                <div
+                                  key={f.id}
+                                  className="flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-lg border border-zinc-700 bg-zinc-900 p-4"
+                                >
+                                  <div className="flex-1">
+                                    <p className="font-semibold text-zinc-100">{f.file.name}</p>
+                                    <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                      <span>{formatBytes(f.file.size)}</span>
+                                      {hasEpisodeInfo ? (
+                                        <>
+                                          <span className="text-emerald-400">
+                                            • ✅ S{f.seasonNumber!.toString().padStart(2, "0")}E
+                                            {f.episodeNumber!.toString().padStart(2, "0")}
+                                          </span>
+                                          {episodeStatusLabel && (
+                                            <span
+                                              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] ${episodeStatusClass}`}
+                                            >
+                                              {episodeStatusLabel}
+                                            </span>
+                                          )}
+                                        </>
+                                      ) : f.status === "pending" ? (
+                                        <span className="text-yellow-400 animate-pulse">
+                                          • 🔍 Detectando...
+                                        </span>
+                                      ) : (
+                                        <span className="text-red-400">• ⚠️ Não detectado</span>
+                                      )}
+                                    {/* Botões sempre visíveis */}
+                                    {f.status !== "uploading" && f.status !== "completed" && (
+                                      <>
+                                        <button
+                                          onClick={() => fixWithAI(f)}
+                                          disabled={aiDetectingId === f.id}
+                                          className="text-purple-400 hover:text-purple-300 underline disabled:opacity-50"
+                                        >
+                                          {aiDetectingId === f.id ? "🤖 Detectando..." : "🤖 IA"}
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            const ep = prompt(
+                                              "Número do episódio:",
+                                              f.episodeNumber?.toString() || "1",
+                                            );
+                                            const season = prompt(
+                                              "Temporada:",
+                                              f.seasonNumber?.toString() || "1",
+                                            );
+                                            if (ep && season) {
+                                              updateEpisode(f.id, parseInt(season, 10), parseInt(ep, 10));
+                                            }
+                                          }}
+                                          className="text-blue-400 hover:text-blue-300 underline"
+                                        >
+                                          ✏️ Editar
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                  {f.status === "uploading" && (
+                                    <div className="mt-2 space-y-1">
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-zinc-400">
+                                          {f.uploadedBytes && formatBytes(f.uploadedBytes)} / {formatBytes(f.file.size)}
+                                        </span>
+                                        <span className="text-emerald-400 font-mono">
+                                          {f.uploadSpeed && formatSpeed(f.uploadSpeed)}
+                                        </span>
+                                      </div>
+                                      <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                                        <div
+                                          className="h-full bg-emerald-600 transition-all"
+                                          style={{ width: `${f.progress}%` }}
+                                        />
+                                      </div>
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-zinc-400">{f.progress}%</span>
+                                        <div className="flex items-center gap-2">
+                                          {typeof f.retryCount === "number" && f.retryCount > 1 && (
+                                            <span className="text-[10px] text-amber-400">
+                                              Tentativa {f.retryCount}/{MULTIPART_MAX_RETRIES}
+                                            </span>
+                                          )}
+                                          {f.estimatedTimeLeft && f.estimatedTimeLeft > 0 && (
+                                            <span className="text-zinc-500">
+                                              ~{formatTime(f.estimatedTimeLeft)} restante
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {f.status === "completed" && (
+                                    <p className="text-xs text-emerald-400 mt-1">✅ Upload concluído!</p>
+                                  )}
+                                  {f.status === "error" && (
+                                    <p className="text-xs text-red-400 mt-1">❌ {f.error}</p>
+                                  )}
+                                  {f.status === "cancelled" && (
+                                    <p className="text-xs text-zinc-400 mt-1">⏹ Upload cancelado.</p>
+                                  )}
+                                </div>
+                                {f.status === "pending" && (
+                                  <button
+                                    onClick={() => removeFile(f.id)}
+                                    className="text-red-400 hover:text-red-300"
+                                  >
+                                    🗑️
+                                  </button>
+                                )}
+                                {f.status === "uploading" && (
+                                  <button
+                                    onClick={() => handleCancelUpload(f.id)}
+                                    className="text-xs rounded-md border border-red-700 px-2 py-1 text-red-300 hover:bg-red-900/40"
+                                  >
+                                    ⏹ Cancelar
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
-                    )}
-                    {f.status === "completed" && (
-                      <p className="text-xs text-emerald-400 mt-1">✅ Upload concluído!</p>
-                    )}
-                    {f.status === "error" && (
-                      <p className="text-xs text-red-400 mt-1">❌ {f.error}</p>
-                    )}
-                  </div>
-                  {f.status === "pending" && (
-                    <button
-                      onClick={() => removeFile(f.id)}
-                      className="text-red-400 hover:text-red-300"
+                    );
+                  });
+                  })()
+                : uploadFiles.map((f) => (
+                    <div
+                      key={f.id}
+                      className="flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-lg border border-zinc-700 bg-zinc-900 p-4"
                     >
-                      🗑️
-                    </button>
-                  )}
-                </div>
-              ))}
+                      <div className="flex-1">
+                        <p className="font-semibold text-zinc-100">{f.file.name}</p>
+                        <div className="flex items-center gap-2 text-xs text-zinc-500">
+                          <span>{formatBytes(f.file.size)}</span>
+                          {f.seasonNumber && f.episodeNumber ? (
+                            <span className="text-emerald-400">
+                              • ✅ S{f.seasonNumber.toString().padStart(2, "0")}E
+                              {f.episodeNumber.toString().padStart(2, "0")}
+                            </span>
+                          ) : f.status === "pending" ? (
+                            <span className="text-yellow-400 animate-pulse">
+                              • 🔍 Detectando...
+                            </span>
+                          ) : (
+                            <span className="text-red-400">• ⚠️ Não detectado</span>
+                          )}
+                          {/* Botões sempre visíveis */}
+                          {f.status !== "uploading" && f.status !== "completed" && (
+                            <>
+                              <button
+                                onClick={() => fixWithAI(f)}
+                                disabled={aiDetectingId === f.id}
+                                className="text-purple-400 hover:text-purple-300 underline disabled:opacity-50"
+                              >
+                                {aiDetectingId === f.id ? "🤖 Detectando..." : "🤖 IA"}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const ep = prompt(
+                                    "Número do episódio:",
+                                    f.episodeNumber?.toString() || "1",
+                                  );
+                                  const season = prompt(
+                                    "Temporada:",
+                                    f.seasonNumber?.toString() || "1",
+                                  );
+                                  if (ep && season) {
+                                    updateEpisode(f.id, parseInt(season, 10), parseInt(ep, 10));
+                                  }
+                                }}
+                                className="text-blue-400 hover:text-blue-300 underline"
+                              >
+                                ✏️ Editar
+                              </button>
+                            </>
+                          )}
+                        </div>
+                        {f.status === "uploading" && (
+                          <div className="mt-2 space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-zinc-400">
+                                {f.uploadedBytes && formatBytes(f.uploadedBytes)} / {formatBytes(f.file.size)}
+                              </span>
+                              <span className="text-emerald-400 font-mono">
+                                {f.uploadSpeed && formatSpeed(f.uploadSpeed)}
+                              </span>
+                            </div>
+                            <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-emerald-600 transition-all"
+                                style={{ width: `${f.progress}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-zinc-400">{f.progress}%</span>
+                              <div className="flex items-center gap-2">
+                                {typeof f.retryCount === "number" && f.retryCount > 1 && (
+                                  <span className="text-[10px] text-amber-400">
+                                    Tentativa {f.retryCount}/{MULTIPART_MAX_RETRIES}
+                                  </span>
+                                )}
+                                {f.estimatedTimeLeft && f.estimatedTimeLeft > 0 && (
+                                  <span className="text-zinc-500">
+                                    ~{formatTime(f.estimatedTimeLeft)} restante
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {f.status === "completed" && (
+                          <p className="text-xs text-emerald-400 mt-1">✅ Upload concluído!</p>
+                        )}
+                        {f.status === "error" && (
+                          <p className="text-xs text-red-400 mt-1">❌ {f.error}</p>
+                        )}
+                        {f.status === "cancelled" && (
+                          <p className="text-xs text-zinc-400 mt-1">⏹ Upload cancelado.</p>
+                        )}
+                      </div>
+                      {f.status === "pending" && (
+                        <button
+                          onClick={() => removeFile(f.id)}
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          🗑️
+                        </button>
+                      )}
+                      {f.status === "uploading" && (
+                        <button
+                          onClick={() => handleCancelUpload(f.id)}
+                          className="text-xs rounded-md border border-red-700 px-2 py-1 text-red-300 hover:bg-red-900/40"
+                        >
+                          ⏹ Cancelar
+                        </button>
+                      )}
+                    </div>
+                  ))}
             </div>
           )}
 
@@ -1290,6 +2212,41 @@ export default function UploadV2Page() {
                 className="rounded"
               />
               Deletar arquivo original após transcodificação
+            </label>
+            <label className="flex items-center gap-2 text-sm text-zinc-300">
+              <input
+                type="checkbox"
+                checked={queueUploads}
+                onChange={(e) => setQueueUploads(e.target.checked)}
+                className="rounded"
+              />
+              Fazer upload em fila (1 arquivo por vez)
+            </label>
+            <label className="flex items-center gap-2 text-sm text-zinc-300">
+              <input
+                type="checkbox"
+                checked={notifyOnComplete}
+                onChange={async (e) => {
+                  const checked = e.target.checked;
+                  if (!checked) {
+                    setNotifyOnComplete(false);
+                    return;
+                  }
+
+                  const granted = await ensureNotificationPermission();
+                  if (!granted) {
+                    setNotifyOnComplete(false);
+                    setInfo(
+                      "Navegador não permitiu notificações de desktop. Verifique as permissões do site.",
+                    );
+                    return;
+                  }
+
+                  setNotifyOnComplete(true);
+                }}
+                className="rounded"
+              />
+              Notificar quando uploads/transcodificação iniciarem
             </label>
             <div className="flex items-center gap-4">
               <label className="text-sm text-zinc-300">CRF (qualidade):</label>

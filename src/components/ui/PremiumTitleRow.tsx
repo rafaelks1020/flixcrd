@@ -1,10 +1,12 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import PremiumTitleCard from "./PremiumTitleCard";
 
 interface Title {
   id: string;
+  href?: string;
   name: string;
   posterUrl: string | null;
   backdropUrl?: string | null;
@@ -27,10 +29,12 @@ export default function PremiumTitleRow({ title, titles, showNewBadge }: Premium
   const [canScrollRight, setCanScrollRight] = useState(false);
   const [isScrolling, setIsScrolling] = useState(false);
 
+  // Check scroll buttons visibility
   const checkScroll = () => {
     if (scrollRef.current) {
       const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
       setCanScrollLeft(scrollLeft > 10);
+      // Small buffer for float precision
       setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 10);
     }
   };
@@ -40,124 +44,59 @@ export default function PremiumTitleRow({ title, titles, showNewBadge }: Premium
     const scrollEl = scrollRef.current;
     if (scrollEl) {
       scrollEl.addEventListener('scroll', checkScroll);
-      return () => scrollEl.removeEventListener('scroll', checkScroll);
+      window.addEventListener('resize', checkScroll);
+      return () => {
+        scrollEl.removeEventListener('scroll', checkScroll);
+        window.removeEventListener('resize', checkScroll);
+      };
     }
   }, [titles]);
 
   const scroll = (direction: 'left' | 'right') => {
-    if (scrollRef.current && !isScrolling) {
+    if (scrollRef.current) {
       setIsScrolling(true);
-      const scrollAmount = direction === 'left' ? -1000 : 1000;
+      const { clientWidth } = scrollRef.current;
+      const scrollAmount = direction === 'left' ? -clientWidth * 0.8 : clientWidth * 0.8;
       scrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-      setTimeout(() => setIsScrolling(false), 600);
+      setTimeout(() => setIsScrolling(false), 500);
     }
   };
 
   if (!titles || titles.length === 0) return null;
 
   return (
-    <div style={{ marginBottom: '3rem', position: 'relative' }}>
-      {/* Title with Accent */}
-      <div style={{ paddingLeft: '3%', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div
-          style={{
-            width: '4px',
-            height: '28px',
-            background: 'linear-gradient(180deg, #dc2626 0%, #991b1b 100%)',
-            borderRadius: '2px',
-          }}
-        />
-        <h2
-          style={{
-            fontSize: '24px',
-            fontWeight: 'bold',
-            color: 'white',
-            letterSpacing: '-0.5px',
-            textShadow: '0 2px 10px rgba(0,0,0,0.5)',
-          }}
-        >
+    <div className="mb-12 relative group/row hover:z-[100] transition-all duration-300">
+      {/* Row Title */}
+      <div className="px-4 md:px-12 mb-4 flex items-center gap-3">
+        <div className="w-1 h-6 bg-primary rounded-full shadow-[0_0_10px_var(--primary)]" />
+        <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight drop-shadow-md group-hover/row:text-primary transition-colors duration-300">
           {title}
         </h2>
       </div>
 
-      {/* Scroll Container Wrapper */}
-      <div style={{ position: 'relative', paddingLeft: '3%', paddingRight: '3%' }}>
+      {/* Carousel Container */}
+      <div className="relative group/carousel">
         {/* Left Arrow */}
         {canScrollLeft && (
           <button
             onClick={() => scroll('left')}
-            style={{
-              position: 'absolute',
-              left: '0',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              zIndex: 10,
-              width: '50px',
-              height: '100%',
-              background: 'linear-gradient(to right, rgba(0,0,0,0.8) 0%, transparent 100%)',
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-start',
-              paddingLeft: '10px',
-              transition: 'all 0.3s ease',
-              opacity: isScrolling ? 0 : 1,
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.background = 'linear-gradient(to right, rgba(0,0,0,0.95) 0%, transparent 100%)';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.background = 'linear-gradient(to right, rgba(0,0,0,0.8) 0%, transparent 100%)';
-            }}
+            className="absolute left-0 top-0 bottom-0 z-20 w-12 md:w-16 bg-black/50 hover:bg-black/70 flex items-center justify-center text-white opacity-0 group-hover/carousel:opacity-100 transition-all duration-300 backdrop-blur-sm"
           >
-            <div
-              style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '50%',
-                background: 'rgba(255,255,255,0.1)',
-                backdropFilter: 'blur(10px)',
-                border: '2px solid rgba(255,255,255,0.2)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.2)';
-                e.currentTarget.style.transform = 'scale(1.1)';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.transform = 'scale(1)';
-              }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-            </div>
+            <ChevronLeft size={32} className="transform hover:scale-125 transition-transform" />
           </button>
         )}
 
-        {/* Titles Container */}
+        {/* Scrollable Area */}
         <div
           ref={scrollRef}
-          style={{
-            display: 'flex',
-            gap: '16px',
-            overflowX: 'auto',
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none',
-            WebkitOverflowScrolling: 'touch',
-            paddingTop: '10px',
-            paddingBottom: '20px',
-          }}
+          className="flex gap-4 md:gap-6 overflow-x-auto scrollbar-hide px-4 md:px-12 py-24 -my-20"
+          style={{ scrollBehavior: 'smooth' }}
         >
           {titles.map((item) => (
             <PremiumTitleCard
               key={item.id}
               id={item.id}
+              href={item.href}
               name={item.name}
               posterUrl={item.posterUrl}
               backdropUrl={item.backdropUrl}
@@ -175,57 +114,9 @@ export default function PremiumTitleRow({ title, titles, showNewBadge }: Premium
         {canScrollRight && (
           <button
             onClick={() => scroll('right')}
-            style={{
-              position: 'absolute',
-              right: '0',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              zIndex: 10,
-              width: '50px',
-              height: '100%',
-              background: 'linear-gradient(to left, rgba(0,0,0,0.8) 0%, transparent 100%)',
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              paddingRight: '10px',
-              transition: 'all 0.3s ease',
-              opacity: isScrolling ? 0 : 1,
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.background = 'linear-gradient(to left, rgba(0,0,0,0.95) 0%, transparent 100%)';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.background = 'linear-gradient(to left, rgba(0,0,0,0.8) 0%, transparent 100%)';
-            }}
+            className="absolute right-0 top-0 bottom-0 z-20 w-12 md:w-16 bg-black/50 hover:bg-black/70 flex items-center justify-center text-white opacity-0 group-hover/carousel:opacity-100 transition-all duration-300 backdrop-blur-sm"
           >
-            <div
-              style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '50%',
-                background: 'rgba(255,255,255,0.1)',
-                backdropFilter: 'blur(10px)',
-                border: '2px solid rgba(255,255,255,0.2)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.2)';
-                e.currentTarget.style.transform = 'scale(1.1)';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                e.currentTarget.style.transform = 'scale(1)';
-              }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                <path d="M9 18l6-6-6-6" />
-              </svg>
-            </div>
+            <ChevronRight size={32} className="transform hover:scale-125 transition-transform" />
           </button>
         )}
       </div>

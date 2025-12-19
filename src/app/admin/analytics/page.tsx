@@ -31,9 +31,16 @@ interface Stats {
   uploadsPerDay: { date: string; count: number }[];
 }
 
+interface PresenceStats {
+  onlineNow: { sessions: number; users: number };
+  time: { todaySeconds: number; windowDays: number; windowSeconds: number };
+  topUsers: Array<{ user: { id: string; email: string; name: string | null; role: string }; seconds: number }>;
+}
+
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState<"7d" | "30d" | "90d">("7d");
   const [stats, setStats] = useState<Stats | null>(null);
+  const [presence, setPresence] = useState<PresenceStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,14 +53,31 @@ export default function AnalyticsPage() {
         if (!res.ok) throw new Error("Erro ao carregar estatísticas");
         const data = await res.json();
         setStats(data);
+
+        const pRes = await fetch(`/api/admin/presence?windowDays=${encodeURIComponent(period === "7d" ? "7" : period === "30d" ? "30" : "90")}`);
+        if (pRes.ok) {
+          const p = await pRes.json();
+          setPresence(p);
+        } else {
+          setPresence(null);
+        }
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Erro desconhecido");
+        setPresence(null);
       } finally {
         setLoading(false);
       }
     }
     loadStats();
   }, [period]);
+
+  const formatDuration = (seconds: number) => {
+    const s = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(s / 3600);
+    const minutes = Math.floor((s % 3600) / 60);
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+  };
 
   const formatChange = (change: number) => {
     if (change > 0) return <span className="text-emerald-400">+{change}%</span>;
@@ -120,12 +144,30 @@ export default function AnalyticsPage() {
       {/* Cards de Resumo */}
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
+          <p className="text-[11px] uppercase text-zinc-500">Online agora</p>
+          <p className="mt-2 text-3xl font-semibold text-emerald-300">{presence?.onlineNow?.users ?? "—"}</p>
+          <p className="mt-1 text-xs text-zinc-500">{presence?.onlineNow?.sessions ?? "—"} sessões ativas</p>
+        </div>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
+          <p className="text-[11px] uppercase text-zinc-500">Tempo online hoje</p>
+          <p className="mt-2 text-3xl font-semibold text-blue-300">{presence ? formatDuration(presence.time.todaySeconds) : "—"}</p>
+          <p className="mt-1 text-xs text-zinc-500">Total agregado (todas as sessões)</p>
+        </div>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
+          <p className="text-[11px] uppercase text-zinc-500">Tempo online ({presence?.time?.windowDays ?? 0}d)</p>
+          <p className="mt-2 text-3xl font-semibold text-yellow-300">{presence ? formatDuration(presence.time.windowSeconds) : "—"}</p>
+          <p className="mt-1 text-xs text-zinc-500">Janela móvel</p>
+        </div>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
           <p className="text-[11px] uppercase text-zinc-500">Total de Títulos</p>
           <p className="mt-2 text-3xl font-semibold text-zinc-50">{stats.titlesCount}</p>
           <p className="mt-1 text-xs text-zinc-500">
             {stats.titlesWithHlsCount} com HLS pronto
           </p>
         </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
           <p className="text-[11px] uppercase text-zinc-500">Novos Títulos</p>
           <p className="mt-2 text-3xl font-semibold text-blue-300">{stats.titlesInPeriod}</p>
@@ -142,6 +184,25 @@ export default function AnalyticsPage() {
           <p className="mt-1 text-xs text-zinc-500">{stats.usersCount} usuários total</p>
         </div>
       </div>
+
+      {presence?.topUsers?.length ? (
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4">
+          <h3 className="text-sm font-semibold mb-3">🟢 Top usuários por tempo online ({presence.time.windowDays}d)</h3>
+          <div className="space-y-2">
+            {presence.topUsers.map((row) => (
+              <div key={row.user.id} className="flex items-center justify-between rounded-md border border-zinc-800 bg-zinc-900/50 p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-zinc-100 truncate">
+                    {row.user.name || row.user.email || row.user.id}
+                  </p>
+                  <p className="text-xs text-zinc-500">{row.user.role}</p>
+                </div>
+                <div className="text-sm font-semibold text-emerald-300">{formatDuration(row.seconds)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* Gráficos */}
       <div className="grid gap-4 md:grid-cols-2">

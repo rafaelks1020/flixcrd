@@ -1,5 +1,4 @@
 import { EmailStatus } from "@/types/email";
-import Mailjet from "node-mailjet";
 
 import { recordEmailLog, type EmailLogMeta } from "@/lib/email-log";
 
@@ -21,30 +20,27 @@ export type SendMailArgs = {
   context?: unknown;
 };
 
-const MAILJET_API_KEY = process.env.MAILJET_API_KEY;
-const MAILJET_SECRET_KEY = process.env.MAILJET_SECRET_KEY;
-const MAILJET_FROM_EMAIL = process.env.MAILJET_FROM_EMAIL;
-const MAILJET_FROM_NAME = process.env.MAILJET_FROM_NAME || "Pflix";
-
-let mailjetClient: ReturnType<typeof Mailjet.apiConnect> | null = null;
-
-function getClient() {
-  if (!mailjetClient) {
-    if (!MAILJET_API_KEY || !MAILJET_SECRET_KEY) {
-      throw new Error("MAILJET_API_KEY/MAILJET_SECRET_KEY não configurados");
-    }
-    mailjetClient = Mailjet.apiConnect(MAILJET_API_KEY, MAILJET_SECRET_KEY);
-  }
-  return mailjetClient;
-}
+const RESEND_API_KEY = process.env.RESEND_KEY;
+const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "no-reply@pflix.com.br";
+const RESEND_FROM_NAME = process.env.RESEND_FROM_NAME || "Pflix";
+const RESEND_API_URL = "https://api.resend.com/emails";
 
 function normalizeRecipients(to: Recipient | Recipient[]) {
   const list = Array.isArray(to) ? to : [to];
   return list.map((item) =>
     typeof item === "string"
-      ? { Email: item }
-      : { Email: item.email, Name: item.name },
+      ? { email: item }
+      : { email: item.email, name: item.name },
   );
+}
+
+function safeParseJson(text: string) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
 }
 
 export async function sendMail({
@@ -57,13 +53,15 @@ export async function sendMail({
   meta,
   context,
 }: SendMailArgs) {
-  const client = getClient();
+  if (!RESEND_API_KEY) {
+    throw new Error("RESEND_KEY não configurado");
+  }
 
-  const senderEmail = fromEmail || MAILJET_FROM_EMAIL;
-  const senderName = fromName || MAILJET_FROM_NAME;
+  const senderEmail = fromEmail || RESEND_FROM_EMAIL;
+  const senderName = fromName || RESEND_FROM_NAME;
 
   if (!senderEmail) {
-    throw new Error("MAILJET_FROM_EMAIL não configurado");
+    throw new Error("Remetente de email não configurado");
   }
 
   if (!text && !html) {
@@ -71,28 +69,55 @@ export async function sendMail({
   }
 
   const recipients = normalizeRecipients(to);
+  const toEmails = recipients.map((r) => r.email);
+  const toList = toEmails.join(", ");
 
-  const payload = {
-    Messages: [
-      {
-        From: {
-          Email: senderEmail,
-          Name: senderName,
-        },
-        To: recipients,
-        Subject: subject,
-        TextPart: text,
-        HTMLPart: html,
-      },
-    ],
-  };
+  const from = `${senderName} <${senderEmail}>`;
 
-  const toList = recipients.map((r) => r.Email).join(", ");
+  let providerResponse: unknown = undefined;
 
   try {
-    const res = await client.post("send", { version: "v3.1" }).request(payload);
+    const res = await fetch(RESEND_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: toEmails,
+        subject,
+        html,
+        text,
+      }),
+    });
 
-    // Registro de sucesso (não bloqueante)
+    const bodyText = await res.text();
+    providerResponse = safeParseJson(bodyText);
+
+    if (!res.ok) {
+      const message =
+        (providerResponse as any)?.message ||
+        (providerResponse as any)?.error ||
+        `Resend error ${res.status}`;
+
+      await recordEmailLog({
+        status: EmailStatus.ERROR,
+        to: toList,
+        subject,
+        fromEmail: senderEmail,
+        fromName: senderName,
+        meta,
+        context,
+        providerResponse,
+        errorMessage: String(message),
+      }).catch((logErr) => {
+        console.error("[EmailLog] Falha ao registrar erro de email:", logErr);
+      });
+
+      throw new Error(String(message));
+    }
+
     void recordEmailLog({
       status: EmailStatus.SUCCESS,
       to: toList,
@@ -101,16 +126,14 @@ export async function sendMail({
       fromName: senderName,
       meta,
       context,
-      providerResponse: res.body,
+      providerResponse,
     });
 
-    return res.body;
+    return providerResponse;
   } catch (err: any) {
     const errorMessage =
       err instanceof Error ? err.message : String(err ?? "Erro desconhecido");
-    const providerResponse = err?.response?.body ?? err;
 
-    // Registro de erro (tentativa melhor-esforço)
     await recordEmailLog({
       status: EmailStatus.ERROR,
       to: toList,

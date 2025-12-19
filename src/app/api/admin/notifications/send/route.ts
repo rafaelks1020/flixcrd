@@ -6,6 +6,7 @@ import {
   filterTokensByPreference,
   NotificationCategory,
   sendPushToTokens,
+  sendWebPushToAll,
 } from "@/lib/push";
 
 // POST - Envia notificação para dispositivos
@@ -57,17 +58,17 @@ export async function POST(request: NextRequest) {
 
     const filteredTokens = filterTokensByPreference(tokens, category);
 
-    if (filteredTokens.length === 0) {
-      return NextResponse.json({
-        success: true,
-        sent: 0,
-        failed: 0,
-        total: 0,
-        message: "Nenhum dispositivo encontrado",
-      });
-    }
+    const expoResult = filteredTokens.length
+      ? await sendPushToTokens(filteredTokens, {
+          title,
+          message,
+          data,
+          channelId,
+          category,
+        })
+      : { total: 0, sent: 0, failed: 0 };
 
-    const result = await sendPushToTokens(filteredTokens, {
+    const webResult = await sendWebPushToAll({
       title,
       message,
       data,
@@ -75,11 +76,33 @@ export async function POST(request: NextRequest) {
       category,
     });
 
+    if (expoResult.total + webResult.total === 0) {
+      return NextResponse.json({
+        success: true,
+        sent: 0,
+        failed: 0,
+        total: 0,
+        message: "Nenhum dispositivo encontrado",
+        sentExpo: 0,
+        failedExpo: 0,
+        totalExpo: 0,
+        sentWeb: 0,
+        failedWeb: 0,
+        totalWeb: 0,
+      });
+    }
+
     return NextResponse.json({
       success: true,
-      sent: result.sent,
-      failed: result.failed,
-      total: result.total,
+      sent: expoResult.sent + webResult.sent,
+      failed: expoResult.failed + webResult.failed,
+      total: expoResult.total + webResult.total,
+      sentExpo: expoResult.sent,
+      failedExpo: expoResult.failed,
+      totalExpo: expoResult.total,
+      sentWeb: webResult.sent,
+      failedWeb: webResult.failed,
+      totalWeb: webResult.total,
     });
   } catch (error) {
     console.error("Error sending notifications:", error);

@@ -1,8 +1,13 @@
 "use client";
 
-import { useState, useRef, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
+import { Play, Plus, Check, Info, Star, Clock, Calendar, ChevronLeft, ChevronRight, Youtube } from "lucide-react";
 import PremiumNavbar from "@/components/ui/PremiumNavbar";
+import PremiumTitleCard from "@/components/ui/PremiumTitleCard";
+import FavoriteButton from "./FavoriteButton";
+import { cn } from "@/lib/utils";
 
 interface TitleData {
   id: string;
@@ -54,6 +59,8 @@ interface SimilarTitle {
   name: string;
   posterUrl?: string | null;
   voteAverage?: number | null;
+  type?: string;
+  releaseDate?: string;
 }
 
 interface Video {
@@ -89,17 +96,23 @@ export default function TitleDetailClient({
   isLoggedIn,
   isAdmin,
 }: TitleDetailClientProps) {
-  const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
   const [selectedSeason, setSelectedSeason] = useState(seasons[0]?.seasonNumber || 1);
+  const [isScrolled, setIsScrolled] = useState(false);
 
   const castRowRef = useRef<HTMLDivElement | null>(null);
   const similarRowRef = useRef<HTMLDivElement | null>(null);
   const videosRowRef = useRef<HTMLDivElement | null>(null);
 
+  useEffect(() => {
+    const handleScroll = () => setIsScrolled(window.scrollY > 50);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
   const scrollRow = (ref: RefObject<HTMLDivElement | null>, direction: "left" | "right") => {
     const container = ref.current;
     if (!container) return;
-    const delta = direction === "left" ? -360 : 360;
+    const delta = direction === "left" ? -container.offsetWidth * 0.8 : container.offsetWidth * 0.8;
     container.scrollBy({ left: delta, behavior: "smooth" });
   };
 
@@ -110,458 +123,301 @@ export default function TitleDetailClient({
   const currentSeason = seasons.find((s) => s.seasonNumber === selectedSeason);
   const episodes = currentSeason?.episodes || [];
 
-  const handleAddFavorite = async () => {
-    // Toggle favorite logic here
-    setIsFavorite(!isFavorite);
-  };
-
   return (
-    <div style={{ minHeight: '100vh', background: '#000', color: '#fff' }}>
+    <div
+      className="min-h-screen bg-black text-white selection:bg-primary/30"
+      style={{ "--spotlight-color": "rgba(229, 9, 20, 0.25)" } as any}
+    >
       <PremiumNavbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
 
       {/* Hero Section */}
-      <div style={{ position: 'relative', minHeight: '70vh' }}>
-        {/* Background */}
-        {title.backdropUrl && (
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              backgroundImage: `url(${title.backdropUrl})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center top',
-            }}
-          />
-        )}
-        
-        {/* Gradients */}
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to right, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0.3) 100%)' }} />
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #000 0%, transparent 50%)' }} />
-
-        {/* Content */}
-        <div style={{ position: 'relative', zIndex: 10, display: 'flex', alignItems: 'flex-end', minHeight: '70vh', padding: '0 4%', paddingBottom: '60px', paddingTop: '100px', gap: '40px' }}>
-          {/* Poster */}
-          <div style={{ flexShrink: 0, width: '280px', display: 'none' }} className="md-show">
-            {title.posterUrl ? (
-              <img
-                src={title.posterUrl}
-                alt={title.name}
-                style={{ width: '100%', borderRadius: '8px', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}
+      <section className="relative w-full h-[85vh] md:h-[95vh] min-h-[600px] overflow-hidden group">
+        {/* Backdrop Background */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={title.backdropUrl}
+            initial={{ scale: 1.1, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 1.5 }}
+            className="absolute inset-0"
+          >
+            {title.backdropUrl ? (
+              <div
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-transform duration-[20s] ease-linear group-hover:scale-110"
+                style={{ backgroundImage: `url(${title.backdropUrl})` }}
               />
             ) : (
-              <div style={{ aspectRatio: '2/3', background: '#1a1a1a', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '48px' }}>🎬</div>
-            )}
-          </div>
-
-          {/* Info */}
-          <div style={{ flex: 1, maxWidth: '700px' }}>
-            <h1 style={{ fontSize: 'clamp(2rem, 4vw, 3.5rem)', fontWeight: 800, marginBottom: '12px', lineHeight: 1.1 }}>
-              {title.name}
-              {year && <span style={{ color: 'rgba(255,255,255,0.6)', fontWeight: 400 }}> ({year})</span>}
-            </h1>
-
-            {title.originalName && title.originalName !== title.name && (
-              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '14px', marginBottom: '16px' }}>{title.originalName}</p>
+              <div className="absolute inset-0 bg-zinc-900" />
             )}
 
-            {/* Meta */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px', flexWrap: 'wrap' }}>
-              {rating && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.1)', padding: '6px 12px', borderRadius: '4px' }}>
-                  <span style={{ color: '#ffd700', fontSize: '16px' }}>★</span>
-                  <span style={{ fontWeight: 600 }}>{rating}</span>
-                </div>
-              )}
-              <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                {title.type === 'MOVIE' ? 'Filme' : title.type === 'SERIES' ? 'Série' : title.type === 'ANIME' ? 'Anime' : title.type}
-              </span>
-              {title.runtime && (
-                <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '14px' }}>
-                  {Math.floor(title.runtime / 60)}h {title.runtime % 60}min
+            {/* Cinematic Gradients */}
+            <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/30" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-60" />
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Hero Content */}
+        <div className="relative z-10 flex h-full items-end px-4 md:px-16 pt-32 md:pt-40 pb-16 md:pb-24 max-w-[1400px] mx-auto">
+          <div className="w-full lg:max-w-4xl">
+            <motion.div
+              initial={{ y: 30, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.2, duration: 0.8 }}
+              className="space-y-6"
+            >
+              {/* Title */}
+              <div>
+                <h1 className="text-4xl md:text-7xl font-black tracking-tighter leading-tight mb-2 drop-shadow-2xl">
+                  {title.name}
+                </h1>
+                {title.originalName && title.originalName !== title.name && (
+                  <p className="text-lg md:text-xl text-zinc-400 font-medium tracking-tight opacity-70 italic">
+                    {title.originalName}
+                  </p>
+                )}
+              </div>
+
+              {/* Meta Row */}
+              <div className="flex flex-wrap items-center gap-4 text-sm md:text-base font-bold text-zinc-300 drop-shadow-md">
+                {rating && (
+                  <div className="flex items-center gap-1.5 text-green-500 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/5">
+                    <Star size={16} fill="currentColor" />
+                    <span>{rating}</span>
+                  </div>
+                )}
+                {year && (
+                  <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/5">
+                    <Calendar size={16} />
+                    <span>{year}</span>
+                  </div>
+                )}
+                {title.runtime && (
+                  <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/5">
+                    <Clock size={16} />
+                    <span>{Math.floor(title.runtime / 60)}h {title.runtime % 60}m</span>
+                  </div>
+                )}
+                <span className="uppercase tracking-widest text-primary font-black px-3 py-1 bg-primary/10 rounded-full border border-primary/20">
+                  {title.type === 'MOVIE' ? 'Filme' : title.type === 'SERIES' ? 'Série' : title.type}
                 </span>
-              )}
-            </div>
+              </div>
 
-            {/* Genres */}
-            {genres.length > 0 && (
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+              {/* Genres */}
+              <div className="flex flex-wrap gap-2">
                 {genres.map((genre, i) => (
-                  <span key={i} style={{ background: 'rgba(255,255,255,0.1)', padding: '6px 14px', borderRadius: '20px', fontSize: '13px' }}>
+                  <span key={i} className="bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/10 px-4 py-1.5 rounded-full text-xs md:text-sm font-bold transition-colors cursor-default">
                     {genre}
                   </span>
                 ))}
               </div>
-            )}
 
-            {/* Overview */}
-            {title.overview && (
-              <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '16px', lineHeight: 1.7, marginBottom: '28px', maxWidth: '600px' }}>
+              {/* Overview */}
+              <p className="text-lg text-zinc-300/90 leading-relaxed max-w-2xl drop-shadow-md font-medium line-clamp-3 md:line-clamp-none">
                 {title.overview}
               </p>
-            )}
 
-            {/* Buttons */}
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-              <Link
-                href={isSeries && seasons[0]?.episodes?.[0] ? `/watch/${title.id}?episodeId=${seasons[0].episodes[0].id}` : `/watch/${title.id}`}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', padding: '16px 36px', background: '#fff', borderRadius: '4px', color: '#000', fontSize: '16px', fontWeight: 700, textDecoration: 'none', transition: 'transform 0.2s' }}
-                onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-              >
-                <svg style={{ width: '24px', height: '24px' }} fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                Assistir
-              </Link>
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-4 pt-4">
+                <Link
+                  href={isSeries && episodes[0] ? `/watch/${title.id}?episodeId=${episodes[0].id}` : `/watch/${title.id}`}
+                  className="flex items-center gap-3 bg-white text-black px-8 py-4 rounded-xl font-black text-lg hover:bg-zinc-200 transition-all transform hover:scale-105 active:scale-95 shadow-xl"
+                >
+                  <Play size={24} fill="currentColor" />
+                  Assistir Agora
+                </Link>
 
-              <button
-                onClick={handleAddFavorite}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '52px', height: '52px', background: 'rgba(42, 42, 42, 0.6)', border: `2px solid ${isFavorite ? '#fff' : 'rgba(255,255,255,0.5)'}`, borderRadius: '50%', color: '#fff', cursor: 'pointer', transition: 'all 0.2s' }}
-                onMouseOver={(e) => e.currentTarget.style.borderColor = '#fff'}
-                onMouseOut={(e) => e.currentTarget.style.borderColor = isFavorite ? '#fff' : 'rgba(255,255,255,0.5)'}
-              >
-                {isFavorite ? (
-                  <svg style={{ width: '24px', height: '24px' }} fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-                ) : (
-                  <svg style={{ width: '24px', height: '24px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                )}
-              </button>
-            </div>
+                <FavoriteButton titleId={title.id} initialIsFavorite={initialIsFavorite} />
+
+                <button className="flex items-center justify-center w-[58px] h-[58px] rounded-xl bg-black/40 border-2 border-zinc-500/50 text-white hover:border-white hover:bg-black/60 transition-all transform hover:scale-105 active:scale-95 shadow-xl backdrop-blur-md">
+                  <Info size={28} />
+                </button>
+              </div>
+            </motion.div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Content Sections */}
-      <div style={{ padding: '40px 4%' }}>
-        {/* Episodes */}
+      {/* Content Space Container */}
+      <div className="max-w-[1400px] mx-auto px-4 md:px-16 -mt-10 relative z-20 pb-40 space-y-24">
+
+        {/* Episodes Section */}
         {isSeries && seasons.length > 0 && (
-          <section style={{ marginBottom: '60px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '24px' }}>
-              <h2 style={{ fontSize: '24px', fontWeight: 700 }}>Episódios</h2>
-              <select
-                value={selectedSeason}
-                onChange={(e) => setSelectedSeason(Number(e.target.value))}
-                style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '4px', padding: '8px 16px', color: '#fff', fontSize: '14px', cursor: 'pointer' }}
-              >
-                {seasons.map((s) => (
-                  <option key={s.seasonNumber} value={s.seasonNumber}>Temporada {s.seasonNumber}</option>
-                ))}
-              </select>
+          <motion.section
+            initial={{ y: 40, opacity: 0 }}
+            whileInView={{ y: 0, opacity: 1 }}
+            viewport={{ once: true }}
+            className="space-y-8"
+          >
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-white/5 pb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-1.5 h-8 bg-primary rounded-full" />
+                <h2 className="text-3xl font-black tracking-tight underline-offset-8 decoration-primary/40 decoration-4">Episódios</h2>
+              </div>
+
+              <div className="relative min-w-[200px]">
+                <select
+                  value={selectedSeason}
+                  onChange={(e) => setSelectedSeason(Number(e.target.value))}
+                  className="w-full bg-zinc-900/80 border border-white/10 rounded-xl py-3 px-5 text-sm font-black text-white focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all appearance-none cursor-pointer backdrop-blur-lg hover:bg-zinc-800"
+                >
+                  {seasons.map((s) => (
+                    <option key={s.seasonNumber} value={s.seasonNumber}>Temporada {s.seasonNumber}</option>
+                  ))}
+                </select>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
+                  {/* Custom arrow icon here if needed */}
+                </div>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {episodes.map((ep) => (
+            <div className="grid grid-cols-1 gap-4">
+              {episodes.map((ep, idx) => (
                 <Link
                   key={ep.id}
                   href={`/watch/${title.id}?episodeId=${ep.id}`}
-                  style={{ display: 'flex', gap: '16px', background: '#141414', borderRadius: '4px', overflow: 'hidden', textDecoration: 'none', color: '#fff', transition: 'background 0.2s' }}
-                  onMouseOver={(e) => e.currentTarget.style.background = '#1a1a1a'}
-                  onMouseOut={(e) => e.currentTarget.style.background = '#141414'}
+                  className="group flex flex-col md:flex-row gap-6 bg-zinc-900/30 hover:bg-zinc-900/80 border border-white/5 p-4 rounded-2xl transition-all duration-300 hover:shadow-2xl hover:border-white/10"
                 >
-                  <div style={{ width: '180px', flexShrink: 0, position: 'relative' }}>
-                    <div style={{ paddingBottom: '56.25%', background: '#0a0a0a' }}>
-                      {ep.stillPath && (
-                        <img src={ep.stillPath} alt={ep.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <div className="relative w-full md:w-72 flex-shrink-0 aspect-video rounded-xl overflow-hidden shadow-lg border border-white/5">
+                    {ep.stillPath ? (
+                      <img src={ep.stillPath} alt={ep.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                    ) : (
+                      <div className="w-full h-full bg-zinc-800 flex items-center justify-center text-zinc-600 text-4xl">🎬</div>
+                    )}
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
+                      <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center text-black shadow-2xl transform scale-75 group-hover:scale-100 transition-transform duration-300">
+                        <Play size={24} fill="currentColor" />
+                      </div>
+                    </div>
+                    <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded text-[10px] font-black border border-white/10">
+                      EP {ep.episodeNumber}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col justify-center flex-1 space-y-3 py-2">
+                    <div className="flex items-center justify-between gap-4">
+                      <h3 className="text-xl font-black tracking-tight group-hover:text-primary transition-colors">
+                        {ep.episodeNumber}. {ep.name}
+                      </h3>
+                      {ep.runtime && (
+                        <span className="text-sm font-bold text-zinc-500 flex items-center gap-1.5 whitespace-nowrap">
+                          <Clock size={14} />
+                          {ep.runtime} min
+                        </span>
                       )}
                     </div>
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <svg style={{ width: '16px', height: '16px', marginLeft: '2px' }} fill="#fff" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ padding: '16px', flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                      <span style={{ fontWeight: 600 }}>{ep.episodeNumber}. {ep.name}</span>
-                      {ep.runtime && <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px' }}>{ep.runtime}min</span>}
-                    </div>
-                    {ep.overview && (
-                      <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '14px', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                        {ep.overview}
-                      </p>
-                    )}
+                    <p className="text-zinc-400 text-sm leading-relaxed line-clamp-2 md:line-clamp-none font-medium">
+                      {ep.overview || "Nenhuma descrição disponível para este episódio."}
+                    </p>
                   </div>
                 </Link>
               ))}
             </div>
-          </section>
+          </motion.section>
         )}
 
-        {/* Cast */}
-        {cast.length > 0 && (
-          <section style={{ marginBottom: '60px' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>Elenco</h2>
-            <div style={{ position: 'relative' }}>
-              {cast.length > 6 && (
-                <button
-                  type="button"
-                  onClick={() => scrollRow(castRowRef, "left")}
-                  style={{
-                    position: 'absolute',
-                    left: 0,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    zIndex: 20,
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '999px',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'radial-gradient(circle at 30% 50%, rgba(255,255,255,0.35), rgba(0,0,0,0.95))',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                    <path d="M15 18l-6-6 6-6" />
-                  </svg>
+        {/* Similar Titles Grid */}
+        {similarTitles.length > 0 && (
+          <section className="space-y-8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-1.5 h-8 bg-primary rounded-full" />
+                <h2 className="text-3xl font-black tracking-tight">Títulos Semelhantes</h2>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => scrollRow(similarRowRef, 'left')} className="p-2 rounded-full border border-white/10 bg-zinc-900/50 hover:bg-zinc-800 transition-colors">
+                  <ChevronLeft size={24} />
                 </button>
-              )}
-              {cast.length > 6 && (
-                <button
-                  type="button"
-                  onClick={() => scrollRow(castRowRef, "right")}
-                  style={{
-                    position: 'absolute',
-                    right: 0,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    zIndex: 20,
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '999px',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'radial-gradient(circle at 70% 50%, rgba(255,255,255,0.35), rgba(0,0,0,0.95))',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                    <path d="M9 6l6 6-6 6" />
-                  </svg>
+                <button onClick={() => scrollRow(similarRowRef, 'right')} className="p-2 rounded-full border border-white/10 bg-zinc-900/50 hover:bg-zinc-800 transition-colors">
+                  <ChevronRight size={24} />
                 </button>
-              )}
-              <div
-                ref={castRowRef}
-                className="scrollbar-hide"
-                style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '16px', scrollBehavior: 'smooth' }}
-              >
-              {cast.slice(0, 12).map((person) => (
-                <div key={person.id} style={{ flexShrink: 0, width: '140px', textAlign: 'center' }}>
-                  <div style={{ width: '140px', height: '140px', borderRadius: '50%', overflow: 'hidden', marginBottom: '12px', background: '#1a1a1a' }}>
-                    {person.profilePath ? (
-                      <img src={person.profilePath} alt={person.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '48px', color: '#333' }}>👤</div>
-                    )}
-                  </div>
-                  <p style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{person.name}</p>
-                  {person.character && <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px' }}>{person.character}</p>}
+              </div>
+            </div>
+
+            <div
+              ref={similarRowRef}
+              className="flex gap-4 md:gap-6 overflow-x-auto scrollbar-hide pb-4 snap-x"
+            >
+              {similarTitles.map((item) => (
+                <div key={item.id} className="w-36 md:w-56 flex-shrink-0 snap-start">
+                  <PremiumTitleCard
+                    id={item.id}
+                    name={item.name}
+                    posterUrl={item.posterUrl || null}
+                    type={item.type || 'MOVIE'}
+                    rating={item.voteAverage || undefined}
+                    year={item.releaseDate ? new Date(item.releaseDate).getFullYear() : undefined}
+                  />
                 </div>
               ))}
-              </div>
             </div>
           </section>
         )}
 
-        {/* Similar Titles */}
-        {similarTitles.length > 0 && (
-          <section style={{ marginBottom: '60px' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>Títulos Semelhantes</h2>
-            <div style={{ position: 'relative' }}>
-              {similarTitles.length > 6 && (
-                <button
-                  type="button"
-                  onClick={() => scrollRow(similarRowRef, "left")}
-                  style={{
-                    position: 'absolute',
-                    left: 0,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    zIndex: 20,
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '999px',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'radial-gradient(circle at 30% 50%, rgba(255,255,255,0.35), rgba(0,0,0,0.95))',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                    <path d="M15 18l-6-6 6-6" />
-                  </svg>
-                </button>
-              )}
-              {similarTitles.length > 6 && (
-                <button
-                  type="button"
-                  onClick={() => scrollRow(similarRowRef, "right")}
-                  style={{
-                    position: 'absolute',
-                    right: 0,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    zIndex: 20,
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '999px',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'radial-gradient(circle at 70% 50%, rgba(255,255,255,0.35), rgba(0,0,0,0.95))',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                    <path d="M9 6l6 6-6 6" />
-                  </svg>
-                </button>
-              )}
-              <div
-                ref={similarRowRef}
-                className="scrollbar-hide"
-                style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '16px', scrollBehavior: 'smooth' }}
-              >
-              {similarTitles.map((item) => (
-                <Link
-                  key={item.id}
-                  href={`/title/${item.id}`}
-                  style={{ flexShrink: 0, width: '200px', borderRadius: '4px', overflow: 'hidden', background: '#141414', textDecoration: 'none', color: '#fff', transition: 'transform 0.2s' }}
-                  onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                  onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                >
-                  {item.posterUrl ? (
-                    <img src={item.posterUrl} alt={item.name} style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover' }} />
-                  ) : (
-                    <div style={{ width: '100%', aspectRatio: '2/3', background: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px' }}>🎬</div>
-                  )}
-                </Link>
+        {/* Cast Section */}
+        {cast.length > 0 && (
+          <section className="space-y-10">
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-8 bg-primary rounded-full" />
+              <h2 className="text-3xl font-black tracking-tight">Principais Atores</h2>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-8">
+              {cast.slice(0, 12).map((person) => (
+                <div key={person.id} className="group flex flex-col items-center text-center space-y-4">
+                  <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden border-2 border-white/5 transition-all duration-500 group-hover:border-primary group-hover:shadow-[0_0_20px_rgba(229,9,20,0.3)] transform group-hover:scale-105">
+                    {person.profilePath ? (
+                      <img src={person.profilePath} alt={person.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                    ) : (
+                      <div className="w-full h-full bg-zinc-900 flex items-center justify-center text-4xl text-zinc-700">👤</div>
+                    )}
+                    <div className="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  <div>
+                    <p className="font-black tracking-tight text-white group-hover:text-primary transition-colors">{person.name}</p>
+                    <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mt-1 line-clamp-1">{person.character}</p>
+                  </div>
+                </div>
               ))}
-              </div>
             </div>
           </section>
         )}
 
-        {/* Trailers */}
-        {videos.length > 0 && (
-          <section style={{ marginBottom: '60px' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>Trailers e Vídeos</h2>
-            <div style={{ position: 'relative' }}>
-              {videos.filter((v) => v.site === 'YouTube').length > 2 && (
-                <button
-                  type="button"
-                  onClick={() => scrollRow(videosRowRef, "left")}
-                  style={{
-                    position: 'absolute',
-                    left: 0,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    zIndex: 20,
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '999px',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'radial-gradient(circle at 30% 50%, rgba(255,255,255,0.35), rgba(0,0,0,0.95))',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                    <path d="M15 18l-6-6 6-6" />
-                  </svg>
-                </button>
-              )}
-              {videos.filter((v) => v.site === 'YouTube').length > 2 && (
-                <button
-                  type="button"
-                  onClick={() => scrollRow(videosRowRef, "right")}
-                  style={{
-                    position: 'absolute',
-                    right: 0,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    zIndex: 20,
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '999px',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'radial-gradient(circle at 70% 50%, rgba(255,255,255,0.35), rgba(0,0,0,0.95))',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                    <path d="M9 6l6 6-6 6" />
-                  </svg>
-                </button>
-              )}
-              <div
-                ref={videosRowRef}
-                className="scrollbar-hide"
-                style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '16px', scrollBehavior: 'smooth' }}
-              >
-                {videos
-                  .filter((v) => v.site === 'YouTube')
-                  .slice(0, 6)
-                  .map((video) => (
-                    <div
-                      key={video.id}
-                      style={{
-                        flexShrink: 0,
-                        width: '360px',
-                        borderRadius: '8px',
-                        overflow: 'hidden',
-                        background: '#141414',
-                      }}
-                    >
-                      <div
-                        style={{
-                          position: 'relative',
-                          paddingBottom: '56.25%',
-                          background: '#000',
-                        }}
-                      >
-                        <iframe
-                          src={`https://www.youtube.com/embed/${video.key}`}
-                          title={video.name}
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                          allowFullScreen
-                          style={{
-                            position: 'absolute',
-                            inset: 0,
-                            width: '100%',
-                            height: '100%',
-                            border: '0',
-                          }}
-                        />
-                      </div>
-                      <div style={{ padding: '12px' }}>
-                        <p style={{ fontWeight: 600, fontSize: '14px' }}>{video.name}</p>
-                        <p
-                          style={{
-                            color: 'rgba(255,255,255,0.5)',
-                            fontSize: '12px',
-                            marginTop: '4px',
-                          }}
-                        >
-                          {video.type}
-                        </p>
-                      </div>
+        {/* Videos Section */}
+        {videos.some(v => v.site === 'YouTube') && (
+          <section className="space-y-8">
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-8 bg-primary rounded-full" />
+              <h2 className="text-3xl font-black tracking-tight">Trailers e Vídeos</h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {videos.filter(v => v.site === 'YouTube').slice(0, 6).map((video) => (
+                <div key={video.id} className="group bg-zinc-900/40 rounded-3xl overflow-hidden border border-white/5 hover:border-white/10 transition-all duration-300 hover:shadow-2xl">
+                  <div className="aspect-video relative">
+                    <iframe
+                      src={`https://www.youtube.com/embed/${video.key}?rel=0&modestbranding=1&textcolor=white`}
+                      title={video.name}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                      className="w-full h-full border-0"
+                    />
+                  </div>
+                  <div className="p-6 space-y-2">
+                    <div className="flex items-center gap-2 text-primary">
+                      <Youtube size={16} />
+                      <span className="text-[10px] font-black uppercase tracking-widest">{video.type}</span>
                     </div>
-                  ))}
-              </div>
+                    <h4 className="font-black tracking-tight text-zinc-100 group-hover:text-white transition-colors line-clamp-1">
+                      {video.name}
+                    </h4>
+                  </div>
+                </div>
+              ))}
             </div>
           </section>
         )}
+
       </div>
     </div>
   );

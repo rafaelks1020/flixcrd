@@ -1,3 +1,5 @@
+import { randomUUID } from "crypto";
+
 import { EmailStatus } from "@/types/email";
 
 import { prisma } from "@/lib/prisma";
@@ -58,6 +60,7 @@ export async function recordEmailLog({
   try {
     await prisma.emailLog.create({
       data: {
+        id: randomUUID(),
         status,
         to,
         subject,
@@ -71,10 +74,12 @@ export async function recordEmailLog({
         }),
         providerResponse: serializeForJson(providerResponse),
         errorMessage,
+        updatedAt: new Date(),
       },
     });
   } catch (err) {
     console.error("[EmailLog] Falha ao registrar log:", err);
   }
 }
+
 

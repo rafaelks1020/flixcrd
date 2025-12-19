@@ -1,6 +1,6 @@
 {
   "name": "flixcrd-web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -17,20 +17,26 @@
     "@types/jsonwebtoken": "^9.0.10",
     "bcryptjs": "^3.0.3",
     "bootstrap": "^5.3.8",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.23.26",
     "hls.js": "^1.5.0",
     "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^0.562.0",
     "next": "16.0.7",
     "next-auth": "^4.24.13",
     "node-mailjet": "^5.1.1",
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "react-hot-toast": "^2.6.0",
-    "recharts": "^3.5.1"
+    "recharts": "^3.5.1",
+    "tailwind-merge": "^3.4.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^19",
+    "@types/node": "^20.19.27",
+    "@types/react": "^19.2.7",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.3",
     "autoprefixer": "^10.4.22",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",

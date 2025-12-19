@@ -69,8 +69,16 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("GET /api/admin/email-logs error", error);
+
+    const message = error instanceof Error ? error.message : String(error);
+    const code = (error as any)?.code ?? null;
+
     return NextResponse.json(
-      { error: "Erro ao carregar logs de email." },
+      {
+        error: "Erro ao carregar logs de email.",
+        details: message,
+        code,
+      },
       { status: 500 },
     );
   }

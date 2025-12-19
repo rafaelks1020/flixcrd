@@ -53,6 +53,7 @@ export async function PUT(request: NextRequest) {
       maxUploadSize,
       transcoderCrf,
       deleteSourceAfterTranscode,
+      labEnabled,
     } = body as {
       siteName?: string;
       siteDescription?: string;
@@ -61,6 +62,7 @@ export async function PUT(request: NextRequest) {
       maxUploadSize?: number;
       transcoderCrf?: number;
       deleteSourceAfterTranscode?: boolean;
+      labEnabled?: boolean;
     };
 
     const current = await getSettings();
@@ -74,6 +76,7 @@ export async function PUT(request: NextRequest) {
     if (typeof maxUploadSize === "number" && !Number.isNaN(maxUploadSize)) data.maxUploadSize = maxUploadSize;
     if (typeof transcoderCrf === "number" && !Number.isNaN(transcoderCrf)) data.transcoderCrf = transcoderCrf;
     if (typeof deleteSourceAfterTranscode === "boolean") data.deleteSourceAfterTranscode = deleteSourceAfterTranscode;
+    if (typeof labEnabled === "boolean") data.labEnabled = labEnabled;
 
     const updated = await prisma.settings.update({
       where: { id: current.id },

@@ -11,6 +11,18 @@ interface SettingsState {
   maxUploadSize: number;
   transcoderCrf: number;
   deleteSourceAfterTranscode: boolean;
+  labEnabled: boolean;
+}
+
+
+interface VersionInfo {
+  name?: string;
+  version?: string;
+  commitSha?: string | null;
+  commitRef?: string | null;
+  deploymentId?: string | null;
+  region?: string | null;
+  serverTime?: string;
 }
 
 export default function SettingsPage() {
@@ -22,10 +34,14 @@ export default function SettingsPage() {
     maxUploadSize: 10,
     transcoderCrf: 20,
     deleteSourceAfterTranscode: true,
+    labEnabled: false,
   });
 
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
+  const [versionError, setVersionError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadSettings() {
@@ -48,6 +64,7 @@ export default function SettingsPage() {
               ? data.deleteSourceAfterTranscode
               : true,
           ),
+          labEnabled: Boolean(data.labEnabled),
         });
       } catch (error) {
         console.error("Erro ao carregar configurações", error);
@@ -57,7 +74,23 @@ export default function SettingsPage() {
       }
     }
 
+    async function loadVersion() {
+      try {
+        setVersionError(null);
+        const res = await fetch("/api/version", { cache: "no-store" });
+        if (!res.ok) {
+          throw new Error("Erro ao carregar versão");
+        }
+        const data = await res.json();
+        setVersionInfo(data);
+      } catch (error) {
+        console.error("Erro ao carregar versão", error);
+        setVersionError("Erro ao carregar versão");
+      }
+    }
+
     loadSettings();
+    loadVersion();
   }, []);
 
   async function handleSave() {
@@ -83,6 +116,7 @@ export default function SettingsPage() {
         maxUploadSize: data.maxUploadSize,
         transcoderCrf: data.transcoderCrf,
         deleteSourceAfterTranscode: data.deleteSourceAfterTranscode,
+        labEnabled: data.labEnabled,
       });
 
       toast.success("✅ Configurações salvas!");
@@ -110,7 +144,7 @@ export default function SettingsPage() {
       {/* Geral */}
       <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 space-y-4">
         <h3 className="text-sm font-semibold">🌐 Geral</h3>
-        
+
         <div className="space-y-2">
           <label className="block text-xs text-zinc-300">Nome do Site</label>
           <input
@@ -155,7 +189,7 @@ export default function SettingsPage() {
       {/* Upload */}
       <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 space-y-4">
         <h3 className="text-sm font-semibold">📤 Upload</h3>
-        
+
         <div className="space-y-2">
           <label className="block text-xs text-zinc-300">Tamanho Máximo (GB)</label>
           <input
@@ -173,7 +207,7 @@ export default function SettingsPage() {
       {/* Transcodificação */}
       <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 space-y-4">
         <h3 className="text-sm font-semibold">🎬 Transcodificação</h3>
-        
+
         <div className="space-y-2">
           <label className="block text-xs text-zinc-300">CRF Padrão (Qualidade)</label>
           <div className="flex items-center gap-4">
@@ -199,6 +233,50 @@ export default function SettingsPage() {
           />
           <label className="text-sm text-zinc-300">Deletar arquivo original após transcodificação</label>
         </div>
+      </div>
+
+      {/* Lab Integration */}
+      <div className="rounded-lg border border-purple-500/20 bg-purple-900/10 p-4 space-y-4">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          🧪 Lab Integration <span className="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">BETA</span>
+        </h3>
+
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={settings.labEnabled}
+            onChange={(e) => setSettings({ ...settings, labEnabled: e.target.checked })}
+            className="h-4 w-4 accent-purple-500"
+          />
+          <div className="flex flex-col">
+            <label className="text-sm text-zinc-300">Habilitar Modo Lab (Superflix API)</label>
+            <span className="text-xs text-zinc-500">Quando ativo, o sistema usará a API do Lab como fonte principal de títulos.</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Versão */}
+      <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 space-y-3">
+        <h3 className="text-sm font-semibold">🏷️ Versão do Sistema</h3>
+
+        {versionError ? (
+          <div className="text-sm text-zinc-400">{versionError}</div>
+        ) : !versionInfo ? (
+          <div className="text-sm text-zinc-400">Carregando versão...</div>
+        ) : (
+          <div className="space-y-1 text-sm text-zinc-300">
+            <div>
+              <span className="text-zinc-400">Versão:</span> {versionInfo.version || "-"}
+            </div>
+            <div>
+              <span className="text-zinc-400">Commit:</span> {versionInfo.commitSha ? versionInfo.commitSha.slice(0, 7) : "-"}
+            </div>
+            <div className="text-xs text-zinc-500">
+              {versionInfo.deploymentId ? `deploy: ${versionInfo.deploymentId}` : ""}
+              {versionInfo.region ? `${versionInfo.deploymentId ? " • " : ""}region: ${versionInfo.region}` : ""}
+            </div>
+          </div>
+        )}
       </div>
 
       <button

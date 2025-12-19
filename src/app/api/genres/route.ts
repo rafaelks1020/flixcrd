@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 // Cache por 5 minutos
 export const revalidate = 300;
 
@@ -16,8 +18,12 @@ export async function GET() {
       },
     });
 
-    // Só retorna gêneros que têm pelo menos 1 título
-    const filtered = genres.filter((g: any) => g._count.TitleGenre > 0);
+    // Só retorna gêneros que têm pelo menos 1 título e não são Terror/Horror
+    const filtered = genres.filter((g: any) => {
+      const name = g.name.toLowerCase();
+      const isTerror = name === "terror" || name === "horror";
+      return g._count.TitleGenre > 0 && !isTerror;
+    });
 
     return NextResponse.json(filtered);
   } catch (error) {

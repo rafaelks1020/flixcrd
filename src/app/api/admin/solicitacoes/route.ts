@@ -14,7 +14,14 @@ interface AdminRequestItem {
   priorityScore: number | null;
   createdAt: Date;
   updatedAt: Date;
+  assignedAdminId: string | null;
+  assignedAt: Date | null;
   User: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  AssignedAdmin: {
     id: string;
     email: string;
     name: string | null;
@@ -53,6 +60,7 @@ export async function GET(request: NextRequest) {
     const minFollowers = searchParams.get("minFollowers");
     const sort = searchParams.get("sort") || "oldest"; // oldest | newest | priority | followers | sla
     const linkFilter = searchParams.get("upload"); // with | without
+    const assignedFilter = searchParams.get("assigned"); // me | unassigned
 
     const where: any = {};
 
@@ -85,6 +93,15 @@ export async function GET(request: NextRequest) {
       if (Number.isFinite(min)) {
         where.followersCount = { gte: min };
       }
+    }
+
+    if (assignedFilter === "me") {
+      const adminId = (session.user as any).id as string | undefined;
+      if (adminId) {
+        where.assignedAdminId = adminId;
+      }
+    } else if (assignedFilter === "unassigned") {
+      where.assignedAdminId = null;
     }
 
     let orderBy: any = { createdAt: "asc" }; // padrão: mais antiga primeiro
@@ -128,6 +145,13 @@ export async function GET(request: NextRequest) {
                 type: true,
               },
             },
+          },
+        },
+        AssignedAdmin: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
           },
         },
       },
@@ -178,6 +202,8 @@ export async function GET(request: NextRequest) {
         priorityScore: req.priorityScore,
         createdAt: req.createdAt,
         updatedAt: req.updatedAt,
+        assignedAdminId: req.assignedAdminId,
+        assignedAt: (req as any).assignedAt ?? null,
         User: req.User
           ? {
               id: req.User.id,
@@ -202,6 +228,13 @@ export async function GET(request: NextRequest) {
                     type: req.RequestUpload.Title.type,
                   }
                 : null,
+            }
+          : null,
+        AssignedAdmin: req.AssignedAdmin
+          ? {
+              id: req.AssignedAdmin.id,
+              email: req.AssignedAdmin.email,
+              name: req.AssignedAdmin.name,
             }
           : null,
       };

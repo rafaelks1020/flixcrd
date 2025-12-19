@@ -1,17 +1,29 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import Link from "next/link";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import PremiumNavbar from "@/components/ui/PremiumNavbar";
+import PremiumTitleCard from "@/components/ui/PremiumTitleCard";
+import BrowseHero from "@/components/ui/BrowseHero";
+import GenreBar from "@/components/ui/GenreBar";
+import { Search, LayoutGrid, Ghost, Loader2, Filter } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface Title {
   id: string;
   name: string;
   posterUrl: string | null;
-  backdropUrl?: string | null;
+  backdropUrl: string | null;
   type: string;
   voteAverage?: number | null;
   releaseDate?: string | null;
+  overview: string | null;
+  genres?: { genre: { id: string, name: string } }[];
+}
+
+interface Genre {
+  id: string;
+  name: string;
 }
 
 interface BrowseClientProps {
@@ -28,21 +40,34 @@ export default function BrowseClient({
   isAdmin,
 }: BrowseClientProps) {
   const [titles, setTitles] = useState<Title[]>(initialTitles);
+  const [genres, setGenres] = useState<Genre[]>([]);
   const [loading, setLoading] = useState(false);
   const [filterType, setFilterType] = useState<string>("ALL");
-  const [sortBy, setSortBy] = useState<string>("popularity");
+  const [selectedGenreId, setSelectedGenreId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const observerRef = useRef<HTMLDivElement | null>(null);
+
+  // Featured title is the first one by default (most popular)
+  const featuredTitle = useMemo(() => titles[0] ?? null, [titles]);
+
+  // Load Genres
+  useEffect(() => {
+    fetch("/api/genres")
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setGenres(data);
+      })
+      .catch(err => console.error("Erro ao carregar gêneros:", err));
+  }, []);
 
   const loadTitles = useCallback(async (pageToLoad: number, reset: boolean) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (filterType !== "ALL") params.append("type", filterType);
-      if (sortBy) params.append("sort", sortBy);
+      if (selectedGenreId) params.append("genre", selectedGenreId);
       if (searchQuery) params.append("q", searchQuery);
       params.append("page", String(pageToLoad));
       params.append("limit", String(PAGE_SIZE));
@@ -51,11 +76,7 @@ export default function BrowseClient({
       if (!res.ok) return;
 
       const json = await res.json();
-      const list: Title[] = Array.isArray(json)
-        ? json
-        : Array.isArray(json.data)
-          ? json.data
-          : [];
+      const list: Title[] = Array.isArray(json.data) ? json.data : [];
 
       setTitles((prev) => (reset ? list : [...prev, ...list]));
       setPage(pageToLoad);
@@ -65,14 +86,14 @@ export default function BrowseClient({
     } finally {
       setLoading(false);
     }
-  }, [filterType, sortBy, searchQuery]);
+  }, [filterType, selectedGenreId, searchQuery]);
 
-  // Carrega a primeira página sempre que filtros/ordenação/busca mudarem
+  // Handle filter changes with reset
   useEffect(() => {
     loadTitles(1, true);
-  }, [loadTitles]);
+  }, [filterType, selectedGenreId, searchQuery, loadTitles]);
 
-  // Observer para infinite scroll
+  // Infinite Scroll Intersection Observer
   useEffect(() => {
     if (!hasMore || loading) return;
 
@@ -85,170 +106,152 @@ export default function BrowseClient({
           loadTitles(page + 1, false);
         }
       },
-      { threshold: 0.2 }
+      { threshold: 0.1 }
     );
 
     observer.observe(node);
-
-    return () => {
-      observer.disconnect();
-    };
+    return () => observer.disconnect();
   }, [hasMore, loading, page, loadTitles]);
 
-  const selectStyle: React.CSSProperties = {
-    background: '#1a1a1a',
-    border: '1px solid #333',
-    borderRadius: '4px',
-    padding: '10px 16px',
-    color: '#fff',
-    fontSize: '14px',
-    cursor: 'pointer',
-    outline: 'none',
-  };
-
   return (
-    <div style={{ minHeight: '100vh', background: '#000', color: '#fff' }}>
+    <div className="min-h-screen bg-black text-white selection:bg-primary/30">
       <PremiumNavbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
 
-      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '100px 4% 60px' }}>
-        {/* Header */}
-        <div style={{ marginBottom: '40px' }}>
-          <h1 style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', fontWeight: 700, marginBottom: '24px' }}>
-            Catálogo
-          </h1>
+      {/* Hero Section */}
+      {!searchQuery && !selectedGenreId && filterType === "ALL" && featuredTitle && (
+        <BrowseHero title={featuredTitle} />
+      )}
 
-          {/* Search */}
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{ position: 'relative', maxWidth: '500px' }}>
+      <main className={cn(
+        "max-w-[1700px] mx-auto px-4 md:px-12 pb-20",
+        (!searchQuery && !selectedGenreId && filterType === "ALL") ? "pt-10" : "pt-28"
+      )}>
+        {/* Controls Section */}
+        <header className="mb-12 space-y-8">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+            <div className="space-y-4">
+              <h2 className="text-3xl md:text-5xl font-black tracking-tighter text-white uppercase">
+                {searchQuery ? `Resultados para "${searchQuery}"` : "Catálogo"}
+              </h2>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 backdrop-blur-md rounded-full border border-white/5 text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                  <LayoutGrid size={14} className="text-primary" />
+                  <span>{titles.length} Títulos</span>
+                </div>
+                {/* Type Filters */}
+                <div className="flex bg-white/5 backdrop-blur-md p-1 rounded-xl border border-white/5">
+                  {["ALL", "MOVIE", "SERIES", "ANIME"].map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setFilterType(t)}
+                      className={cn(
+                        "px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
+                        filterType === t ? "bg-white text-black shadow-lg" : "text-zinc-600 hover:text-white"
+                      )}
+                    >
+                      {t === "ALL" ? "Tudo" : t === "MOVIE" ? "Filmes" : t === "SERIES" ? "Séries" : "Animes"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative w-full md:max-w-md group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-primary transition-colors" size={20} />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar títulos..."
-                style={{
-                  width: '100%',
-                  padding: '14px 20px',
-                  paddingLeft: '50px',
-                  background: '#1a1a1a',
-                  border: '1px solid #333',
-                  borderRadius: '4px',
-                  color: '#fff',
-                  fontSize: '15px',
-                  outline: 'none',
-                }}
-                onFocus={(e) => e.currentTarget.style.borderColor = '#e50914'}
-                onBlur={(e) => e.currentTarget.style.borderColor = '#333'}
+                placeholder="Buscar por nome ou palavras-chave..."
+                className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white placeholder:text-zinc-700 focus:outline-none focus:border-primary/50 transition-all backdrop-blur-xl shadow-2xl"
               />
-              <svg
-                style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', width: '20px', height: '20px', color: 'rgba(255,255,255,0.5)' }}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
             </div>
           </div>
 
-          {/* Filters */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px' }}>
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              style={selectStyle}
-            >
-              <option value="ALL">Todos os Tipos</option>
-              <option value="MOVIE">Filmes</option>
-              <option value="SERIES">Séries</option>
-              <option value="ANIME">Animes</option>
-            </select>
-
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              style={selectStyle}
-            >
-              <option value="popularity">Mais Populares</option>
-              <option value="recent">Mais Recentes</option>
-              <option value="rating">Melhor Avaliados</option>
-              <option value="name">Nome (A-Z)</option>
-            </select>
-
-            <span style={{ marginLeft: 'auto', fontSize: '14px', color: 'rgba(255,255,255,0.5)' }}>
-              {titles.length} título{titles.length !== 1 ? "s" : ""}
-            </span>
+          {/* Genre Selection Bar */}
+          <div className="border-t border-white/5 pt-2">
+            <GenreBar
+              genres={genres}
+              selectedId={selectedGenreId}
+              onSelect={setSelectedGenreId}
+            />
           </div>
-        </div>
+        </header>
 
-        {/* Grid */}
-        {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' }}>
-            {[...Array(18)].map((_, i) => (
-              <div key={i} style={{ aspectRatio: '2/3', background: '#1a1a1a', borderRadius: '4px', animation: 'pulse 2s infinite' }} />
-            ))}
-          </div>
-        ) : titles.length > 0 ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '20px' }}>
-            {titles.map((title) => (
-              <Link
-                key={title.id}
-                href={`/title/${title.id}`}
-                onMouseEnter={() => setHoveredId(title.id)}
-                onMouseLeave={() => setHoveredId(null)}
-                style={{
-                  display: 'block',
-                  borderRadius: '4px',
-                  overflow: 'hidden',
-                  background: '#141414',
-                  textDecoration: 'none',
-                  color: '#fff',
-                  transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-                  transform: hoveredId === title.id ? 'scale(1.05)' : 'scale(1)',
-                  boxShadow: hoveredId === title.id ? '0 10px 30px rgba(0,0,0,0.5)' : 'none',
-                }}
+        {/* Content Grid with Staggered Animations */}
+        <AnimatePresence mode="popLayout">
+          {titles.length > 0 ? (
+            <motion.div
+              layout
+              className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-x-4 gap-y-10 md:gap-x-6 md:gap-y-14"
+            >
+              {titles.map((title, index) => (
+                <motion.div
+                  key={title.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: Math.min(index * 0.05, 0.5) }}
+                >
+                  <PremiumTitleCard
+                    id={title.id}
+                    name={title.name}
+                    posterUrl={title.posterUrl}
+                    type={title.type}
+                    rating={title.voteAverage || undefined}
+                    year={title.releaseDate ? new Date(title.releaseDate).getFullYear() : undefined}
+                    genres={title.genres?.map(g => g.genre.name)}
+                  />
+                </motion.div>
+              ))}
+            </motion.div>
+          ) : !loading ? (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex flex-col items-center justify-center py-40 text-center"
+            >
+              <div className="w-24 h-24 bg-zinc-900 rounded-full flex items-center justify-center mb-6 border border-white/5 shadow-2xl text-zinc-700">
+                <Ghost size={48} strokeWidth={1.5} />
+              </div>
+              <h3 className="text-2xl font-black text-white uppercase tracking-tighter mb-2">Vazio Absoluto</h3>
+              <p className="text-zinc-600 max-w-md text-sm font-medium">
+                Não detectamos nenhum título com esses filtros. Tente uma busca menos específica ou mude a categoria.
+              </p>
+              <button
+                onClick={() => { setSearchQuery(""); setFilterType("ALL"); setSelectedGenreId(null); }}
+                className="mt-8 px-10 py-3 bg-white text-black rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-zinc-200 transition-all hover:scale-105 active:scale-95 shadow-xl"
               >
-                <div style={{ position: 'relative' }}>
-                  {title.posterUrl ? (
-                    <img src={title.posterUrl} alt={title.name} style={{ width: '100%', aspectRatio: '2/3', objectFit: 'cover' }} />
-                  ) : (
-                    <div style={{ width: '100%', aspectRatio: '2/3', background: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '48px' }}>🎬</div>
-                  )}
-                  
-                  {/* Rating Badge */}
-                  {title.voteAverage && (
-                    <div style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.8)', padding: '4px 8px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
-                      <span style={{ color: '#ffd700' }}>★</span>
-                      <span>{title.voteAverage.toFixed(1)}</span>
-                    </div>
-                  )}
+                Resetar Filtros
+              </button>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
-                  {/* Hover Overlay */}
-                  {hoveredId === title.id && (
-                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px', background: 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, transparent 100%)' }}>
-                      <p style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>{title.name}</p>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>
-                        {title.releaseDate && <span>{new Date(title.releaseDate).getFullYear()}</span>}
-                        <span style={{ textTransform: 'uppercase' }}>{title.type === 'MOVIE' ? 'Filme' : title.type === 'SERIES' ? 'Série' : title.type}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </Link>
+        {/* Loading Skeletons */}
+        {loading && titles.length === 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-4 md:gap-6">
+            {[...Array(14)].map((_, i) => (
+              <div key={i} className="space-y-4">
+                <div className="aspect-[2/3] bg-zinc-900 rounded-2xl animate-pulse border border-white/5" />
+                <div className="h-3 bg-zinc-900 rounded-full w-3/4 animate-pulse ml-1" />
+              </div>
             ))}
           </div>
-        ) : (
-          <div style={{ textAlign: 'center', padding: '80px 0' }}>
-            <div style={{ fontSize: '64px', marginBottom: '16px', opacity: 0.3 }}>🎬</div>
-            <h3 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '8px' }}>Nenhum título encontrado</h3>
-            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '14px' }}>Tente ajustar os filtros ou fazer uma nova busca</p>
-          </div>
         )}
 
-        {/* Infinite scroll trigger */}
-        {hasMore && !loading && (
-          <div ref={observerRef} style={{ height: 1 }} />
+        {/* Infinite Scroll Trigger */}
+        {hasMore && (
+          <div ref={observerRef} className="h-40 flex items-center justify-center mt-12">
+            {loading && (
+              <div className="flex items-center gap-3 text-zinc-500">
+                <Loader2 size={24} className="animate-spin text-primary" />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em]">Escaneando Mais...</span>
+              </div>
+            )}
+          </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

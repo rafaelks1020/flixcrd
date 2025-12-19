@@ -6,6 +6,7 @@ import TitleCard from "./TitleCard";
 interface Title {
   id: string;
   name: string;
+  href?: string;
   posterUrl: string | null;
   backdropUrl?: string | null;
   type: string;

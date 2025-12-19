@@ -3,8 +3,10 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    // Verificar conexão com o banco
-    await prisma.$queryRaw`SELECT 1`;
+    await Promise.race([
+      prisma.$queryRaw`SELECT 1`,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Healthcheck timeout")), 1500)),
+    ]);
 
     return NextResponse.json({
       status: "ok",
@@ -25,10 +27,5 @@ export async function GET() {
 }
 
 export async function HEAD() {
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    return new NextResponse(null, { status: 200 });
-  } catch (error) {
-    return new NextResponse(null, { status: 503 });
-  }
+  return new NextResponse(null, { status: 200 });
 }

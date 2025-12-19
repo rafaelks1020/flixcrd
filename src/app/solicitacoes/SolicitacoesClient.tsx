@@ -2,7 +2,28 @@
 
 import { useEffect, useState } from "react";
 import PremiumNavbar from "@/components/ui/PremiumNavbar";
-import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Search,
+  Send,
+  Film,
+  Tv,
+  Globe,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  PlusCircle,
+  Users,
+  MessageSquare,
+  Sparkles,
+  ChevronRight,
+  TrendingUp,
+  History,
+  Info,
+  Loader2,
+  Check
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface RequestItem {
   id: string;
@@ -17,14 +38,12 @@ interface RequestItem {
   note?: string | null;
   imdbJson?: any;
   createdAt?: string;
-  updatedAt?: string;
 }
 
 interface TmdbResult {
   tmdbId: number;
-  type: string; // MOVIE | SERIES
+  type: string;
   name: string;
-  originalName?: string | null;
   overview: string;
   releaseDate?: string | null;
   posterUrl?: string | null;
@@ -39,7 +58,6 @@ interface SolicitacoesClientProps {
 export default function SolicitacoesClient({ isLoggedIn, isAdmin }: SolicitacoesClientProps) {
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
-
   const [mode, setMode] = useState<"tmdb" | "manual">("tmdb");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
@@ -63,12 +81,10 @@ export default function SolicitacoesClient({ isLoggedIn, isAdmin }: Solicitacoes
 
   useEffect(() => {
     if (!error && !success) return;
-
     const timeout = setTimeout(() => {
       setError(null);
       setSuccess(null);
     }, 6000);
-
     return () => clearTimeout(timeout);
   }, [error, success]);
 
@@ -76,14 +92,9 @@ export default function SolicitacoesClient({ isLoggedIn, isAdmin }: Solicitacoes
     try {
       setLoadingRequests(true);
       const res = await fetch("/api/solicitacoes", { cache: "no-store" });
-      if (!res.ok) {
-        throw new Error("Erro ao carregar solicitações");
-      }
-
-      const data = await res.json();
-      setRequests(data);
+      if (res.ok) setRequests(await res.json());
     } catch (err) {
-      console.error("Erro ao carregar solicitações:", err);
+      console.error(err);
     } finally {
       setLoadingRequests(false);
     }
@@ -92,25 +103,17 @@ export default function SolicitacoesClient({ isLoggedIn, isAdmin }: Solicitacoes
   async function handleSearchTmdb(e?: React.FormEvent) {
     if (e) e.preventDefault();
     if (!searchQuery.trim()) return;
-
     try {
       setSearchLoading(true);
       setError(null);
       const params = new URLSearchParams({ q: searchQuery.trim(), type: "multi" });
       const res = await fetch(`/api/tmdb/search?${params.toString()}`);
-      if (!res.ok) {
-        throw new Error("Erro ao buscar no TMDB");
-      }
+      if (!res.ok) throw new Error("Erro buscar");
       const data = await res.json();
-      const results: TmdbResult[] = data.results ?? [];
-      setSearchResults(results);
-      // Após qualquer busca, habilita a opção de solicitação manual
-      // (usuário pode ter visto os resultados e mesmo assim não ter encontrado o que queria)
+      setSearchResults(data.results ?? []);
       setTmdbSearched(true);
     } catch (err) {
-      console.error("Erro na busca TMDB:", err);
-      setError("Erro ao buscar títulos. Tente novamente.");
-      // Em caso de erro, também permitimos solicitação manual
+      setError("Erro ao buscar títulos.");
       setTmdbSearched(true);
     } finally {
       setSearchLoading(false);
@@ -143,7 +146,6 @@ export default function SolicitacoesClient({ isLoggedIn, isAdmin }: Solicitacoes
     };
 
     if (mode === "tmdb" && selectedResult) {
-      // Usar tmdbId como identificador estável neste contexto
       body.imdbId = String(selectedResult.tmdbId);
       body.imdbJson = selectedResult;
     }
@@ -157,790 +159,395 @@ export default function SolicitacoesClient({ isLoggedIn, isAdmin }: Solicitacoes
       });
 
       if (res.status === 409) {
-        // Já existe uma solicitação para esse conteúdo.
         const data = await res.json().catch(() => ({}));
-        const existingId = data?.requestId as string | undefined;
-
+        const existingId = data?.requestId as string;
         if (existingId) {
-          try {
-            const followRes = await fetch(`/api/solicitacoes/${existingId}/seguir`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-            });
-
-            if (!followRes.ok) {
-              throw new Error("Erro ao seguir solicitação existente.");
-            }
-
-            await loadRequests();
-            setSuccess(
-              "Já existe uma solicitação para esse conteúdo. Você agora está seguindo e receberá notificações dessa solicitação.",
-            );
-            setError(null);
-          } catch (followError: any) {
-            console.error("Erro ao seguir solicitação existente:", followError);
-            setError(
-              followError?.message ||
-                "Já existe uma solicitação para esse conteúdo e não foi possível segui-la.",
-            );
-          }
-        } else {
-          setError(
-            "Já existe uma solicitação para esse conteúdo.",
-          );
+          await fetch(`/api/solicitacoes/${existingId}/seguir`, { method: "POST" });
+          await loadRequests();
+          setSuccess("Conteúdo já solicitado. Agora você é um seguidor!");
         }
         return;
       }
 
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-
-        if (res.status === 429) {
-          throw new Error(
-            data?.error ||
-              "Você acabou de criar uma solicitação. Aguarde alguns segundos antes de enviar outra.",
-          );
-        }
-
-        if (res.status === 400 && typeof data?.error === "string") {
-          if (data.error.includes("Limite de solicitações ativas")) {
-            throw new Error(
-              "Você já tem o número máximo de solicitações ativas. Aguarde alguma ser concluída ou recusada antes de criar outra.",
-            );
-          }
-        }
-
-        throw new Error(data.error || "Erro ao criar solicitação");
+        const data = await res.json();
+        throw new Error(data.error || "Erro ao criar");
       }
 
-      const created: RequestItem = await res.json();
+      const created = await res.json();
       setRequests((prev) => [created, ...prev]);
-      setSuccess("Solicitação criada com sucesso! Você receberá notificações quando houver progresso.");
-
-      // Reset parcial do formulário
+      setSuccess("Solicitação enviada com sucesso!");
       setNote("");
-      if (mode === "manual") {
-        setTitleInput("");
-      }
+      if (mode === "manual") setTitleInput("");
     } catch (err) {
-      console.error("Erro ao criar solicitação:", err);
-      setError(err instanceof Error ? err.message : "Erro ao criar solicitação.");
+      setError(err instanceof Error ? err.message : "Erro crítico.");
     } finally {
       setSubmitting(false);
     }
   }
 
-  function formatStatus(status: string) {
-    switch (status) {
-      case "PENDING":
-        return "Pendente";
-      case "UNDER_REVIEW":
-        return "Em análise";
-      case "IN_PRODUCTION":
-        return "Em produção";
-      case "UPLOADING":
-        return "Upload";
-      case "COMPLETED":
-        return "Concluída";
-      case "REJECTED":
-        return "Recusada";
-      default:
-        return status;
-    }
+  function getStatusLabel(status: string) {
+    const map: Record<string, { label: string; color: string; icon: any }> = {
+      PENDING: { label: "Pendente", color: "zinc", icon: Clock },
+      UNDER_REVIEW: { label: "Em Análise", color: "blue", icon: Search },
+      IN_PRODUCTION: { label: "Em Produção", color: "purple", icon: TrendingUp },
+      COMPLETED: { label: "Concluído", color: "emerald", icon: CheckCircle2 },
+      REJECTED: { label: "Recusado", color: "red", icon: AlertCircle },
+    };
+    return map[status] || { label: status, color: "zinc", icon: Info };
   }
-
-  function formatWorkflow(state: string) {
-    switch (state) {
-      case "TECH_ANALYSIS":
-        return "Análise técnica";
-      case "SOURCE_ACQUISITION":
-        return "Obtendo fonte";
-      case "ENCODING":
-        return "Encoding";
-      case "SUBTITLING":
-        return "Legendagem";
-      case "UPLOAD_SERVER":
-        return "Upload servidor";
-      case "PUBLISHED":
-        return "Publicado";
-      case "NONE":
-      default:
-        return "Sem workflow";
-    }
-  }
-
-  const typedSearchResults = searchResults as any[];
 
   return (
-    <div style={{ minHeight: "100vh", background: "#000", color: "#fff" }}>
+    <div className="min-h-screen bg-black text-white selection:bg-primary/30 relative overflow-x-hidden">
       <PremiumNavbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
 
-      <div style={{ maxWidth: "1360px", margin: "0 auto", padding: "100px 4% 60px" }}>
-        <h1 style={{ fontSize: "clamp(2rem, 4vw, 3rem)", fontWeight: 700, marginBottom: 24 }}>
-          Solicitações de Conteúdo
-        </h1>
+      {/* Background Decor */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-[50vh] bg-gradient-to-b from-primary/10 via-black to-black" />
+        <div className="absolute top-1/4 -right-1/4 w-[600px] h-[600px] bg-blue-900/10 rounded-full blur-[120px]" />
+      </div>
 
-        <p style={{ color: "rgba(255,255,255,0.6)", marginBottom: 32, maxWidth: 700 }}>
-          Peça novos filmes, séries, animes ou doramas para serem adicionados à plataforma.
-          Você pode buscar por títulos existentes no TMDB ou criar uma solicitação manual
-          quando não encontrar o que procura.
-        </p>
+      <main className="relative z-10 mx-auto max-w-[1400px] px-6 md:px-12 pt-28 md:pt-40 pb-20">
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)",
-            columnGap: 40,
-            alignItems: "flex-start",
-          }}
-        >
-          {/* Formulário de criação */}
-          <div
-            style={{
-              background: "rgba(18,18,18,0.95)",
-              borderRadius: 8,
-              border: "1px solid #262626",
-              padding: 20,
-            }}
+        {/* Hero Section */}
+        <header className="mb-16 space-y-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-4 text-primary"
           >
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                marginBottom: 16,
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setMode("tmdb")}
-                style={{
-                  flex: 1,
-                  padding: "8px 12px",
-                  borderRadius: 999,
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  background:
-                    mode === "tmdb" ? "#e50914" : "rgba(255,255,255,0.06)",
-                  color: "#fff",
-                }}
-              >
-                Buscar no TMDB
-              </button>
-
-              {tmdbSearched && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("manual");
-                    setSelectedResult(null);
-                  }}
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    border: "1px solid #4b5563",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    fontWeight: 500,
-                    background:
-                      mode === "manual" ? "#e50914" : "rgba(15,23,42,0.9)",
-                    color: "#fff",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Não encontrei / Solicitação manual
-                </button>
-              )}
+            <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center">
+              <Sparkles size={24} />
             </div>
+            <span className="font-black uppercase tracking-[0.4em] text-xs">Request Hub</span>
+          </motion.div>
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="text-5xl md:text-7xl font-black tracking-tight"
+          >
+            Sua vontade é <br className="hidden md:block" /> nossa ordem.
+          </motion.h1>
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="text-zinc-500 text-lg md:text-xl font-medium max-w-2xl leading-relaxed"
+          >
+            Não encontrou o que queria? Peça novos filmes, séries ou animes.
+            Nossa equipe de aquisição entrará em ação imediatamente.
+          </motion.p>
+        </header>
 
-            {error && (
-              <div
-                style={{
-                  marginBottom: 12,
-                  padding: "8px 12px",
-                  borderRadius: 6,
-                  background: "rgba(239,68,68,0.12)",
-                  color: "#fecaca",
-                  fontSize: 13,
-                }}
-              >
-                {error}
-              </div>
-            )}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
 
-            {success && (
-              <div
-                style={{
-                  marginBottom: 12,
-                  padding: "8px 12px",
-                  borderRadius: 6,
-                  background: "rgba(34,197,94,0.15)",
-                  color: "#bbf7d0",
-                  fontSize: 13,
-                }}
-              >
-                {success}
-              </div>
-            )}
+          {/* Form Side */}
+          <motion.div
+            initial={{ opacity: 0, x: -30 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.3 }}
+            className="lg:col-span-5 space-y-8"
+          >
+            <div className="glass-card bg-zinc-900/40 backdrop-blur-3xl border border-white/5 rounded-[40px] p-8 md:p-10 shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl" />
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {mode === "tmdb" && (
-                <div style={{ marginBottom: 8 }}>
-                  <label style={{ display: "block", fontSize: 13, marginBottom: 6 }}>
-                    Buscar título
-                  </label>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          void handleSearchTmdb();
-                        }
-                      }}
-                      placeholder="Digite o nome do filme, série, anime..."
-                      style={{
-                        flex: 1,
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #333",
-                        background: "#111",
-                        color: "#fff",
-                        fontSize: 13,
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void handleSearchTmdb();
-                      }}
-                      disabled={searchLoading}
-                      style={{
-                        padding: "8px 14px",
-                        borderRadius: 6,
-                        border: "none",
-                        background: "#e50914",
-                        color: "#fff",
-                        fontSize: 13,
-                        fontWeight: 500,
-                        cursor: "pointer",
-                        opacity: searchLoading ? 0.7 : 1,
-                      }}
-                    >
-                      {searchLoading ? "Buscando..." : "Buscar"}
-                    </button>
+              <div className="relative space-y-8">
+                {/* Mode Toggles */}
+                <div className="flex p-1.5 bg-black/40 rounded-2xl border border-white/5">
+                  <button
+                    onClick={() => setMode("tmdb")}
+                    className={cn(
+                      "flex-1 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all",
+                      mode === "tmdb" ? "bg-primary text-white shadow-lg" : "text-zinc-600 hover:text-white"
+                    )}
+                  >
+                    TMDB Discovery
+                  </button>
+                  <button
+                    onClick={() => setMode("manual")}
+                    className={cn(
+                      "flex-1 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all",
+                      mode === "manual" ? "bg-primary text-white shadow-lg" : "text-zinc-600 hover:text-white"
+                    )}
+                  >
+                    Manual Upload
+                  </button>
+                </div>
+
+                {/* Notifications */}
+                <AnimatePresence mode="wait">
+                  {error && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 flex items-center gap-3">
+                      <AlertCircle className="text-red-400" size={18} />
+                      <p className="text-red-400 text-xs font-bold leading-tight">{error}</p>
+                    </motion.div>
+                  )}
+                  {success && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 flex items-center gap-3">
+                      <CheckCircle2 className="text-emerald-400" size={18} />
+                      <p className="text-emerald-400 text-xs font-bold leading-tight">{success}</p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Content */}
+                <div className="space-y-6">
+                  {mode === "tmdb" ? (
+                    <div className="space-y-4">
+                      <div className="relative group">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600 group-focus-within:text-primary transition-colors" size={20} />
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleSearchTmdb()}
+                          placeholder="Ex: Interstellar, Breaking Bad..."
+                          className="w-full bg-black/40 border border-white/5 rounded-2xl py-5 pl-12 pr-32 text-white font-black placeholder:text-zinc-800 focus:outline-none focus:border-primary/50 transition-all outline-none"
+                        />
+                        <button
+                          onClick={() => handleSearchTmdb()}
+                          disabled={searchLoading}
+                          className="absolute right-2 top-2 bottom-2 px-6 bg-primary hover:bg-red-700 text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2"
+                        >
+                          {searchLoading ? <Loader2 className="animate-spin" size={14} /> : (
+                            <>
+                              Buscar
+                              <Search size={14} />
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* TMDB Results List */}
+                      <AnimatePresence>
+                        {searchResults.length > 0 && !selectedResult && (
+                          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                            {searchResults.map((item) => (
+                              <button
+                                key={`${item.type}-${item.tmdbId}`}
+                                onClick={() => {
+                                  setSelectedResult(item);
+                                  setTitleInput(item.name);
+                                  setType(item.type || "MOVIE");
+                                }}
+                                className="w-full bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl p-3 flex gap-4 transition-all text-left"
+                              >
+                                <img src={item.posterUrl || ""} className="w-12 h-18 rounded-lg object-cover bg-zinc-800" />
+                                <div className="space-y-1 py-1">
+                                  <p className="font-black text-sm text-white line-clamp-1">{item.name}</p>
+                                  <p className="text-[10px] uppercase font-black tracking-widest text-zinc-600">
+                                    {item.type === "MOVIE" ? "Filme" : "Série"} • {item.releaseDate?.split("-")[0]}
+                                  </p>
+                                </div>
+                              </button>
+                            ))}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      {/* Selected Result Display */}
+                      {selectedResult && (
+                        <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 flex gap-4 items-center animate-in fade-in slide-in-from-top-4 duration-500">
+                          <img src={selectedResult.posterUrl || ""} className="w-16 h-24 rounded-xl object-cover shadow-2xl" />
+                          <div className="flex-1 space-y-1">
+                            <h3 className="font-black text-lg">{selectedResult.name}</h3>
+                            <div className="flex gap-2">
+                              <span className="px-2 py-0.5 rounded-full bg-white/10 text-white text-[9px] font-black uppercase tracking-widest">{selectedResult.type}</span>
+                              <span className="px-2 py-0.5 rounded-full bg-white/10 text-white text-[9px] font-black uppercase tracking-widest">{selectedResult.releaseDate?.split("-")[0]}</span>
+                            </div>
+                            <button onClick={() => setSelectedResult(null)} className="text-[10px] font-black uppercase text-zinc-500 hover:text-white transition-colors">Trocar Título</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-600 ml-4">Nome do Título</label>
+                      <input
+                        type="text"
+                        value={titleInput}
+                        onChange={(e) => setTitleInput(e.target.value)}
+                        placeholder="Nome difícil de achar..."
+                        className="w-full bg-black/40 border border-white/5 rounded-2xl py-5 px-6 font-black text-white outline-none focus:border-primary/50 transition-all"
+                      />
+                    </div>
+                  )}
+
+                  {/* Shared Fields */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2 text-primary">
+                      <label className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-600 ml-4">Tipo</label>
+                      <div className="relative">
+                        <select
+                          value={type}
+                          onChange={(e) => setType(e.target.value)}
+                          className="w-full bg-black/40 border border-white/5 rounded-2xl py-4 px-5 font-black text-sm appearance-none outline-none focus:border-primary/50 transition-all"
+                        >
+                          <option value="MOVIE">Filme</option>
+                          <option value="SERIES">Série</option>
+                          <option value="ANIME">Anime</option>
+                        </select>
+                        <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-zinc-600 pointer-events-none" size={16} />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-600 ml-4">Qualidade</label>
+                      <div className="relative">
+                        <select
+                          value={quality}
+                          onChange={(e) => setQuality(e.target.value)}
+                          className="w-full bg-black/40 border border-white/5 rounded-2xl py-4 px-5 font-black text-sm appearance-none outline-none focus:border-primary/50 transition-all"
+                        >
+                          <option value="1080p">1080p Full HD</option>
+                          <option value="4K">4K Ultra HD</option>
+                          <option value="720p">720p HD</option>
+                        </select>
+                        <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-zinc-600 pointer-events-none" size={16} />
+                      </div>
+                    </div>
                   </div>
 
-                  {typedSearchResults.length > 0 && !selectedResult && (
-                    <div
-                      style={{
-                        marginTop: 10,
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-                        gap: 12,
-                      }}
-                    >
-                      {typedSearchResults.map((item) => {
-                        const year = item.releaseDate
-                          ? new Date(item.releaseDate).getFullYear()
-                          : null;
-                        return (
-                          <button
-                            key={`${item.type}-${item.tmdbId}`}
-                            type="button"
-                            onClick={() => {
-                              setSelectedResult(item);
-                              setTitleInput(item.name);
-                              setType(item.type || "MOVIE");
-                            }}
-                            style={{
-                              textAlign: "left",
-                              background: "#18181b",
-                              border: "1px solid #27272a",
-                              borderRadius: 8,
-                              padding: 8,
-                              display: "flex",
-                              gap: 8,
-                              cursor: "pointer",
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: 40,
-                                height: 60,
-                                borderRadius: 4,
-                                overflow: "hidden",
-                                background: "#111",
-                                flexShrink: 0,
-                              }}
-                            >
-                              {item.posterUrl ? (
-                                 
-                                <img
-                                  src={item.posterUrl}
-                                  alt={item.name}
-                                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                                />
-                              ) : (
-                                <div
-                                  style={{
-                                    width: "100%",
-                                    height: "100%",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    fontSize: 18,
-                                  }}
-                                >
-                                  🎬
-                                </div>
-                              )}
-                            </div>
-                            <div style={{ flex: 1 }}>
-                              <div
-                                style={{
-                                  fontSize: 13,
-                                  fontWeight: 500,
-                                  marginBottom: 2,
-                                  overflow: "hidden",
-                                  display: "-webkit-box",
-                                  WebkitLineClamp: 2,
-                                  WebkitBoxOrient: "vertical",
-                                }}
-                              >
-                                {item.name}
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: 11,
-                                  color: "rgba(255,255,255,0.6)",
-                                  marginBottom: 4,
-                                }}
-                              >
-                                {year && <span>{year} • </span>}
-                                <span>{item.type === "MOVIE" ? "Filme" : "Série"}</span>
-                              </div>
-                              {item.overview && (
-                                <div
-                                  style={{
-                                    fontSize: 11,
-                                    color: "rgba(255,255,255,0.6)",
-                                    marginTop: 2,
-                                    maxHeight: 48,
-                                    overflow: "hidden",
-                                    display: "-webkit-box",
-                                    WebkitLineClamp: 3,
-                                    WebkitBoxOrient: "vertical",
-                                  }}
-                                >
-                                  {item.overview}
-                                </div>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {selectedResult && (
-                    <div
-                      style={{
-                        marginTop: 10,
-                        padding: 8,
-                        borderRadius: 8,
-                        border: "1px solid #27272a",
-                        background: "#111827",
-                        display: "flex",
-                        gap: 8,
-                        alignItems: "center",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 40,
-                          height: 60,
-                          borderRadius: 4,
-                          overflow: "hidden",
-                          background: "#111",
-                          flexShrink: 0,
-                        }}
-                      >
-                        {selectedResult.posterUrl ? (
-                           
-                          <img
-                            src={selectedResult.posterUrl}
-                            alt={selectedResult.name}
-                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                          />
-                        ) : (
-                          <div
-                            style={{
-                              width: "100%",
-                              height: "100%",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              fontSize: 18,
-                            }}
-                          >
-                            🎬
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 500,
-                            marginBottom: 2,
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                          }}
-                        >
-                          {selectedResult.name}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: "rgba(255,255,255,0.6)",
-                          }}
-                        >
-                          {selectedResult.releaseDate && (
-                            <span>
-                              {new Date(selectedResult.releaseDate).getFullYear()} • {" "}
-                            </span>
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-600 ml-4">Preferência de Áudio</label>
+                    <div className="flex flex-wrap gap-2">
+                      {["dublado", "legendado", "original"].map((lang) => (
+                        <button
+                          key={lang}
+                          type="button"
+                          onClick={() => toggleLanguage(lang)}
+                          className={cn(
+                            "px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all",
+                            languages.includes(lang)
+                              ? "bg-primary text-white scale-105"
+                              : "bg-black/40 text-zinc-600 border border-white/5 hover:border-white/20"
                           )}
-                          <span>{selectedResult.type === "MOVIE" ? "Filme" : "Série"}</span>
+                        >
+                          {lang}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-600 ml-4">Nota Adicional</label>
+                    <textarea
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      rows={3}
+                      placeholder="Alguma versão específica? Algum detalhe especial?"
+                      className="w-full bg-black/40 border border-white/5 rounded-[24px] py-4 px-6 text-sm outline-none focus:border-primary/50 transition-all resize-none"
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    className="w-full h-16 bg-primary hover:bg-red-700 rounded-2xl flex items-center justify-center gap-3 font-black uppercase tracking-[0.2em] text-sm text-white transition-all shadow-xl shadow-primary/20 hover:shadow-primary/40 active:scale-95 disabled:bg-zinc-800 disabled:cursor-not-allowed"
+                  >
+                    {submitting ? <Loader2 className="animate-spin" /> : (
+                      <>
+                        Enviar Solicitação
+                        <Send size={18} />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* List Side */}
+          <div className="lg:col-span-7 space-y-8">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-black tracking-tight flex items-center gap-4">
+                <History className="text-primary" />
+                Feed de Pedidos
+              </h2>
+              <div className="px-4 py-2 rounded-full border border-zinc-800 text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                {requests.length} Solicitações
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
+              <AnimatePresence mode="popLayout">
+                {loadingRequests ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="h-32 bg-zinc-900 animate-pulse rounded-[32px] border border-white/5" />
+                  ))
+                ) : requests.map((item, idx) => {
+                  const status = getStatusLabel(item.status);
+                  const Icon = status.icon;
+                  return (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, y: 30 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                      className="group glass-card bg-zinc-900/20 hover:bg-zinc-900/60 border border-white/5 hover:border-white/10 rounded-[32px] p-6 transition-all duration-500 hover:-translate-y-1 relative overflow-hidden"
+                    >
+                      {/* Subscriptions count float */}
+                      <div className="absolute top-4 right-6 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/60 border border-white/5 text-zinc-500">
+                        <Users size={14} />
+                        <span className="text-[11px] font-black">{item.followersCount || 1}</span>
+                      </div>
+
+                      <div className="flex gap-6 items-start">
+                        {/* Status Icon Orb */}
+                        <div className={cn(
+                          "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border transition-all duration-500",
+                          status.color === "emerald" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.1)]" :
+                            status.color === "blue" ? "bg-blue-500/10 border-blue-500/20 text-blue-500" :
+                              status.color === "purple" ? "bg-purple-500/10 border-purple-500/20 text-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.2)]" :
+                                status.color === "red" ? "bg-red-500/10 border-red-500/20 text-red-500" :
+                                  "bg-zinc-800 border-white/5 text-zinc-400"
+                        )}>
+                          <Icon size={24} />
+                        </div>
+
+                        <div className="flex-1 space-y-3">
+                          <div className="space-y-1">
+                            <h3 className="text-xl font-black text-white group-hover:text-primary transition-colors">{item.title}</h3>
+                            <div className="flex flex-wrap gap-2">
+                              <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">{item.type}</span>
+                              <span className="text-[10px] font-black uppercase text-zinc-700 tracking-widest">•</span>
+                              <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">{item.desiredQuality}</span>
+                              <span className="text-[10px] font-black uppercase text-zinc-700 tracking-widest">•</span>
+                              <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">{status.label}</span>
+                            </div>
+                          </div>
+
+                          {/* Progress bar visual for production/review */}
+                          {item.status !== "COMPLETED" && item.status !== "REJECTED" && (
+                            <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden border border-white/5">
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: item.status === "PENDING" ? "20%" : item.status === "UNDER_REVIEW" ? "50%" : "85%" }}
+                                className={cn(
+                                  "h-full rounded-full transition-all duration-1000",
+                                  item.status === "PENDING" ? "bg-zinc-700" : item.status === "UNDER_REVIEW" ? "bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" : "bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]"
+                                )}
+                              />
+                            </div>
+                          )}
+
+                          {item.note && (
+                            <div className="flex gap-2 items-start text-xs text-zinc-600 bg-black/20 p-3 rounded-2xl italic border border-white/5">
+                              <MessageSquare size={14} className="shrink-0 mt-0.5" />
+                              <p>"{item.note}"</p>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div>
-                <label style={{ display: "block", fontSize: 13, marginBottom: 4 }}>
-                  Título
-                </label>
-                <input
-                  type="text"
-                  value={selectedResult ? selectedResult.name : titleInput}
-                  onChange={(e) => {
-                    setSelectedResult(null);
-                    setTitleInput(e.target.value);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      void handleSubmit();
-                    }
-                  }}
-                  placeholder="Nome do conteúdo a ser solicitado"
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    borderRadius: 6,
-                    border: "1px solid #333",
-                    background: "#111",
-                    color: "#fff",
-                    fontSize: 13,
-                  }}
-                />
-              </div>
-
-              <div style={{ display: "flex", gap: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: "block", fontSize: 13, marginBottom: 4 }}>
-                    Tipo
-                  </label>
-                  <select
-                    value={type}
-                    onChange={(e) => setType(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "8px 12px",
-                      borderRadius: 6,
-                      border: "1px solid #333",
-                      background: "#111",
-                      color: "#fff",
-                      fontSize: 13,
-                    }}
-                  >
-                    <option value="MOVIE">Filme</option>
-                    <option value="SERIES">Série</option>
-                    <option value="ANIME">Anime</option>
-                    <option value="DORAMA">Dorama</option>
-                    <option value="OTHER">Outro</option>
-                  </select>
-                </div>
-
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: "block", fontSize: 13, marginBottom: 4 }}>
-                    Qualidade desejada
-                  </label>
-                  <select
-                    value={quality}
-                    onChange={(e) => setQuality(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "8px 12px",
-                      borderRadius: 6,
-                      border: "1px solid #333",
-                      background: "#111",
-                      color: "#fff",
-                      fontSize: 13,
-                    }}
-                  >
-                    <option value="720p">720p</option>
-                    <option value="1080p">1080p</option>
-                    <option value="4K">4K</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: 13, marginBottom: 4 }}>
-                  Idiomas desejados
-                </label>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {[{ value: "dublado", label: "Dublado" }, { value: "legendado", label: "Legendado" }, { value: "original", label: "Áudio original" }].map(
-                    (opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => toggleLanguage(opt.value)}
-                        style={{
-                          padding: "6px 10px",
-                          borderRadius: 999,
-                          border: languages.includes(opt.value)
-                            ? "1px solid #e50914"
-                            : "1px solid #333",
-                          background: languages.includes(opt.value)
-                            ? "rgba(229,9,20,0.15)"
-                            : "#111",
-                          color: "#fff",
-                          fontSize: 12,
-                          cursor: "pointer",
-                        }}
-                      >
-                        {opt.label}
-                      </button>
-                    ),
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: 13, marginBottom: 4 }}>
-                  Observação (opcional)
-                </label>
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  rows={3}
-                  placeholder="Ex: Versão dublada em português, se possível."
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    borderRadius: 6,
-                    border: "1px solid #333",
-                    background: "#111",
-                    color: "#fff",
-                    fontSize: 13,
-                    resize: "vertical",
-                  }}
-                />
-              </div>
-
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={() => {
-                  void handleSubmit();
-                }}
-                style={{
-                  marginTop: 4,
-                  padding: "10px 16px",
-                  borderRadius: 6,
-                  border: "none",
-                  background: "#e50914",
-                  color: "#fff",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  opacity: submitting ? 0.7 : 1,
-                }}
-              >
-                {submitting ? "Enviando..." : "Enviar solicitação"}
-              </button>
+                    </motion.div>
+                  );
+                })
+                }
+              </AnimatePresence>
             </div>
           </div>
-
-          {/* Listagem de solicitações */}
-          <div>
-            <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>
-              Minhas solicitações
-            </h2>
-
-            {loadingRequests ? (
-              <p style={{ fontSize: 14, color: "rgba(255,255,255,0.6)" }}>
-                Carregando solicitações...
-              </p>
-            ) : requests.length === 0 ? (
-              <p style={{ fontSize: 14, color: "rgba(255,255,255,0.6)" }}>
-                Você ainda não fez nenhuma solicitação.
-              </p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {requests.map((req) => {
-                  let year: number | null = null;
-                  if (req.imdbJson && typeof req.imdbJson === "object") {
-                    const anyJson: any = req.imdbJson;
-                    if (anyJson.releaseDate) {
-                      const d = new Date(anyJson.releaseDate);
-                      if (!Number.isNaN(d.getTime())) {
-                        year = d.getFullYear();
-                      }
-                    }
-                  }
-
-                  return (
-                    <div
-                      key={req.id}
-                      style={{
-                        borderRadius: 8,
-                        border: "1px solid #27272a",
-                        background: "rgba(18,18,18,0.95)",
-                        padding: 12,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 4,
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                        <div>
-                          <div style={{ fontSize: 15, fontWeight: 500 }}>
-                            <Link
-                              href={`/solicitacao/${req.id}`}
-                              style={{
-                                color: "#fff",
-                                textDecoration: "none",
-                              }}
-                            >
-                              {req.title}
-                            </Link>
-                          </div>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              color: "rgba(255,255,255,0.6)",
-                              marginTop: 2,
-                            }}
-                          >
-                            {year && <span>{year} • </span>}
-                            <span>
-                              {req.type === "MOVIE"
-                                ? "Filme"
-                                : req.type === "SERIES"
-                                  ? "Série"
-                                  : req.type === "ANIME"
-                                    ? "Anime"
-                                    : req.type === "DORAMA"
-                                      ? "Dorama"
-                                      : req.type}
-                            </span>
-                          </div>
-                        </div>
-                        <div style={{ textAlign: "right", fontSize: 12 }}>
-                          <div
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 6,
-                            }}
-                          >
-                            <span
-                              style={{
-                                padding: "2px 8px",
-                                borderRadius: 999,
-                                fontSize: 11,
-                                background:
-                                  req.status === "COMPLETED"
-                                    ? "rgba(34,197,94,0.15)"
-                                    : req.status === "REJECTED"
-                                      ? "rgba(239,68,68,0.15)"
-                                      : "rgba(250,204,21,0.12)",
-                              }}
-                            >
-                              {formatStatus(req.status)}
-                            </span>
-                            <span
-                              style={{
-                                padding: "2px 8px",
-                                borderRadius: 999,
-                                fontSize: 11,
-                                background: "rgba(148,163,184,0.15)",
-                              }}
-                            >
-                              {formatWorkflow(req.workflowState)}
-                            </span>
-                          </div>
-                          <div
-                            style={{
-                              marginTop: 4,
-                              color: "rgba(148,163,184,0.9)",
-                            }}
-                          >
-                            {req.followersCount} seguidor
-                            {req.followersCount !== 1 ? "es" : ""}
-                          </div>
-                        </div>
-                      </div>
-
-                      {req.note && (
-                        <div
-                          style={{
-                            marginTop: 4,
-                            fontSize: 12,
-                            color: "rgba(209,213,219,0.9)",
-                          }}
-                        >
-                          <span style={{ opacity: 0.7 }}>Obs:</span> {req.note}
-                        </div>
-                      )}
-
-                      {(req.desiredLanguages || req.desiredQuality) && (
-                        <div
-                          style={{
-                            marginTop: 4,
-                            fontSize: 11,
-                            color: "rgba(148,163,184,0.9)",
-                          }}
-                        >
-                          {req.desiredLanguages && (
-                            <span>
-                              Idiomas: {String(req.desiredLanguages)}
-                            </span>
-                          )}
-                          {req.desiredLanguages && req.desiredQuality && " • "}
-                          {req.desiredQuality && <span>Qualidade: {req.desiredQuality}</span>}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

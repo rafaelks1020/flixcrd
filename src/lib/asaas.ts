@@ -3,11 +3,27 @@
  * API Docs: https://docs.asaas.com/
  */
 
-const ASAAS_API_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://api.asaas.com/v3'
-  : 'https://sandbox.asaas.com/api/v3';
+const ASAAS_API_KEY =
+  process.env.ASAAS_API_KEY ||
+  (process.env.NODE_ENV === 'production'
+    ? process.env.ASAAS_KEY_PRODUCTION || process.env.ASAAS_KEY_PROD
+    : process.env.ASAAS_KEY_SANDBOX);
 
-const ASAAS_API_KEY = process.env.ASAAS_KEY_SANDBOX;
+const DEFAULT_ASAAS_API_URL =
+  process.env.NODE_ENV === 'production'
+    ? 'https://api.asaas.com/v3'
+    : 'https://sandbox.asaas.com/api/v3';
+
+function inferAsaasApiUrlFromKey(key: string | undefined): string | null {
+  if (!key) return null;
+  const k = key.toLowerCase();
+  if (k.includes('_hmlg_') || k.includes('hmlg')) return 'https://sandbox.asaas.com/api/v3';
+  if (k.includes('_prod_') || k.includes('prod')) return 'https://api.asaas.com/v3';
+  return null;
+}
+
+const ASAAS_API_URL =
+  process.env.ASAAS_API_URL || inferAsaasApiUrlFromKey(ASAAS_API_KEY) || DEFAULT_ASAAS_API_URL;
 
 interface AsaasCustomer {
   id: string;
@@ -15,6 +31,7 @@ interface AsaasCustomer {
   email: string;
   cpfCnpj?: string;
   phone?: string;
+  notificationDisabled?: boolean;
 }
 
 interface AsaasPayment {
@@ -43,11 +60,24 @@ interface AsaasSubscription {
   status: string;
 }
 
+interface AsaasNotification {
+  id: string;
+  customer: string;
+  enabled: boolean;
+  emailEnabledForProvider?: boolean;
+  smsEnabledForProvider?: boolean;
+  emailEnabledForCustomer?: boolean;
+  smsEnabledForCustomer?: boolean;
+  phoneCallEnabledForCustomer?: boolean;
+  whatsappEnabledForCustomer?: boolean;
+}
+
 interface CreateCustomerParams {
   name: string;
   email: string;
   cpfCnpj?: string;
   phone?: string;
+  notificationDisabled?: boolean;
 }
 
 interface CreatePaymentParams {
@@ -91,7 +121,7 @@ async function asaasRequest<T>(
   options: RequestInit = {}
 ): Promise<T> {
   if (!ASAAS_API_KEY) {
-    throw new Error('ASAAS_KEY_SANDBOX não configurada');
+    throw new Error('Chave do Asaas não configurada (ASAAS_API_KEY/ASAAS_KEY_PROD/ASAAS_KEY_SANDBOX)');
   }
 
   const response = await fetch(`${ASAAS_API_URL}${endpoint}`, {
@@ -125,16 +155,104 @@ export async function findCustomerByEmail(email: string): Promise<AsaasCustomer 
 export async function createCustomer(params: CreateCustomerParams): Promise<AsaasCustomer> {
   return asaasRequest<AsaasCustomer>('/customers', {
     method: 'POST',
+    body: JSON.stringify({
+      ...params,
+      notificationDisabled: params.notificationDisabled ?? true,
+    }),
+  });
+}
+
+export async function updateCustomer(
+  customerId: string,
+  params: Partial<CreateCustomerParams>
+): Promise<AsaasCustomer> {
+  return asaasRequest<AsaasCustomer>(`/customers/${customerId}`, {
+    method: 'PUT',
     body: JSON.stringify(params),
   });
+}
+
+async function listCustomerNotifications(customerId: string): Promise<AsaasNotification[]> {
+  const response = await asaasRequest<{ data: AsaasNotification[] }>(
+    `/customers/${customerId}/notifications`
+  );
+  return response.data || [];
+}
+
+async function disableCustomerNotificationsBatch(customerId: string): Promise<void> {
+  const notifications = await listCustomerNotifications(customerId);
+  if (!notifications.length) return;
+
+  const mustDisable = notifications.some((n) =>
+    Boolean(
+      n.enabled ||
+        n.emailEnabledForProvider ||
+        n.smsEnabledForProvider ||
+        n.emailEnabledForCustomer ||
+        n.smsEnabledForCustomer ||
+        n.phoneCallEnabledForCustomer ||
+        n.whatsappEnabledForCustomer,
+    ),
+  );
+
+  if (!mustDisable) return;
+
+  const payload = {
+    customer: customerId,
+    notifications: notifications.map((n) => ({
+      id: n.id,
+      enabled: false,
+      emailEnabledForProvider: false,
+      smsEnabledForProvider: false,
+      emailEnabledForCustomer: false,
+      smsEnabledForCustomer: false,
+      phoneCallEnabledForCustomer: false,
+      whatsappEnabledForCustomer: false,
+    })),
+  };
+
+  await asaasRequest('/notifications/batch', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function disableCustomerNotifications(customerId: string): Promise<void> {
+  await updateCustomer(customerId, { notificationDisabled: true });
+  try {
+    await disableCustomerNotificationsBatch(customerId);
+  } catch (error) {
+    console.error('[Asaas] Falha ao desativar notificações via batch:', {
+      customerId,
+      error,
+    });
+  }
 }
 
 export async function getOrCreateCustomer(params: CreateCustomerParams): Promise<AsaasCustomer> {
   const existing = await findCustomerByEmail(params.email);
   if (existing) {
+    try {
+      await disableCustomerNotifications(existing.id);
+    } catch (error) {
+      console.error('[Asaas] Falha ao desativar notificações do cliente existente:', {
+        customerId: existing.id,
+        error,
+      });
+    }
     return existing;
   }
-  return createCustomer(params);
+
+  const created = await createCustomer(params);
+  try {
+    await disableCustomerNotifications(created.id);
+  } catch (error) {
+    console.error('[Asaas] Falha ao desativar notificações do cliente recém-criado:', {
+      customerId: created.id,
+      error,
+    });
+  }
+  return created;
 }
 
 // ==================== PAYMENTS ====================

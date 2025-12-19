@@ -36,6 +36,24 @@ interface RequestDetail {
   createdAt: string;
   updatedAt: string;
   history: HistoryItem[];
+  assignedAdminId?: string | null;
+  AssignedAdmin?: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  assignedAt?: string | null;
+  RequestUpload?: {
+    id: string;
+    titleId: string | null;
+    completedAt: string | null;
+    Title?: {
+      id: string;
+      name: string;
+      slug: string;
+      type: string | null;
+    } | null;
+  } | null;
 }
 
 interface RequestDetailClientProps {
@@ -115,6 +133,8 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [internalNote, setInternalNote] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -122,6 +142,21 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isLoggedIn]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 768px)");
+    const update = () => setIsMobile(Boolean(mq.matches));
+    update();
+
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", update);
+      return () => mq.removeEventListener("change", update);
+    }
+
+    mq.addListener(update);
+    return () => mq.removeListener(update);
+  }, []);
 
   async function load() {
     try {
@@ -143,7 +178,7 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
         ...json,
         createdAt: json.createdAt,
         updatedAt: json.updatedAt,
-        history: (json.history || []).map((h: HistoryItem) => ({
+        history: (json.RequestHistory || []).map((h: HistoryItem) => ({
           ...h,
           createdAt: h.createdAt,
         })),
@@ -169,7 +204,7 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
     <div style={{ minHeight: "100vh", background: "#000", color: "#fff" }}>
       <PremiumNavbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
 
-      <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "100px 4% 60px" }}>
+      <div style={{ maxWidth: "1100px", margin: "0 auto", padding: isMobile ? "78px 16px 44px" : "100px 4% 60px" }}>
         <button
           type="button"
           onClick={() => router.back()}
@@ -194,7 +229,7 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
             Solicitação não encontrada.
           </p>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "260px 1fr", gap: isMobile ? 16 : 24 }}>
             {/* Coluna esquerda: poster + dados principais */}
             <div>
               <div
@@ -331,6 +366,74 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
                 )}
               </div>
 
+              {data.RequestUpload && (
+                <div
+                  style={{
+                    marginTop: 16,
+                    padding: 10,
+                    borderRadius: 8,
+                    border: "1px solid rgba(56,189,248,0.6)",
+                    background: "rgba(8,47,73,0.9)",
+                    fontSize: 12,
+                    color: "rgba(191,219,254,0.9)",
+                  }}
+                >
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>Status de upload</div>
+                  <div style={{ marginBottom: 4 }}>
+                    {data.RequestUpload.completedAt
+                      ? `Upload concluído em ${new Date(
+                          data.RequestUpload.completedAt,
+                        ).toLocaleString("pt-BR")}`
+                      : "Upload em andamento para este pedido."}
+                  </div>
+                  {data.RequestUpload.Title && (
+                    <div
+                      style={{
+                        marginTop: 4,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 4,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "rgba(148,163,184,0.9)",
+                        }}
+                      >
+                        Título no catálogo:
+                        {" "}
+                        <span style={{ fontWeight: 600, color: "#e5e7eb" }}>
+                          {data.RequestUpload.Title.name}
+                        </span>
+                      </div>
+                      {isAdmin && (
+                        <a
+                          href={`/admin/catalog/${data.RequestUpload.Title.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: "4px 8px",
+                            borderRadius: 999,
+                            border: "1px solid rgba(56,189,248,0.8)",
+                            background: "rgba(15,23,42,0.9)",
+                            color: "#e0f2fe",
+                            fontSize: 11,
+                            textDecoration: "none",
+                            marginTop: 2,
+                          }}
+                        >
+                          Ver no painel admin
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Painel de ações do admin */}
               {isAdmin && data.status !== "COMPLETED" && data.status !== "REJECTED" && (
                 <div
@@ -357,6 +460,36 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
                       {actionMessage}
                     </div>
                   )}
+                  <div
+                    style={{
+                      marginBottom: 8,
+                      fontSize: 12,
+                      color: "rgba(148,163,184,0.9)",
+                    }}
+                  >
+                    {data.AssignedAdmin ? (
+                      <>
+                        <span>Responsável: </span>
+                        <strong>
+                          {data.AssignedAdmin.name || data.AssignedAdmin.email}
+                        </strong>
+                        {data.assignedAt && (
+                          <div style={{ fontSize: 11 }}>
+                            Desde{" "}
+                            {new Date(data.assignedAt).toLocaleString("pt-BR", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <span>Sem responsável definido.</span>
+                    )}
+                  </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <button
                       type="button"
@@ -393,6 +526,71 @@ export default function RequestDetailClient({ id, isLoggedIn, isAdmin }: Request
                     >
                       Assumir caso
                     </button>
+
+                    <div>
+                      <div style={{ marginTop: 4, marginBottom: 4 }}>Notas internas</div>
+                      <textarea
+                        value={internalNote}
+                        onChange={(e) => setInternalNote(e.target.value)}
+                        rows={2}
+                        placeholder="Anotação interna (visível apenas para administradores)"
+                        style={{
+                          width: "100%",
+                          padding: "6px 8px",
+                          borderRadius: 6,
+                          border: "1px solid #4b5563",
+                          background: "#020617",
+                          color: "#e5e7eb",
+                          fontSize: 12,
+                          marginBottom: 4,
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={actionLoading || !internalNote.trim()}
+                        onClick={async () => {
+                          if (!internalNote.trim()) return;
+                          try {
+                            setActionLoading(true);
+                            setActionMessage(null);
+                            setError(null);
+                            const res = await fetch(
+                              `/api/admin/solicitacoes/${id}/add-note`,
+                              {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ message: internalNote.trim() }),
+                              },
+                            );
+                            if (!res.ok)
+                              throw new Error("Erro ao adicionar nota interna.");
+                            await load();
+                            setActionMessage("Nota interna adicionada.");
+                            setInternalNote("");
+                          } catch (err) {
+                            setError(
+                              err instanceof Error
+                                ? err.message
+                                : "Erro ao adicionar nota interna.",
+                            );
+                          } finally {
+                            setActionLoading(false);
+                          }
+                        }}
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 999,
+                          border: "none",
+                          background: "#111827",
+                          color: "#e5e7eb",
+                          cursor: "pointer",
+                          fontSize: 12,
+                          opacity: actionLoading || !internalNote.trim() ? 0.6 : 1,
+                        }}
+                      >
+                        Adicionar nota interna
+                      </button>
+                    </div>
 
                     <button
                       type="button"

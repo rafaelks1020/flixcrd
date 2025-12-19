@@ -24,6 +24,7 @@ interface NotificationStats {
   androidTokens: number;
   iosTokens: number;
   webTokens: number;
+  activeWebPushSubscriptions?: number;
 }
 
 export default function AdminNotificationsPage() {
@@ -93,7 +94,13 @@ export default function AdminNotificationsPage() {
         throw new Error(data.error || "Erro ao enviar");
       }
 
-      toast.success(`Notificação enviada para ${data.sent} dispositivos!`);
+      const sentExpo = typeof data.sentExpo === "number" ? data.sentExpo : null;
+      const sentWeb = typeof data.sentWeb === "number" ? data.sentWeb : null;
+      if (sentExpo !== null || sentWeb !== null) {
+        toast.success(`Enviado: Expo ${sentExpo ?? 0} | Web ${sentWeb ?? 0}`);
+      } else {
+        toast.success(`Notificação enviada para ${data.sent} dispositivos!`);
+      }
       setTitle("");
       setMessage("");
     } catch (err) {
@@ -196,6 +203,10 @@ export default function AdminNotificationsPage() {
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
             <p className="text-zinc-400 text-xs">🌐 Web</p>
             <p className="text-2xl font-bold">{stats.webTokens}</p>
+          </div>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+            <p className="text-zinc-400 text-xs">🔔 Web Push (PWA)</p>
+            <p className="text-2xl font-bold">{stats.activeWebPushSubscriptions ?? 0}</p>
           </div>
         </div>
       )}

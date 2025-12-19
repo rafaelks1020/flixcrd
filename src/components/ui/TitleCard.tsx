@@ -8,6 +8,7 @@ import Link from "next/link";
 interface TitleCardProps {
   id: string;
   name: string;
+  href?: string;
   posterUrl: string | null;
   backdropUrl?: string | null;
   type: string;
@@ -22,6 +23,7 @@ interface TitleCardProps {
 export default function TitleCard({
   id,
   name,
+  href,
   posterUrl,
   backdropUrl,
   type,
@@ -38,7 +40,7 @@ export default function TitleCard({
   const year = releaseDate ? new Date(releaseDate).getFullYear() : null;
 
   return (
-    <Link href={`/title/${id}`}>
+    <Link href={href ?? `/title/${id}`}>
       <div
         className="group relative aspect-[2/3] overflow-hidden rounded-lg bg-zinc-900 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-black/50 hover:z-10"
         onMouseEnter={() => setIsHovered(true)}

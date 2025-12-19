@@ -1,6 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
+import { Play, Info, Plus, Star, Calendar } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface HeroTitle {
   id: string;
@@ -15,257 +19,135 @@ interface HeroTitle {
 interface PremiumHeroProps {
   title: HeroTitle | null;
   isLoggedIn: boolean;
+  playHref?: string;
+  infoHref?: string;
 }
 
-export default function PremiumHero({ title, isLoggedIn }: PremiumHeroProps) {
+export default function PremiumHero({ title, isLoggedIn, playHref, infoHref }: PremiumHeroProps) {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const checkMobile = () => setIsMobile(window.matchMedia("(max-width: 768px)").matches);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
   if (!title) return null;
 
   const year = title.releaseDate ? new Date(title.releaseDate).getFullYear() : null;
   const rating = title.voteAverage ? title.voteAverage.toFixed(1) : null;
+  const playLink = playHref ?? `/title/${title.id}`;
+  const infoLink = infoHref ?? `/title/${title.id}`;
 
   return (
-    <section
-      style={{
-        position: 'relative',
-        height: '90vh',
-        minHeight: '600px',
-        width: '100%',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Background Image */}
-      {title.backdropUrl && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundImage: `url(${title.backdropUrl})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center top',
-          }}
-        />
-      )}
-
-      {/* Gradients Overlay */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'linear-gradient(to right, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.4) 50%, transparent 100%)',
-        }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'linear-gradient(to top, #000 0%, rgba(0,0,0,0.4) 40%, transparent 100%)',
-        }}
-      />
-
-      {/* Content */}
-      <div
-        style={{
-          position: 'relative',
-          zIndex: 10,
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          padding: '0 4%',
-          paddingTop: '68px',
-          maxWidth: '650px',
-        }}
-      >
-        {/* Title */}
-        <h1
-          style={{
-            fontSize: 'clamp(2.5rem, 5vw, 4rem)',
-            fontWeight: 800,
-            color: '#fff',
-            lineHeight: 1.1,
-            marginBottom: '16px',
-            textShadow: '2px 2px 8px rgba(0,0,0,0.5)',
-          }}
+    <section className="relative w-full h-[85vh] md:h-[95vh] min-h-[500px] overflow-hidden group">
+      {/* Dynamic Background with Ken Burns Effect */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={title?.backdropUrl}
+          initial={{ scale: 1.1, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 1.5 }}
+          className="absolute inset-0"
         >
-          {title.name}
-        </h1>
-
-        {/* Meta */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '16px',
-            marginBottom: '20px',
-            flexWrap: 'wrap',
-          }}
-        >
-          {rating && (
+          {title?.backdropUrl && (
             <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'rgba(255,255,255,0.15)',
-                padding: '6px 12px',
-                borderRadius: '4px',
-                backdropFilter: 'blur(10px)',
-              }}
-            >
-              <span style={{ color: '#ffd700', fontSize: '16px' }}>★</span>
-              <span style={{ color: '#fff', fontSize: '14px', fontWeight: 600 }}>{rating}</span>
-            </div>
+              className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-transform duration-[20s] ease-linear group-hover:scale-110"
+              style={{ backgroundImage: `url(${title.backdropUrl})` }}
+            />
           )}
-          {year && (
-            <span style={{ color: 'rgba(255,255,255,0.9)', fontSize: '15px', fontWeight: 500 }}>
-              {year}
-            </span>
-          )}
-          {title.type && (
-            <span
-              style={{
-                color: 'rgba(255,255,255,0.7)',
-                fontSize: '12px',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '1px',
-                background: 'rgba(255,255,255,0.1)',
-                padding: '4px 10px',
-                borderRadius: '4px',
-              }}
-            >
-              {title.type}
-            </span>
-          )}
-        </div>
+          {/* Cinematic Gradients */}
+          <div className="absolute inset-0 bg-gradient-to-r from-black via-black/50 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/50 to-transparent" />
+        </motion.div>
+      </AnimatePresence>
 
-        {/* Overview */}
-        {title.overview && (
-          <p
-            style={{
-              color: 'rgba(255,255,255,0.85)',
-              fontSize: '16px',
-              lineHeight: 1.6,
-              marginBottom: '28px',
-              display: '-webkit-box',
-              WebkitLineClamp: 3,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-              maxWidth: '550px',
-            }}
+      {/* Content Container */}
+      <div className="relative z-10 flex flex-col justify-center h-full px-4 md:px-16 pt-20 max-w-4xl">
+        <motion.div
+          key={title?.id}
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.2, duration: 0.8 }}
+        >
+          {/* Meta Badges */}
+          <div className="flex items-center gap-3 mb-4">
+            {title?.type && (
+              <span className="px-2 py-0.5 rounded text-[10px] md:text-xs font-bold tracking-widest uppercase bg-white/20 text-white backdrop-blur-md border border-white/10 shadow-[0_0_10px_rgba(255,255,255,0.1)]">
+                {title.type}
+              </span>
+            )}
+            {year && (
+              <span className="flex items-center gap-1 text-xs md:text-sm font-medium text-zinc-300">
+                <Calendar size={12} /> {year}
+              </span>
+            )}
+            {rating && (
+              <span className="flex items-center gap-1 text-xs md:text-sm font-medium text-yellow-400">
+                <Star size={12} fill="currentColor" /> {rating}
+              </span>
+            )}
+          </div>
+
+          {/* Title - Staggered entrance */}
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.8 }}
+            className="text-4xl md:text-7xl lg:text-8xl font-black text-white leading-[0.9] tracking-tight mb-6 drop-shadow-2xl"
           >
-            {title.overview}
-          </p>
-        )}
+            {title?.name}
+          </motion.h1>
 
-        {/* Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          {/* Play Button */}
-          <Link
-            href={`/title/${title.id}`}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '10px',
-              padding: '14px 32px',
-              background: '#fff',
-              borderRadius: '4px',
-              color: '#000',
-              fontSize: '16px',
-              fontWeight: 700,
-              textDecoration: 'none',
-              transition: 'all 0.2s ease',
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.8)';
-              e.currentTarget.style.transform = 'scale(1.02)';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.background = '#fff';
-              e.currentTarget.style.transform = 'scale(1)';
-            }}
-          >
-            <svg style={{ width: '24px', height: '24px' }} fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-            Assistir
-          </Link>
-
-          {/* More Info Button */}
-          <Link
-            href={`/title/${title.id}`}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '10px',
-              padding: '14px 28px',
-              background: 'rgba(109, 109, 110, 0.7)',
-              borderRadius: '4px',
-              color: '#fff',
-              fontSize: '16px',
-              fontWeight: 600,
-              textDecoration: 'none',
-              transition: 'all 0.2s ease',
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.background = 'rgba(109, 109, 110, 0.5)';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.background = 'rgba(109, 109, 110, 0.7)';
-            }}
-          >
-            <svg style={{ width: '24px', height: '24px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Mais informações
-          </Link>
-
-          {/* Add to List */}
-          {isLoggedIn && (
-            <button
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '44px',
-                height: '44px',
-                background: 'rgba(42, 42, 42, 0.6)',
-                border: '2px solid rgba(255,255,255,0.5)',
-                borderRadius: '50%',
-                color: '#fff',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.borderColor = '#fff';
-                e.currentTarget.style.background = 'rgba(42, 42, 42, 0.8)';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.5)';
-                e.currentTarget.style.background = 'rgba(42, 42, 42, 0.6)';
-              }}
-              title="Adicionar à Minha Lista"
+          {/* Overview */}
+          {title?.overview && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5, duration: 0.8 }}
+              className="text-zinc-300 text-sm md:text-lg leading-relaxed line-clamp-3 md:line-clamp-4 max-w-xl mb-8 drop-shadow-md"
             >
-              <svg style={{ width: '20px', height: '20px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
+              {title.overview}
+            </motion.p>
           )}
-        </div>
+
+          {/* Action Buttons */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.7, duration: 0.6 }}
+            className="flex flex-wrap items-center gap-3"
+          >
+            <Link
+              href={playLink}
+              className="flex items-center gap-2 px-6 py-3 bg-white text-black rounded font-bold text-base md:text-lg transition-colors hover:bg-white/90 active:scale-95"
+            >
+              <Play fill="currentColor" size={20} />
+              Assistir
+            </Link>
+
+            <Link
+              href={infoLink}
+              className="flex items-center gap-2 px-6 py-3 bg-white/20 text-white rounded font-bold text-base md:text-lg backdrop-blur-md transition-colors hover:bg-white/30 active:scale-95"
+            >
+              <Info size={20} />
+              Mais Info
+            </Link>
+
+            {isLoggedIn && (
+              <button
+                className="flex items-center gap-2 px-6 py-3 bg-white/20 text-white rounded font-bold text-base md:text-lg backdrop-blur-md transition-colors hover:bg-white/30 active:scale-95"
+              >
+                <Plus size={20} />
+                Minha Lista
+              </button>
+            )}
+          </motion.div>
+        </motion.div>
       </div>
-
-      {/* Bottom fade */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: '150px',
-          background: 'linear-gradient(to top, #000 0%, transparent 100%)',
-          pointerEvents: 'none',
-        }}
-      />
     </section>
   );
 }

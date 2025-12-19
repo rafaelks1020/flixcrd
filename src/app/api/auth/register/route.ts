@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { getOrCreateCustomer } from '@/lib/asaas';
+import { sendMail } from '@/lib/mailjet';
 
 const db = prisma as any;
 
@@ -92,7 +93,6 @@ export async function POST(request: NextRequest) {
       console.error('[Register] Erro ao criar cliente no Asaas:', asaasError);
     }
 
-    // Criar perfil padrão
     await prisma.profile.create({
       data: {
         userId: user.id,
@@ -100,6 +100,61 @@ export async function POST(request: NextRequest) {
         isKids: false,
       },
     });
+
+    // Enviar email de boas-vindas (não bloqueia o fluxo em caso de erro)
+    try {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+      const loginUrl = `${String(appUrl).replace(/\/$/, "")}/login`;
+
+      await sendMail({
+        to: user.email,
+        subject: 'Cadastro recebido - FlixCRD',
+        fromEmail: 'suporte@pflix.com.br',
+        fromName: 'Suporte FlixCRD',
+        meta: {
+          reason: 'user-registered',
+          userId: user.id,
+          extra: {
+            source: 'auth-register',
+          },
+        },
+        context: {
+          userId: user.id,
+          email: user.email,
+        },
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #e50914;">Cadastro recebido</h2>
+            <p>Olá, ${user.name || user.email}!</p>
+            <p>Sua conta foi criada e está aguardando aprovação.</p>
+            <p>Você receberá um email assim que seu acesso for liberado.</p>
+            <p style="text-align: center; margin: 30px 0;">
+              <a href="${loginUrl}" 
+                 style="background-color: #e50914; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                Acompanhar cadastro
+              </a>
+            </p>
+            <p style="color: #666; font-size: 14px;">
+              Se você não reconhece este cadastro, responda este email ou entre em contato com o suporte.
+            </p>
+          </div>
+        `,
+        text: `
+Cadastro recebido - FlixCRD
+
+Olá, ${user.name || user.email}!
+
+Sua conta foi criada e está aguardando aprovação.
+Você receberá um email assim que seu acesso for liberado.
+
+Acompanhe em: ${loginUrl}
+
+Se você não reconhece este cadastro, entre em contato com o suporte.
+        `,
+      });
+    } catch (emailError) {
+      console.error('[Register] Erro ao enviar email de boas-vindas:', emailError);
+    }
 
     return NextResponse.json({
       success: true,

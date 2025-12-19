@@ -25,6 +25,25 @@ export async function GET(request: NextRequest, context: RouteContext) {
         RequestHistory: {
           orderBy: { createdAt: "asc" },
         },
+        AssignedAdmin: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
+        },
+        RequestUpload: {
+          include: {
+            Title: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                type: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -33,6 +52,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
         { error: "Solicitação não encontrada." },
         { status: 404 },
       );
+    }
+
+    if (user.role === "ADMIN") {
+      return NextResponse.json(requestRecord);
     }
 
     if (requestRecord.userId !== user.id) {

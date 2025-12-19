@@ -6,6 +6,117 @@
 
 Resumo das mudanças que impactam o painel admin, fluxos de upload, legendas e monitoramento.
 
+## 2025-12-18 – LAB: Recomendações por IA (Claude)
+
+- **Nova API**: `POST /api/lab/ai/recommendations` – recomendações a partir de texto livre (ex.: "comédia romântica + John Wick"), usando Anthropic (Claude Haiku) apenas para interpretar preferências e gerando a lista via TMDB (filtrando somente itens disponíveis no LAB).
+- **UI no LAB**: `/lab` ganhou um campo "Peça pra IA recomendar" que exibe os resultados em grid (formato catálogo).
+- **Persistência (perfil)**: o sistema grava no banco as **últimas 3 rodadas** de recomendações por usuário (top 3 itens por rodada) para permitir montar um perfil/média de gosto.
+- **Limitação de uso**: para evitar custo excessivo, usuários não-admin podem gerar recomendações **apenas 1 vez por mês**.
+- **Melhorias de catálogo**: as recomendações agora consultam múltiplas páginas do TMDB para aumentar variedade (mantendo filtro pelo catálogo LAB) e a UI exibe os resultados em grid (formato catálogo).
+- **Melhoria de precisão**: o parser da IA agora define preferência de mídia (filme/série) quando o usuário pede explicitamente, e o ranking aplica filtragem/ordenação por gêneros e faixa de ano para resultados mais coerentes.
+- **Controle de acesso**: disponível somente para **ADMIN** ou quando `NEXT_PUBLIC_LAB_ENABLED=true`.
+- **Variáveis de ambiente**:
+  - `CLAUDE_KEY` (obrigatória)
+  - `CLAUDE_MODEL` (opcional, default: `claude-3-haiku-20240307`)
+
+## 2025-12-16 – Módulo oculto "Lab" (integração SuperFlixAPI completa)
+
+- **Nova rota interna**: `/lab` – Catálogo estilo Netflix idêntico à página inicial com Hero, busca exclusiva e carrosséis.
+- **Página de detalhes**: `/lab/title/[id]?type=movie|tv` – Página completa do título com:
+  - Hero com backdrop, poster, sinopse, gêneros, nota, duração
+  - Para séries/animes: seletor de temporada + lista de episódios com thumbnails
+  - Botão "Assistir" que leva ao player
+- **Player integrado**: `/lab/watch?type=filme|serie&id=...&season=...&episode=...`
+  - Filmes: usa IMDb ID → `superflixapi.run/filme/ttXXXXXXX`
+  - Séries/Animes: usa TMDB ID → `superflixapi.run/serie/ID/temporada/episodio`
+  - Player minimalista (somente vídeo + controles de temporada/episódio quando série)
+  - Personalização visual aplicada por padrão: `#noEpList`, `#noLink`, `#transparent`, `#noBackground`
+- **Persistência de busca**: resultados da busca são mantidos no localStorage ao navegar entre páginas.
+- **Acesso controlado**: aparece no menu apenas para **ADMIN** ou quando `NEXT_PUBLIC_LAB_ENABLED=true`.
+- **APIs proxy**:
+  - `GET /api/lab/catalogo?type=movie|serie|anime&limit=N` – busca IDs da SuperFlixAPI + detalhes do TMDB
+  - `GET /api/lab/busca?q=...` – busca no TMDB multi-search
+  - `GET /api/lab/titulo/[id]?type=movie|tv` – detalhes completos do título (TMDB)
+  - `GET /api/lab/titulo/[id]/temporada/[season]` – episódios da temporada (TMDB)
+  - `GET /api/lab/lista` – proxy para `/lista` (IDs por categoria)
+  - `GET /api/lab/calendario` – proxy para `/calendario.php`
+  - `GET /api/lab/discover?category=movie|serie|anime&sort=...&year=...&genre=...&page=...&limit=...` – catálogo inteligente (TMDB discover filtrado por IDs disponíveis na SuperFlix)
+  - `GET /api/lab/tmdb/genres?type=movie|tv` – lista de gêneros do TMDB para UI de filtros
+
+- **Calendário (UI)**: `/lab/calendario` mostra lançamentos por dia/status com botões para abrir Detalhes e Assistir no player do Lab.
+
+- **Catálogo Inteligente (UI)**: `/lab/explore` com filtros por categoria (Filmes/Séries/Animes), ordenação (popularidade/nota/votos/novidades), gênero e ano; resultados apontam para `/lab/title/...`.
+
+## 2025-12-17 – Lab: Explore inteligente + seções automáticas
+
+- **Explore inteligente**: `/lab/explore` ganhou seções automáticas antes dos filtros:
+  - **Em alta no LAB** (tendências TMDB filtradas apenas para itens disponíveis na SuperFlix)
+  - **Recomendados pra você** (TMDB recommendations baseado em seeds do localStorage do LAB)
+- **Novas APIs**:
+  - `GET /api/lab/trending?type=all|movie|tv&time=day|week&limit=N`
+  - `GET /api/lab/recommendations?seeds=movie:ID,tv:ID&limit=N`
+- **Estabilidade**: deduplicação reforçada em `discover/busca` para evitar warnings de React por keys duplicadas.
+
+## 2025-12-17 – Métricas: Presença/Tempo online (MVP)
+
+- **Heartbeat de presença**: o frontend envia batimentos periódicos para registrar sessão/lastSeen.
+- **Métricas no admin**: `/admin/analytics` agora mostra:
+  - Online agora (usuários/sessões)
+  - Tempo online hoje (agregado)
+  - Tempo online na janela (7/30/90d)
+  - Top usuários por tempo online
+- **Novas APIs**:
+  - `POST /api/presence/heartbeat` (web/mobile)
+  - `GET /api/admin/presence` (ADMIN)
+
+## 2025-12-15 – Inter Boleto (Cobrança v3) + Webhook de ativação automática
+
+### PWA (nível app)
+
+- **Offline fallback** – rota `/offline` para fallback quando o usuário estiver sem internet.
+- **Service Worker** – cache inteligente para assets estáticos + fallback offline (sem cachear streaming/API).
+- **UX de instalação e atualização** – banner de instalar quando disponível e CTA de atualização quando houver nova versão.
+- **Playback tipo app** – Media Session e Wake Lock para controles nativos e evitar tela apagando durante o vídeo.
+- **Web Push (PWA)** – suporte a Web Push com VAPID + subscriptions por usuário, envio via admin e handler no Service Worker.
+
+### Variáveis de ambiente (Web Push)
+
+- `WEBPUSH_VAPID_PUBLIC_KEY`
+- `WEBPUSH_VAPID_PRIVATE_KEY`
+- `WEBPUSH_VAPID_SUBJECT` (ex: `mailto:suporte@...` ou `https://pflix.com.br`)
+
+### Pagamentos (Inter)
+
+- **Boleto Inter (Cobrança v3)** – `POST /api/subscription/create` com `billingType=BOLETO` emite cobrança no Inter e grava `Payment.asaasPaymentId = codigoSolicitacao` (UUID do Inter) e `Payment.invoiceUrl = "INTER"`.
+- **PIX Inter** – `POST /api/subscription/create` com `billingType=PIX` emite cobrança imediata no Inter e grava `PixPayment.txid` e `Payment.asaasPaymentId = txid`.
+- **PDF do boleto via proxy** – `GET /api/payments/:paymentId/invoice` retorna `application/pdf` baixado do Inter quando o pagamento for do Inter.
+- **Webhook Inter Cobrança (boleto)** – novo endpoint `POST /api/webhooks/inter/cobranca`:
+  - Valida token por header (`x-webhook-token` / `x-inter-webhook-token` / `inter-webhook-token`) quando `INTER_WEBHOOK_TOKEN` (ou `INTER_COBRANCA_WEBHOOK_TOKEN` / `INTER_BOLETO_WEBHOOK_TOKEN`) estiver definido.
+  - Confirma o status **server-to-server** consultando o Inter (`GET /cobranca/v3/cobrancas/{codigoSolicitacao}`).
+  - Atualiza `Payment` e ativa a `Subscription` de forma **idempotente** (evita reprocessar o mesmo pagamento e evita email duplicado).
+- **Webhook Inter PIX** – endpoint `POST /api/webhooks/inter/pix`:
+  - Protegido por token (em produção **exige** `INTER_WEBHOOK_TOKEN` ou `INTER_PIX_WEBHOOK_TOKEN`).
+  - Aceita payload no formato `[{...}]` e também `{ pix: [{...}] }`.
+  - Confirma o status **server-to-server** consultando o Inter (`GET /pix/v2/cob/{txid}`), valida valor e ativa a assinatura de forma **idempotente**.
+
+### Variáveis de ambiente (Inter)
+
+- `INTER_CLIENT_ID`, `INTER_CLIENT_SECRET` (OAuth)
+- `INTER_CERTIFICATE` e `INTER_PRIVATE_KEY` (mTLS)
+- `INTER_CONTA_CORRENTE` (quando aplicável)
+- `INTER_WEBHOOK_TOKEN` para proteger webhooks (PIX e Cobrança)
+- `INTER_PIX_WEBHOOK_TOKEN` (opcional) para proteger apenas o webhook PIX
+- `INTER_COBRANCA_WEBHOOK_TOKEN` / `INTER_BOLETO_WEBHOOK_TOKEN` (opcional) para proteger apenas o webhook Cobrança
+
+### Seletor de provedor (ASAAS vs INTER)
+
+- **Provider por ambiente** – é possível escolher o gateway de cobrança por env:
+  - `PAYMENTS_PROVIDER_PIX=ASAAS|INTER`
+  - `PAYMENTS_PROVIDER_BOLETO=ASAAS|INTER`
+  - fallback: `PAYMENTS_PROVIDER_DEFAULT=ASAAS|INTER` (ou `PAYMENTS_PROVIDER` / `PAYMENT_PROVIDER`)
+- **Override por request (opcional)** – `POST /api/subscription/create` aceita `paymentProvider: "ASAAS" | "INTER"`.
+- **Padrão (sem env/payload)** – volta para **ASAAS** (INTER é opt-in).
+
 ## 2025-12-10 – Mailjet, Recuperação de Senha e Cron visível
 
 ### Comunicação & Emails (Mailjet)

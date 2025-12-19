@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sendPushToUsers } from "@/lib/push";
+import { sendMail } from "@/lib/mailjet";
 
 interface RouteContext {
   params: Promise<{
@@ -103,6 +104,60 @@ export async function POST(request: NextRequest, context: RouteContext) {
           message: `A solicitação "${existing.title}" está na etapa ${normalized}.`,
           data: { requestId: id, type: "REQUEST_PROCESSING", state: normalized },
         });
+        const users = await prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { email: true, name: true },
+        });
+
+        const emails = users
+          .map((u) => u.email)
+          .filter((email): email is string => Boolean(email));
+
+        if (emails.length > 0) {
+          const appUrl =
+            process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+
+          await sendMail({
+            to: emails,
+            subject: "Sua solicitação está em processamento",
+            fromEmail: "contato@pflix.com.br",
+            fromName: "FlixCRD",
+            meta: {
+              reason: "request-status-changed",
+              userId: existing.userId,
+              requestId: existing.id,
+              extra: {
+                workflowState: normalized,
+              },
+            },
+            context: {
+              requestId: existing.id,
+              workflowState: normalized,
+            },
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #e50914;">Sua solicitação está em processamento</h2>
+                <p>Olá!</p>
+                <p>A solicitação <strong>${existing.title}</strong> está na etapa <strong>${normalized}</strong>.</p>
+                <p>Você será avisado quando ela for concluída.</p>
+                <p style="text-align: center; margin: 30px 0;">
+                  <a href="${appUrl}/solicitacoes" 
+                     style="background-color: #e50914; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                    Ver minhas solicitações
+                  </a>
+                </p>
+              </div>
+            `,
+            text: `
+Sua solicitação está em processamento
+
+A solicitação "${existing.title}" está na etapa ${normalized}.
+Você será avisado quando ela for concluída.
+
+Acesse: ${appUrl}/solicitacoes
+            `,
+          });
+        }
       } catch (notifyError) {
          
         console.error("Failed to send push for request workflow:", notifyError);

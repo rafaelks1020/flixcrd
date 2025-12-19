@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function PendingApprovalPage() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const router = useRouter();
 
   useEffect(() => {
@@ -14,16 +14,29 @@ export default function PendingApprovalPage() {
       return;
     }
 
-    // Se já foi aprovado, redirecionar para subscribe ou browse
     if (status === "authenticated") {
       const approvalStatus = (session?.user as any)?.approvalStatus;
       if (approvalStatus === "APPROVED") {
         router.push("/subscribe");
-      } else if (approvalStatus === "REJECTED") {
-        // Mantém na página para mostrar mensagem de rejeição
+        return;
       }
+
+      const interval = setInterval(() => {
+        update();
+      }, 15000);
+
+      update();
+      return () => clearInterval(interval);
     }
-  }, [status, session, router]);
+  }, [status, session, router, update]);
+
+  async function handleCheckStatus() {
+    try {
+      await update();
+    } catch {
+      window.location.reload();
+    }
+  }
 
   if (status === "loading") {
     return (
@@ -101,7 +114,7 @@ export default function PendingApprovalPage() {
 
         <div className="space-y-3">
           <button
-            onClick={() => window.location.reload()}
+            onClick={handleCheckStatus}
             className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-medium rounded-lg transition-colors"
           >
             🔄 Verificar Status

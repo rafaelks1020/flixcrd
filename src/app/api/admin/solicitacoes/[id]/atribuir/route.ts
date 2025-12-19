@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sendPushToUsers } from "@/lib/push";
+import { sendMail } from "@/lib/mailjet";
 
 interface RouteContext {
   params: Promise<{
@@ -35,6 +36,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
+    await prisma.request.update({
+      where: { id },
+      data: {
+        assignedAdminId: adminId ?? null,
+        assignedAt: new Date(),
+      },
+    });
+
     await prisma.requestHistory.create({
       data: {
         requestId: id,
@@ -61,6 +70,61 @@ export async function POST(request: NextRequest, context: RouteContext) {
         message: `Um administrador assumiu a solicitação "${existing.title}".`,
         data: { requestId: id, type: "REQUEST_ASSIGNED" },
       });
+
+      const users = await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { email: true, name: true },
+      });
+
+      const emails = users
+        .map((u) => u.email)
+        .filter((email): email is string => Boolean(email));
+
+      if (emails.length > 0) {
+        const appUrl =
+          process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+
+        await sendMail({
+          to: emails,
+          subject: "Sua solicitação foi assumida",
+          fromEmail: "contato@pflix.com.br",
+          fromName: "FlixCRD",
+          meta: {
+            reason: "request-status-changed",
+            userId: existing.userId,
+            requestId: existing.id,
+            extra: {
+              type: "ASSIGNED",
+            },
+          },
+          context: {
+            requestId: existing.id,
+            status: "ASSIGNED",
+          },
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #e50914;">Sua solicitação foi assumida</h2>
+              <p>Olá!</p>
+              <p>Um administrador assumiu a solicitação <strong>${existing.title}</strong>.</p>
+              <p>Você será notificado quando houver novas atualizações.</p>
+              <p style="text-align: center; margin: 30px 0;">
+                <a href="${appUrl}/solicitacoes" 
+                   style="background-color: #e50914; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                  Ver minhas solicitações
+                </a>
+              </p>
+            </div>
+          `,
+          text: `
+Sua solicitação foi assumida
+
+Um administrador assumiu a solicitação "${existing.title}".
+Você será notificado quando houver novas atualizações.
+
+Acesse: ${appUrl}/solicitacoes
+          `,
+        });
+      }
     } catch (notifyError) {
        
       console.error("Failed to send push for request assign:", notifyError);

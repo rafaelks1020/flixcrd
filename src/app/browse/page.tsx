@@ -29,17 +29,29 @@ export default async function BrowsePage() {
     select: {
       id: true,
       name: true,
+      overview: true,
       posterUrl: true,
       backdropUrl: true,
       type: true,
       voteAverage: true,
       releaseDate: true,
+      TitleGenre: {
+        include: {
+          Genre: true
+        }
+      }
     },
   });
 
   const titles = titlesRaw.map((t) => ({
     ...t,
     releaseDate: t.releaseDate ? t.releaseDate.toISOString() : null,
+    genres: t.TitleGenre.map(tg => ({
+      genre: {
+        id: tg.Genre.id,
+        name: tg.Genre.name
+      }
+    }))
   }));
 
   return <BrowseClient initialTitles={titles} isLoggedIn={isLoggedIn} isAdmin={isAdmin} />;
