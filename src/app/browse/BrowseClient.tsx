@@ -13,11 +13,11 @@ interface Title {
   id: string;
   name: string;
   posterUrl: string | null;
-  backdropUrl?: string | null;
+  backdropUrl: string | null;
   type: string;
   voteAverage?: number | null;
   releaseDate?: string | null;
-  overview?: string | null;
+  overview: string | null;
   genres?: { genre: { id: string, name: string } }[];
 }
 
@@ -50,7 +50,7 @@ export default function BrowseClient({
   const observerRef = useRef<HTMLDivElement | null>(null);
 
   // Featured title is the first one by default (most popular)
-  const featuredTitle = useMemo(() => titles[0] || null, [titles]);
+  const featuredTitle = useMemo(() => titles[0] ?? null, [titles]);
 
   // Load Genres
   useEffect(() => {
@@ -119,7 +119,7 @@ export default function BrowseClient({
 
       {/* Hero Section */}
       {!searchQuery && !selectedGenreId && filterType === "ALL" && featuredTitle && (
-        <BrowseHero title={featuredTitle as any} />
+        <BrowseHero title={featuredTitle} />
       )}
 
       <main className={cn(

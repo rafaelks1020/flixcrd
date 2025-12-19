@@ -445,19 +445,19 @@ export default function LabClient({ isLoggedIn, isAdmin }: LabClientProps) {
             </motion.div>
           )}
         </AnimatePresence>
-        <div className="relative -mt-20 pb-32 space-y-16 px-4 md:px-0">
+        <div className="relative -mt-8 z-30 pb-32 space-y-24 px-4 md:px-8">
           <AnimatePresence>{aiLoading && <NeuralScanHUD query={aiQuery} />}</AnimatePresence>
           <div className="max-w-7xl mx-auto px-4 md:px-8 space-y-8">
             <div className="flex flex-col xl:flex-row gap-6 items-stretch">
               <div className="flex-[2]">
-                <div className="group relative bg-white/5 backdrop-blur-3xl border border-white/10 rounded-3xl p-4 transition-all hover:bg-white/[0.08] hover:border-white/20 shadow-2xl">
-                  <div className="flex flex-col md:flex-row items-center gap-4">
+                <div className="group relative bg-white/5 backdrop-blur-3xl border border-white/10 rounded-[32px] p-6 md:p-8 transition-all hover:bg-white/[0.08] hover:border-white/20 shadow-2xl">
+                  <div className="flex flex-col md:flex-row items-center gap-6">
                     <div className="flex-1 relative w-full group/input">
-                      <Brain className="absolute left-5 top-1/2 -translate-y-1/2 text-primary group-hover/input:scale-110 transition-transform duration-300" size={20} />
-                      <input value={aiQuery} onChange={(e) => setAiQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && runAiRecommendations()} placeholder="Descreva o que quer ver..." className="w-full h-14 bg-black/40 border border-white/5 rounded-2xl pl-14 pr-6 text-sm text-white focus:border-primary/50 outline-none transition-all placeholder:text-zinc-600 font-bold uppercase tracking-widest text-[11px]" />
+                      <Brain className="absolute left-6 top-1/2 -translate-y-1/2 text-primary group-hover/input:scale-110 transition-transform duration-300 pointer-events-none" size={24} />
+                      <input value={aiQuery} onChange={(e) => setAiQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && runAiRecommendations()} placeholder="Descreva o que quer ver..." className="w-full h-16 bg-black/40 border border-white/5 rounded-2xl pl-16 pr-8 text-sm text-white focus:border-primary/50 outline-none transition-all placeholder:text-zinc-600 font-bold uppercase tracking-widest text-[11px]" />
                     </div>
-                    <button onClick={runAiRecommendations} disabled={aiLoading} className="h-14 px-8 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-[11px] hover:bg-zinc-200 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center gap-3 shrink-0">
-                      {aiLoading ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />} Explorar com IA
+                    <button onClick={runAiRecommendations} disabled={aiLoading} className="h-16 px-10 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-[11px] hover:bg-zinc-200 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center gap-3 shrink-0 shadow-[0_0_30px_rgba(255,255,255,0.1)]">
+                      {aiLoading ? <Loader2 className="animate-spin" size={20} /> : <Sparkles size={20} />} Explorar com IA
                     </button>
                   </div>
                 </div>
@@ -494,7 +494,7 @@ export default function LabClient({ isLoggedIn, isAdmin }: LabClientProps) {
               <AnimatePresence>{aiResults.length > 0 && (<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6"><div className="max-w-7xl mx-auto px-4 md:px-8 flex items-baseline justify-between border-l-2 border-primary pl-6"><h2 className="text-2xl font-black text-white uppercase tracking-tighter">Sintonizado com você</h2><button onClick={() => setAiResults([])} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">Ocultar</button></div><PremiumTitleRow title="LAB AI Recommendations" titles={aiResults.map(mapLabTitleToPremium)} /></motion.div>)}</AnimatePresence>
               {labContinue.length > 0 && <PremiumTitleRow title="Continuar Assistindo" titles={labContinue.map(it => ({ id: it.key, href: it.watchUrl, name: it.title || "Continuar", posterUrl: it.posterUrl, type: it.watchType === "filme" ? "MOVIE" : "SERIES" }))} />}
               {labMyList.length > 0 && <PremiumTitleRow title="Sua Coleção Premium" titles={labMyList.map(it => ({ id: it.key, href: `/lab/title/${it.tmdbId}?type=${it.mediaType}`, name: it.title, posterUrl: it.posterUrl, type: it.type }))} />}
-              <div className="space-y-16">
+              <div className="space-y-20 pt-8">
                 {filmes.length > 0 && (<div className="space-y-6"><div className="max-w-7xl mx-auto px-4 md:px-8 border-l-2 border-primary pl-6"><h2 className="text-2xl font-black text-white uppercase tracking-tighter">Obras Cinematográficas</h2><p className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.2em] mt-1">Acervo Lab de Filmes</p></div><PremiumTitleRow title="Lab Movies" titles={filmes.map(mapLabTitleToPremium)} /></div>)}
                 {series.length > 0 && (<div className="space-y-6"><div className="max-w-7xl mx-auto px-4 md:px-8 border-l-2 border-emerald-500 pl-6"><h2 className="text-2xl font-black text-white uppercase tracking-tighter">Produções em Série</h2><p className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.2em] mt-1">Maratonas de Alta Performance</p></div><PremiumTitleRow title="Lab Series" titles={series.map(mapLabTitleToPremium)} /></div>)}
                 {animes.length > 0 && (<div className="space-y-6"><div className="max-w-7xl mx-auto px-4 md:px-8 border-l-2 border-yellow-500 pl-6"><h2 className="text-2xl font-black text-white uppercase tracking-tighter">Intelectualidade Oriental</h2><p className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.2em] mt-1">Animes e Cultura Pop</p></div><PremiumTitleRow title="Lab Animes" titles={animes.map(mapLabTitleToPremium)} /></div>)}

@@ -227,7 +227,7 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 z-[90] backdrop-blur-sm"
+              className="fixed inset-0 bg-black/80 z-[9998] backdrop-blur-md"
               onClick={() => setMobileMenuOpen(false)}
             />
             <motion.div
@@ -235,7 +235,7 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed top-0 left-0 bottom-0 w-3/4 max-w-sm bg-zinc-950 z-[100] border-r border-white/10 p-6 shadow-2xl overflow-y-auto"
+              className="fixed top-0 left-0 bottom-0 w-[85%] max-w-xs bg-zinc-950/95 backdrop-blur-xl z-[9999] border-r border-white/10 p-6 shadow-2xl overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-8">
                 <span className="text-2xl font-black text-primary">Pflix</span>

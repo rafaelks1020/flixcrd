@@ -41,7 +41,7 @@ export default function PremiumTitleCard({
   return (
     <motion.div
       layout
-      className="group/card relative w-full flex-shrink-0"
+      className="group/card relative w-[160px] sm:w-[200px] md:w-[240px] lg:w-[260px] xl:w-[300px] flex-shrink-0"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >

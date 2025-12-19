@@ -340,6 +340,7 @@ model Settings {
   maxUploadSize              Int      @default(10)
   transcoderCrf              Int      @default(20)
   deleteSourceAfterTranscode Boolean  @default(true)
+  labEnabled                 Boolean  @default(false)
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
 }
