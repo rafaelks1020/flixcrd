@@ -113,6 +113,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Lock body scroll when mobile sidebar is open
+  useEffect(() => {
+    const isMobile = window.innerWidth < 1024;
+    if (sidebarOpen && isMobile) {
+      document.body.style.overflow = "hidden";
+      document.body.style.touchAction = "none";
+    } else {
+      document.body.style.overflow = "";
+      document.body.style.touchAction = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+      document.body.style.touchAction = "";
+    };
+  }, [sidebarOpen]);
+
+  // Close sidebar on route change (mobile only)
+  useEffect(() => {
+    if (window.innerWidth < 1024) {
+      setSidebarOpen(false);
+    }
+  }, [pathname]);
+
   return (
     <div className="flex min-h-screen bg-black text-zinc-400 selection:bg-primary/30">
       <Toaster
@@ -137,7 +160,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setSidebarOpen(false)}
-            className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm lg:hidden"
+            className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-sm lg:hidden"
           />
         )}
       </AnimatePresence>
@@ -145,16 +168,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Mobile Toggle */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="fixed bottom-6 right-6 z-50 flex lg:hidden w-12 h-12 rounded-full bg-primary text-white shadow-2xl items-center justify-center hover:scale-110 active:scale-95 transition-all"
+        className="fixed bottom-6 right-6 z-[10001] flex lg:hidden w-14 h-14 rounded-full bg-primary text-white shadow-2xl items-center justify-center hover:scale-110 active:scale-95 transition-all"
       >
-        {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+        {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
       </button>
 
       {/* Sidebar */}
       <motion.aside
         initial={false}
-        animate={{ x: sidebarOpen ? 0 : -260 }}
-        className="fixed lg:static inset-y-0 left-0 z-50 w-[260px] flex flex-col bg-zinc-950 border-r border-white/5 shadow-2xl backdrop-blur-3xl"
+        animate={{ x: sidebarOpen ? 0 : -280 }}
+        transition={{ type: "spring", damping: 25, stiffness: 200 }}
+        className="fixed lg:static inset-y-0 left-0 z-[10000] w-[280px] flex flex-col bg-zinc-950 border-r border-white/5 shadow-2xl lg:shadow-none"
       >
         {/* Sidebar Header */}
         <div className="p-8 pb-4">
