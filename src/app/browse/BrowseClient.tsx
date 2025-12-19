@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import Link from "next/link";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import PremiumNavbar from "@/components/ui/PremiumNavbar";
 import PremiumTitleCard from "@/components/ui/PremiumTitleCard";
-import { Search, SlidersHorizontal, ArrowUpDown, LayoutGrid, Ghost } from "lucide-react";
+import BrowseHero from "@/components/ui/BrowseHero";
+import GenreBar from "@/components/ui/GenreBar";
+import { Search, LayoutGrid, Ghost, Loader2, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface Title {
   id: string;
@@ -15,7 +17,13 @@ interface Title {
   type: string;
   voteAverage?: number | null;
   releaseDate?: string | null;
-  genres?: { name: string }[];
+  overview?: string | null;
+  genres?: { genre: { id: string, name: string } }[];
+}
+
+interface Genre {
+  id: string;
+  name: string;
 }
 
 interface BrowseClientProps {
@@ -32,20 +40,34 @@ export default function BrowseClient({
   isAdmin,
 }: BrowseClientProps) {
   const [titles, setTitles] = useState<Title[]>(initialTitles);
+  const [genres, setGenres] = useState<Genre[]>([]);
   const [loading, setLoading] = useState(false);
   const [filterType, setFilterType] = useState<string>("ALL");
-  const [sortBy, setSortBy] = useState<string>("popularity");
+  const [selectedGenreId, setSelectedGenreId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const observerRef = useRef<HTMLDivElement | null>(null);
+
+  // Featured title is the first one by default (most popular)
+  const featuredTitle = useMemo(() => titles[0] || null, [titles]);
+
+  // Load Genres
+  useEffect(() => {
+    fetch("/api/genres")
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setGenres(data);
+      })
+      .catch(err => console.error("Erro ao carregar gêneros:", err));
+  }, []);
 
   const loadTitles = useCallback(async (pageToLoad: number, reset: boolean) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (filterType !== "ALL") params.append("type", filterType);
-      if (sortBy) params.append("sort", sortBy);
+      if (selectedGenreId) params.append("genre", selectedGenreId);
       if (searchQuery) params.append("q", searchQuery);
       params.append("page", String(pageToLoad));
       params.append("limit", String(PAGE_SIZE));
@@ -54,11 +76,7 @@ export default function BrowseClient({
       if (!res.ok) return;
 
       const json = await res.json();
-      const list: Title[] = Array.isArray(json)
-        ? json
-        : Array.isArray(json.data)
-          ? json.data
-          : [];
+      const list: Title[] = Array.isArray(json.data) ? json.data : [];
 
       setTitles((prev) => (reset ? list : [...prev, ...list]));
       setPage(pageToLoad);
@@ -68,12 +86,14 @@ export default function BrowseClient({
     } finally {
       setLoading(false);
     }
-  }, [filterType, sortBy, searchQuery]);
+  }, [filterType, selectedGenreId, searchQuery]);
 
+  // Handle filter changes with reset
   useEffect(() => {
     loadTitles(1, true);
-  }, [loadTitles]);
+  }, [filterType, selectedGenreId, searchQuery, loadTitles]);
 
+  // Infinite Scroll Intersection Observer
   useEffect(() => {
     if (!hasMore || loading) return;
 
@@ -90,155 +110,148 @@ export default function BrowseClient({
     );
 
     observer.observe(node);
-
-    return () => {
-      observer.disconnect();
-    };
+    return () => observer.disconnect();
   }, [hasMore, loading, page, loadTitles]);
 
   return (
     <div className="min-h-screen bg-black text-white selection:bg-primary/30">
       <PremiumNavbar isLoggedIn={isLoggedIn} isAdmin={isAdmin} />
 
-      <main className="max-w-[1700px] mx-auto px-4 md:px-12 pt-28 pb-20">
-        {/* Header Section */}
-        <header className="mb-10 space-y-8">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-            <div>
-              <h1 className="text-4xl md:text-6xl font-black tracking-tighter mb-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-zinc-500">
-                Catálogo
-              </h1>
-              <p className="text-zinc-500 max-w-xl font-medium">
-                Explore nossa biblioteca completa de filmes, séries e animes.
-                Filtre por categoria ou popularidade para encontrar sua próxima obsessão.
-              </p>
+      {/* Hero Section */}
+      {!searchQuery && !selectedGenreId && filterType === "ALL" && featuredTitle && (
+        <BrowseHero title={featuredTitle as any} />
+      )}
+
+      <main className={cn(
+        "max-w-[1700px] mx-auto px-4 md:px-12 pb-20",
+        (!searchQuery && !selectedGenreId && filterType === "ALL") ? "pt-10" : "pt-28"
+      )}>
+        {/* Controls Section */}
+        <header className="mb-12 space-y-8">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+            <div className="space-y-4">
+              <h2 className="text-3xl md:text-5xl font-black tracking-tighter text-white uppercase">
+                {searchQuery ? `Resultados para "${searchQuery}"` : "Catálogo"}
+              </h2>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 backdrop-blur-md rounded-full border border-white/5 text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                  <LayoutGrid size={14} className="text-primary" />
+                  <span>{titles.length} Títulos</span>
+                </div>
+                {/* Type Filters */}
+                <div className="flex bg-white/5 backdrop-blur-md p-1 rounded-xl border border-white/5">
+                  {["ALL", "MOVIE", "SERIES", "ANIME"].map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setFilterType(t)}
+                      className={cn(
+                        "px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
+                        filterType === t ? "bg-white text-black shadow-lg" : "text-zinc-600 hover:text-white"
+                      )}
+                    >
+                      {t === "ALL" ? "Tudo" : t === "MOVIE" ? "Filmes" : t === "SERIES" ? "Séries" : "Animes"}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3 text-sm font-bold text-zinc-500 bg-zinc-900/50 backdrop-blur-md px-4 py-2 rounded-full border border-white/5 shadow-xl">
-              <LayoutGrid size={16} className="text-primary" />
-              <span>{titles.length} Títulos Disponíveis</span>
-            </div>
-          </div>
-
-          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
             {/* Search Input */}
-            <div className="relative w-full lg:max-w-md group">
+            <div className="relative w-full md:max-w-md group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-primary transition-colors" size={20} />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar por nome, elenco ou gênero..."
-                className="w-full bg-zinc-900/50 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white placeholder:text-zinc-600 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all backdrop-blur-md shadow-2xl"
+                placeholder="Buscar por nome ou palavras-chave..."
+                className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-xs font-bold text-white placeholder:text-zinc-700 focus:outline-none focus:border-primary/50 transition-all backdrop-blur-xl shadow-2xl"
               />
             </div>
+          </div>
 
-            {/* Filters Row */}
-            <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-              <div className="relative group">
-                <SlidersHorizontal className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
-                <select
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
-                  className="bg-zinc-900/50 border border-white/10 rounded-xl py-3.5 pl-11 pr-10 text-sm font-semibold text-white focus:outline-none focus:border-primary/50 transition-all appearance-none cursor-pointer backdrop-blur-md hover:bg-zinc-800/80"
-                >
-                  <option value="ALL">Todos os Tipos</option>
-                  <option value="MOVIE">Filmes</option>
-                  <option value="SERIES">Séries</option>
-                  <option value="ANIME">Animes</option>
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" size={16} />
-              </div>
-
-              <div className="relative group">
-                <ArrowUpDown className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="bg-zinc-900/50 border border-white/10 rounded-xl py-3.5 pl-11 pr-10 text-sm font-semibold text-white focus:outline-none focus:border-primary/50 transition-all appearance-none cursor-pointer backdrop-blur-md hover:bg-zinc-800/80"
-                >
-                  <option value="popularity">Mais Populares</option>
-                  <option value="recent">Mais Recentes</option>
-                  <option value="rating">Melhor Avaliados</option>
-                  <option value="name">Nome (A-Z)</option>
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" size={16} />
-              </div>
-            </div>
+          {/* Genre Selection Bar */}
+          <div className="border-t border-white/5 pt-2">
+            <GenreBar
+              genres={genres}
+              selectedId={selectedGenreId}
+              onSelect={setSelectedGenreId}
+            />
           </div>
         </header>
 
-        {/* Content Grid */}
-        {titles.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-x-4 gap-y-10 md:gap-x-6 md:gap-y-14">
-            {titles.map((title) => (
-              <PremiumTitleCard
-                key={title.id}
-                id={title.id}
-                name={title.name}
-                posterUrl={title.posterUrl}
-                type={title.type}
-                rating={title.voteAverage || undefined}
-                year={title.releaseDate ? new Date(title.releaseDate).getFullYear() : undefined}
-                genres={title.genres?.map(g => g.name)}
-              />
-            ))}
-          </div>
-        ) : !loading ? (
-          <div className="flex flex-col items-center justify-center py-40 text-center animate-fade-in">
-            <div className="w-24 h-24 bg-zinc-900 rounded-full flex items-center justify-center mb-6 border border-white/5 shadow-2xl">
-              <Ghost size={48} className="text-zinc-700" />
-            </div>
-            <h3 className="text-2xl font-bold text-white mb-2">Nenhum título encontrado</h3>
-            <p className="text-zinc-500 max-w-md">
-              Não conseguimos encontrar nada com esses filtros.
-              Tente buscar por termos mais genéricos ou mudar a categoria.
-            </p>
-            <button
-              onClick={() => { setSearchQuery(""); setFilterType("ALL"); }}
-              className="mt-8 px-6 py-2 bg-white text-black rounded-lg font-bold hover:bg-zinc-200 transition-colors"
+        {/* Content Grid with Staggered Animations */}
+        <AnimatePresence mode="popLayout">
+          {titles.length > 0 ? (
+            <motion.div
+              layout
+              className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-x-4 gap-y-10 md:gap-x-6 md:gap-y-14"
             >
-              Limpar Filtros
-            </button>
-          </div>
-        ) : null}
+              {titles.map((title, index) => (
+                <motion.div
+                  key={title.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: Math.min(index * 0.05, 0.5) }}
+                >
+                  <PremiumTitleCard
+                    id={title.id}
+                    name={title.name}
+                    posterUrl={title.posterUrl}
+                    type={title.type}
+                    rating={title.voteAverage || undefined}
+                    year={title.releaseDate ? new Date(title.releaseDate).getFullYear() : undefined}
+                    genres={title.genres?.map(g => g.genre.name)}
+                  />
+                </motion.div>
+              ))}
+            </motion.div>
+          ) : !loading ? (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex flex-col items-center justify-center py-40 text-center"
+            >
+              <div className="w-24 h-24 bg-zinc-900 rounded-full flex items-center justify-center mb-6 border border-white/5 shadow-2xl text-zinc-700">
+                <Ghost size={48} strokeWidth={1.5} />
+              </div>
+              <h3 className="text-2xl font-black text-white uppercase tracking-tighter mb-2">Vazio Absoluto</h3>
+              <p className="text-zinc-600 max-w-md text-sm font-medium">
+                Não detectamos nenhum título com esses filtros. Tente uma busca menos específica ou mude a categoria.
+              </p>
+              <button
+                onClick={() => { setSearchQuery(""); setFilterType("ALL"); setSelectedGenreId(null); }}
+                className="mt-8 px-10 py-3 bg-white text-black rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-zinc-200 transition-all hover:scale-105 active:scale-95 shadow-xl"
+              >
+                Resetar Filtros
+              </button>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
-        {/* Loading State Skeleton Grid */}
+        {/* Loading Skeletons */}
         {loading && titles.length === 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-4 md:gap-6">
             {[...Array(14)].map((_, i) => (
               <div key={i} className="space-y-4">
-                <div className="aspect-[2/3] bg-zinc-900 rounded-lg animate-pulse" />
-                <div className="h-4 bg-zinc-900 rounded w-3/4 animate-pulse" />
-                <div className="h-4 bg-zinc-900 rounded w-1/2 animate-pulse" />
+                <div className="aspect-[2/3] bg-zinc-900 rounded-2xl animate-pulse border border-white/5" />
+                <div className="h-3 bg-zinc-900 rounded-full w-3/4 animate-pulse ml-1" />
               </div>
             ))}
           </div>
         )}
 
-        {/* More loader for infinite scroll */}
+        {/* Infinite Scroll Trigger */}
         {hasMore && (
-          <div ref={observerRef} className="h-20 flex items-center justify-center mt-10">
+          <div ref={observerRef} className="h-40 flex items-center justify-center mt-12">
             {loading && (
-              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <div className="flex items-center gap-3 text-zinc-500">
+                <Loader2 size={24} className="animate-spin text-primary" />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em]">Escaneando Mais...</span>
+              </div>
             )}
           </div>
         )}
       </main>
     </div>
-  );
-}
-
-function ChevronDown({ className, size }: { className?: string, size?: number }) {
-  return (
-    <svg
-      className={className}
-      width={size} height={size}
-      viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2"
-      strokeLinecap="round" strokeLinejoin="round"
-    >
-      <path d="m6 9 6 6 6-6" />
-    </svg>
   );
 }
