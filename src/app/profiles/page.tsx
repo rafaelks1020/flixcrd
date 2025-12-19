@@ -1,8 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Plus, Settings, Sparkles, User, UserCheck } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Profile {
   id: string;
@@ -44,159 +47,179 @@ export default function ProfilesPage() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '16px' }}>Carregando perfis...</div>
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-zinc-500 font-black text-xs uppercase tracking-[0.2em] animate-pulse">
+            Carregando sua experiência...
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#141414', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-      {/* Logo */}
-      <Link href="/" style={{ position: 'absolute', top: '24px', left: '4%', textDecoration: 'none' }}>
-        <span style={{ fontSize: '32px', fontWeight: 800, background: 'linear-gradient(135deg, #e50914 0%, #b81d24 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-          Pflix
-        </span>
-      </Link>
+    <div className="min-h-screen bg-black text-white selection:bg-primary/30 relative flex flex-col items-center justify-center p-6 overflow-hidden">
+      {/* Cinematic Background */}
+      <div className="absolute inset-0 z-0">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-900 via-black to-black" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black" />
 
-      {/* Title */}
-      <h1 style={{ fontSize: 'clamp(1.8rem, 4vw, 3.5rem)', fontWeight: 400, color: '#fff', marginBottom: '40px', textAlign: 'center' }}>
-        Quem está assistindo?
-      </h1>
-
-      {/* Profiles Grid */}
-      <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', justifyContent: 'center', marginBottom: '50px' }}>
-        {profiles.map((profile) => (
-          <button
-            key={profile.id}
-            onClick={() => handleSelectProfile(profile.id)}
-            onMouseEnter={() => setHoveredId(profile.id)}
-            onMouseLeave={() => setHoveredId(null)}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '8px',
-              transition: 'transform 0.2s ease',
-              transform: hoveredId === profile.id ? 'scale(1.05)' : 'scale(1)',
-            }}
-          >
-            <div
-              style={{
-                width: '140px',
-                height: '140px',
-                borderRadius: '8px',
-                background: 'linear-gradient(135deg, #333 0%, #1a1a1a 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '64px',
-                border: hoveredId === profile.id ? '3px solid #fff' : '3px solid transparent',
-                transition: 'border-color 0.2s ease',
-                overflow: 'hidden',
-              }}
-            >
-              {profile.avatar || DEFAULT_AVATARS[0]}
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <p
-                style={{
-                  color: hoveredId === profile.id ? '#fff' : 'rgba(255,255,255,0.7)',
-                  fontSize: '16px',
-                  fontWeight: 500,
-                  transition: 'color 0.2s ease',
-                }}
-              >
-                {profile.name}
-              </p>
-              {profile.isKids && (
-                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px', marginTop: '4px' }}>
-                  Kids
-                </p>
-              )}
-            </div>
-          </button>
-        ))}
-
-        {/* Add Profile */}
-        {profiles.length < 5 && (
-          <Link
-            href="/profiles/manage"
-            onMouseEnter={() => setHoveredId('add')}
-            onMouseLeave={() => setHoveredId(null)}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '8px',
-              textDecoration: 'none',
-              transition: 'transform 0.2s ease',
-              transform: hoveredId === 'add' ? 'scale(1.05)' : 'scale(1)',
-            }}
-          >
-            <div
-              style={{
-                width: '140px',
-                height: '140px',
-                borderRadius: '8px',
-                background: 'transparent',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '64px',
-                border: hoveredId === 'add' ? '3px solid #fff' : '3px solid rgba(255,255,255,0.3)',
-                transition: 'border-color 0.2s ease',
-                color: hoveredId === 'add' ? '#fff' : 'rgba(255,255,255,0.5)',
-              }}
-            >
-              <svg style={{ width: '60px', height: '60px' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
-              </svg>
-            </div>
-            <p
-              style={{
-                color: hoveredId === 'add' ? '#fff' : 'rgba(255,255,255,0.5)',
-                fontSize: '16px',
-                fontWeight: 500,
-                transition: 'color 0.2s ease',
-              }}
-            >
-              Adicionar perfil
-            </p>
-          </Link>
-        )}
+        {/* Subtle Ambient Glows */}
+        <motion.div
+          animate={{ opacity: [0.05, 0.1, 0.05], scale: [1, 1.2, 1] }}
+          transition={{ duration: 10, repeat: Infinity }}
+          className="absolute top-0 left-0 w-full h-[50vh] bg-primary/5 blur-[120px] rounded-full"
+        />
       </div>
 
-      {/* Manage Profiles Button */}
-      <Link
-        href="/profiles/manage"
-        style={{
-          padding: '10px 28px',
-          background: 'transparent',
-          border: '1px solid rgba(255,255,255,0.5)',
-          borderRadius: '4px',
-          color: 'rgba(255,255,255,0.7)',
-          fontSize: '14px',
-          fontWeight: 500,
-          textDecoration: 'none',
-          transition: 'all 0.2s ease',
-        }}
-        onMouseOver={(e) => {
-          e.currentTarget.style.borderColor = '#fff';
-          e.currentTarget.style.color = '#fff';
-        }}
-        onMouseOut={(e) => {
-          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.5)';
-          e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
-        }}
+      {/* Header / Logo */}
+      <motion.div
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="absolute top-12 left-12 z-20"
       >
-        Gerenciar perfis
-      </Link>
+        <Link href="/" className="group flex items-center gap-2">
+          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 group-hover:scale-110 transition-transform">
+            <Sparkles size={20} className="text-white fill-white" />
+          </div>
+          <span className="text-3xl font-black tracking-tighter bg-gradient-to-r from-white to-zinc-500 bg-clip-text text-transparent">
+            Pflix
+          </span>
+        </Link>
+      </motion.div>
+
+      {/* Main Content */}
+      <div className="relative z-10 w-full max-w-6xl flex flex-col items-center space-y-16">
+        <motion.header
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center space-y-4"
+        >
+          <h1 className="text-4xl md:text-6xl font-black tracking-tight">
+            Quem está assistindo?
+          </h1>
+          <p className="text-zinc-500 font-bold uppercase tracking-[0.3em] text-xs">
+            Escolha seu perfil para continuar
+          </p>
+        </motion.header>
+
+        {/* Profiles Grid */}
+        <div className="flex flex-wrap items-center justify-center gap-8 md:gap-12 px-4">
+          <AnimatePresence>
+            {profiles.map((profile, index) => (
+              <motion.button
+                key={profile.id}
+                initial={{ opacity: 0, scale: 0.8, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                onClick={() => handleSelectProfile(profile.id)}
+                onMouseEnter={() => setHoveredId(profile.id)}
+                onMouseLeave={() => setHoveredId(null)}
+                className="group relative flex flex-col items-center gap-6"
+              >
+                {/* Avatar Container */}
+                <div className={cn(
+                  "relative w-32 h-32 md:w-44 md:h-44 rounded-[28px] overflow-hidden transition-all duration-500 border-4",
+                  hoveredId === profile.id
+                    ? "border-white scale-110 shadow-[0_0_40px_rgba(255,255,255,0.2)]"
+                    : "border-transparent bg-zinc-900"
+                )}>
+                  {/* Glass Overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent z-10" />
+
+                  {/* Multi-layered Avatar Background */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-950 flex items-center justify-center">
+                    <span className="text-6xl md:text-8xl select-none group-hover:scale-110 transition-transform duration-500">
+                      {profile.avatar || DEFAULT_AVATARS[0]}
+                    </span>
+                  </div>
+
+                  {/* Hover Interaction Element */}
+                  <motion.div
+                    animate={{ opacity: hoveredId === profile.id ? 1 : 0 }}
+                    className="absolute inset-0 bg-black/20 flex items-center justify-center z-20"
+                  >
+                    <UserCheck className="text-white drop-shadow-lg" size={40} />
+                  </motion.div>
+                </div>
+
+                {/* Name Label */}
+                <div className="space-y-1 text-center">
+                  <p className={cn(
+                    "text-xl font-black tracking-tight transition-colors duration-300",
+                    hoveredId === profile.id ? "text-white" : "text-zinc-500"
+                  )}>
+                    {profile.name}
+                  </p>
+                  {profile.isKids && (
+                    <span className="inline-block px-3 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-[10px] font-black uppercase tracking-widest border border-blue-500/20">
+                      Kids
+                    </span>
+                  )}
+                </div>
+              </motion.button>
+            ))}
+
+            {/* Add Profile Feature */}
+            {profiles.length < 5 && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ delay: profiles.length * 0.1 }}
+              >
+                <Link
+                  href="/profiles/manage"
+                  onMouseEnter={() => setHoveredId("add")}
+                  onMouseLeave={() => setHoveredId(null)}
+                  className="group relative flex flex-col items-center gap-6"
+                >
+                  <div className={cn(
+                    "relative w-32 h-32 md:w-44 md:h-44 rounded-[28px] border-4 border-dashed transition-all duration-500 flex items-center justify-center",
+                    hoveredId === "add"
+                      ? "border-white bg-zinc-900 scale-110 shadow-[0_0_40px_rgba(255,255,255,0.1)]"
+                      : "border-zinc-800 hover:border-zinc-700 bg-transparent"
+                  )}>
+                    <Plus
+                      className={cn(
+                        "transition-all duration-500",
+                        hoveredId === "add" ? "text-white scale-110 rotate-90" : "text-zinc-700"
+                      )}
+                      size={60}
+                      strokeWidth={1.5}
+                    />
+                  </div>
+                  <p className={cn(
+                    "text-xl font-black tracking-tight transition-colors duration-300",
+                    hoveredId === "add" ? "text-white" : "text-zinc-500"
+                  )}>
+                    Adicionar
+                  </p>
+                </Link>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Footer Actions */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8 }}
+          className="pt-10"
+        >
+          <Link
+            href="/profiles/manage"
+            className="group flex items-center gap-3 px-8 py-3.5 rounded-2xl border border-zinc-700 text-zinc-500 hover:text-white hover:border-white transition-all duration-300 font-black uppercase tracking-[0.2em] text-sm active:scale-95"
+          >
+            <Settings size={18} className="group-hover:rotate-90 transition-transform duration-500" />
+            Gerenciar perfis
+          </Link>
+        </motion.div>
+      </div>
+
+      {/* Experimental Shadow */}
+      <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-primary/10 rounded-full blur-[100px] pointer-events-none" />
     </div>
   );
 }

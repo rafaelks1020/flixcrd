@@ -5,6 +5,8 @@ import "./globals.css";
 import Providers from "@/components/Providers";
 import { authOptions } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
+import GhostSpotlight from "@/components/ui/GhostSpotlight";
+import SpotlightSearch from "@/components/ui/SpotlightSearch";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -63,16 +65,16 @@ export default async function RootLayout({
 
   const isAdmin = Boolean(
     session &&
-      (session as any).user &&
-      ((session as any).user).role === "ADMIN",
+    (session as any).user &&
+    ((session as any).user).role === "ADMIN",
   );
 
   const inMaintenance = settings.maintenanceMode && !isAdmin;
 
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black text-white`}
       >
         {inMaintenance ? (
           <div className="min-h-screen flex items-center justify-center bg-black text-zinc-100">
@@ -91,6 +93,8 @@ export default async function RootLayout({
           </div>
         ) : (
           <Providers>
+            <GhostSpotlight />
+            <SpotlightSearch />
             {children}
           </Providers>
         )}

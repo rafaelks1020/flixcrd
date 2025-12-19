@@ -1,6 +1,103 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
+import { getSettings } from "@/lib/settings";
+
+const SUPERFLIX_API = "https://superflixapi.run";
+const TMDB_API = "https://api.themoviedb.org/3";
+
+function parseIds(rawText: string): number[] {
+  try {
+    const parsed = JSON.parse(rawText);
+    if (Array.isArray(parsed)) {
+      return parsed.map((id: any) => parseInt(String(id), 10)).filter((n: number) => !Number.isNaN(n));
+    }
+    if (parsed && typeof parsed === "object") {
+      if (Array.isArray(parsed.ids)) {
+        return parsed.ids.map((id: any) => parseInt(String(id), 10)).filter((n: number) => !Number.isNaN(n));
+      }
+      if (Array.isArray(parsed.data)) {
+        return parsed.data.map((item: any) => parseInt(String(item?.id ?? item?.tmdb_id ?? ""), 10)).filter((n: number) => !Number.isNaN(n));
+      }
+    }
+  } catch { /* ignore */ }
+  return rawText.split(/[\n,]/).map((s) => parseInt(s.trim(), 10)).filter((n: number) => !Number.isNaN(n));
+}
+
+async function fetchFromLab(type: string | null, page: number, pageSize: number): Promise<{ data: any[]; total: number; totalPages: number }> {
+  const TMDB_KEY = process.env.TMDB_API_KEY || "";
+  if (!TMDB_KEY) throw new Error("TMDB_API_KEY não configurada.");
+
+  const mediaType = type === "SERIES" ? "tv" : "movie";
+  const superflixCategory = type === "SERIES" ? "serie" : "movie";
+
+  const listaRes = await fetch(`${SUPERFLIX_API}/lista?category=${superflixCategory}&type=tmdb&format=json&order=desc`, {
+    headers: { "User-Agent": "FlixCRD-Lab/1.0" },
+    next: { revalidate: 300 },
+  });
+
+  if (!listaRes.ok) throw new Error("Falha ao consultar /lista.");
+
+  const listaText = await listaRes.text();
+  const ids = parseIds(listaText);
+  const idsSet = new Set(ids);
+
+  const results: any[] = [];
+  const seenTmdbIds = new Set<number>();
+  let tmdbPage = page;
+  let scannedPages = 0;
+  let totalPages = 0;
+
+  while (results.length < pageSize && scannedPages < 6) {
+    const params = new URLSearchParams({
+      api_key: TMDB_KEY,
+      language: "pt-BR",
+      sort_by: "popularity.desc",
+      page: String(tmdbPage),
+      include_adult: "false",
+      vote_count_gte: "20",
+    });
+
+    const tmdbUrl = `${TMDB_API}/discover/${mediaType}?${params.toString()}`;
+    const tmdbRes = await fetch(tmdbUrl, { next: { revalidate: 300 } });
+    if (!tmdbRes.ok) break;
+    const tmdbJson = await tmdbRes.json();
+    const pageResults: any[] = tmdbJson?.results ?? [];
+    if (!totalPages) totalPages = tmdbJson?.total_pages || 0;
+
+    for (const item of pageResults) {
+      const tmdbId = item?.id;
+      if (typeof tmdbId !== "number") continue;
+      if (!idsSet.has(tmdbId)) continue;
+      if (seenTmdbIds.has(tmdbId)) continue;
+      seenTmdbIds.add(tmdbId);
+
+      results.push({
+        id: `lab-${mediaType}-${tmdbId}`,
+        tmdbId,
+        name: item?.title || item?.name || "Sem título",
+        slug: `lab-${tmdbId}`,
+        posterUrl: item?.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
+        backdropUrl: item?.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : null,
+        overview: item?.overview || "",
+        voteAverage: typeof item?.vote_average === "number" ? item.vote_average : 0,
+        releaseDate: item?.release_date || item?.first_air_date || null,
+        type: mediaType === "movie" ? "MOVIE" : "SERIES",
+        TitleGenre: [],
+        genres: [],
+      });
+
+      if (results.length >= pageSize) break;
+    }
+
+    scannedPages += 1;
+    tmdbPage += 1;
+    if (tmdbPage > (totalPages || 500)) break;
+    if (pageResults.length === 0) break;
+  }
+
+  return { data: results, total: ids.length, totalPages: Math.ceil(ids.length / pageSize) };
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -9,11 +106,33 @@ export async function GET(request: NextRequest) {
   const genre = searchParams.get("genre") ?? undefined;
   const page = parseInt(searchParams.get("page") || "1", 10);
   const limit = parseInt(searchParams.get("limit") || "24", 10);
-  const pageSize = Math.min(limit, 200); // Max 200 para evitar respostas gigantes
+  const pageSize = Math.min(limit, 200);
   const skip = (page - 1) * pageSize;
 
+  // Check Lab Mode
+  const settings = await getSettings();
+  const labEnabled = Boolean(settings.labEnabled);
+
+  if (labEnabled && !q && !genre) {
+    try {
+      const labResult = await fetchFromLab(type ?? null, page, pageSize);
+      return NextResponse.json({
+        data: labResult.data,
+        page,
+        limit: pageSize,
+        total: labResult.total,
+        totalPages: labResult.totalPages,
+        source: "lab",
+      });
+    } catch (err) {
+      console.error("Lab fetch error, falling back to DB:", err);
+      // Fall through to DB fetch
+    }
+  }
+
+  // Standard DB fetch
   const where: any = {};
-  
+
   if (q) {
     where.name = {
       contains: q,
@@ -21,19 +140,18 @@ export async function GET(request: NextRequest) {
     };
   }
 
-  if (type && type !== "all") {
+  if (type && type.toLowerCase() !== "all") {
     where.type = type;
   }
 
   if (genre) {
-    where.genres = {
+    where.TitleGenre = {
       some: {
         genreId: genre,
       },
     };
   }
 
-  // Contar total para paginação
   const total = await prisma.title.count({ where: Object.keys(where).length > 0 ? where : undefined });
 
   const titles = await prisma.title.findMany({
@@ -55,16 +173,31 @@ export async function GET(request: NextRequest) {
       overview: true,
       tagline: true,
       hlsPath: true,
+      TitleGenre: {
+        include: {
+          Genre: true
+        }
+      }
     },
   });
 
-  // Retorna formato paginado
+  const titlesWithMappedGenres = titles.map(t => ({
+    ...t,
+    genres: t.TitleGenre.map(tg => ({
+      genre: {
+        id: tg.Genre.id,
+        name: tg.Genre.name
+      }
+    }))
+  }));
+
   return NextResponse.json({
-    data: titles,
+    data: titlesWithMappedGenres,
     page,
     limit: pageSize,
     total,
     totalPages: Math.ceil(total / pageSize),
+    source: "db",
   });
 }
 

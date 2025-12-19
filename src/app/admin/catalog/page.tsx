@@ -1,9 +1,36 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, FormEvent, useMemo } from "react";
 import BulkActions from "@/components/admin/BulkActions";
 import CatalogGridView from "@/components/admin/CatalogGridView";
+import {
+  Plus,
+  Search,
+  Filter,
+  RefreshCw,
+  MoreVertical,
+  Edit2,
+  Trash2,
+  Play,
+  Tv,
+  Settings2,
+  List,
+  LayoutGrid,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  X,
+  Film,
+  Sparkles,
+  MoreHorizontal
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
+import Badge from "@/components/admin/Badge";
 
 type TitleType = "MOVIE" | "SERIES" | "ANIME" | "OTHER";
 
@@ -89,14 +116,14 @@ export default function AdminCatalogPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<TitleType | "ALL">("ALL");
   const [filterHlsStatus, setFilterHlsStatus] = useState<"ALL" | "WITH_HLS" | "WITHOUT_HLS">("ALL");
-  
+
   // PAGINAÇÃO
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
-  
+
   // SELEÇÃO MÚLTIPLA
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  
+
   // VIEW MODE (LIST ou GRID)
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
@@ -119,9 +146,6 @@ export default function AdminCatalogPage() {
     setError(null);
     setInfo(null);
     try {
-      // Importante: a API /api/titles devolve, por padrão, apenas 24 itens.
-      // Para o admin, queremos enxergar TODO o catálogo (filmes + séries/animes),
-      // então pedimos um limite alto aqui e fazemos a paginação apenas no cliente.
       const res = await fetch("/api/titles?limit=1000");
       if (!res.ok) {
         throw new Error("Erro ao carregar títulos");
@@ -136,14 +160,13 @@ export default function AdminCatalogPage() {
       setTitles(list);
 
       const titleIds = list.map((t) => t.id);
-      
+
       if (titleIds.length === 0) {
         setHlsStatus({});
         setPendingEpisodesSummary({});
         return;
       }
 
-      // Atualiza status de HLS em BATCH (1 request só!)
       try {
         const resStatus = await fetch("/api/admin/titles/hls-status-batch", {
           method: "POST",
@@ -158,11 +181,9 @@ export default function AdminCatalogPage() {
           setHlsStatus({});
         }
       } catch {
-        // Se falhar, deixa sem status
         setHlsStatus({});
       }
 
-      // Resumo de episódios pendentes por título (usa dados do banco, não do Wasabi)
       try {
         const resPending = await fetch("/api/admin/titles/pending-episodes-summary", {
           method: "POST",
@@ -251,7 +272,6 @@ export default function AdminCatalogPage() {
     setTranscodingStatus(null);
     try {
       if (type === "SERIES" || type === "ANIME") {
-        // Séries/animes: enfileira HLS para todos os episódios que já têm upload
         const res = await fetch(`/api/admin/titles/${id}/transcode-episodes`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -282,7 +302,6 @@ export default function AdminCatalogPage() {
         setTranscodingStatus(null);
         await loadTitles();
       } else {
-        // Filmes/outros: transcodificação HLS no nível do título
         const res = await fetch(`/api/transcode/hls/${id}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -301,7 +320,6 @@ export default function AdminCatalogPage() {
           throw new Error("Serviço de transcodificação não retornou jobId.");
         }
 
-        // Polling de status
         const poll = async () => {
           try {
             const statusRes = await fetch(
@@ -352,7 +370,6 @@ export default function AdminCatalogPage() {
           }
         };
 
-        // Primeiro poll imediato
         const keepPolling = await poll();
         if (keepPolling) {
           const interval = setInterval(async () => {
@@ -366,7 +383,7 @@ export default function AdminCatalogPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao iniciar transcodificação HLS");
     } finally {
-      // o estado é finalizado no próprio polling
+      // finalizado no polling
     }
   }
 
@@ -442,7 +459,6 @@ export default function AdminCatalogPage() {
       let payload: Record<string, unknown>;
 
       if (editingId) {
-        // Editando: manda todos os campos manualmente
         payload = {
           tmdbId: form.tmdbId ? Number(form.tmdbId) : null,
           type: form.type,
@@ -457,7 +473,6 @@ export default function AdminCatalogPage() {
           hlsPath: form.hlsPath || null,
         };
       } else {
-        // Criando: só manda tmdbId + type, API busca tudo do TMDB
         if (!form.tmdbId || !form.type) {
           throw new Error("Selecione um título do TMDB antes de adicionar.");
         }
@@ -605,17 +620,13 @@ export default function AdminCatalogPage() {
     if (!confirm("Tem certeza que deseja excluir este título?")) return;
     setError(null);
     try {
-      const res = await fetch(`/api/titles/${id}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(`/api/titles/${id}`, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data?.error ?? "Erro ao excluir título");
       }
       await loadTitles();
-      if (editingId === id) {
-        resetForm();
-      }
+      if (editingId === id) resetForm();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao excluir título");
     }
@@ -623,32 +634,37 @@ export default function AdminCatalogPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-semibold">Catálogo</h2>
-          <p className="text-sm text-zinc-400">
-            Gerencie os títulos do catálogo. Use a busca TMDb para criar ou atualizar títulos quando
-            necessário.
-          </p>
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-lg shadow-primary/5">
+              <Film size={24} />
+            </div>
+            <div>
+              <h2 className="text-3xl font-black tracking-tight text-white">Catálogo</h2>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">
+                Gestão de Inteligência de Mídia
+              </p>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              resetForm();
-              setShowTitleModal(true);
-            }}
-            className="rounded-md bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-white"
-          >
-            + Novo título (TMDb)
-          </button>
+        <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={handleRefreshAllFromTmdb}
             disabled={refreshingTmdb}
-            className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-semibold text-zinc-100 hover:bg-zinc-800 disabled:opacity-60"
+            className="h-12 px-6 rounded-2xl border border-white/5 bg-white/5 text-xs font-black uppercase tracking-widest text-zinc-400 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50 flex items-center gap-3"
           >
-            {refreshingTmdb ? "Atualizando TMDb..." : "Atualizar TMDb de todos"}
+            {refreshingTmdb ? <RefreshCw className="animate-spin" size={16} /> : <RefreshCw size={16} />}
+            {refreshingTmdb ? "Sincronizando..." : "Sincronizar Cloud"}
+          </button>
+          <button
+            type="button"
+            onClick={() => { resetForm(); setShowTitleModal(true); }}
+            className="h-12 px-8 rounded-2xl bg-primary text-white text-sm font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-xl shadow-primary/20 hover:shadow-primary/40 flex items-center gap-3 group"
+          >
+            <Plus size={20} className="group-hover:rotate-90 transition-transform" />
+            Novo Título
           </button>
         </div>
       </div>
@@ -667,83 +683,80 @@ export default function AdminCatalogPage() {
       <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 text-xs">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-zinc-100">Títulos cadastrados</h3>
-          {loading && (
-            <span className="text-[10px] text-zinc-500">Carregando...</span>
-          )}
+          {loading && <span className="text-[10px] text-zinc-500">Carregando...</span>}
         </div>
 
-        {/* BUSCA E FILTROS */}
-        <div className="space-y-2 rounded-md border border-zinc-700 bg-zinc-900/50 p-3">
-          <div className="flex items-center gap-2">
-            {/* VIEW MODE TOGGLE */}
-            <div className="flex rounded-lg border border-zinc-700 bg-zinc-900 overflow-hidden">
-              <button
-                onClick={() => setViewMode("list")}
-                className={`px-3 py-1 text-xs transition-colors ${
-                  viewMode === "list"
-                    ? "bg-emerald-600 text-white"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-                title="Visualização em lista"
-              >
-                ☰
-              </button>
-              <button
-                onClick={() => setViewMode("grid")}
-                className={`px-3 py-1 text-xs transition-colors ${
-                  viewMode === "grid"
-                    ? "bg-emerald-600 text-white"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-                title="Visualização em grade"
-              >
-                ⊞
-              </button>
-            </div>
-            
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+          <div className="lg:col-span-4 relative group">
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-zinc-600 group-focus-within:text-primary transition-colors" size={18} />
             <input
               type="text"
-              placeholder="🔍 Buscar título..."
+              placeholder="Buscar por título, ID ou slug..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-600 focus:outline-none"
+              className="w-full h-14 bg-white/5 border border-white/5 rounded-2xl pl-14 pr-6 text-sm font-bold text-white placeholder:text-zinc-700 focus:outline-none focus:border-primary/50 transition-all"
             />
-            
-            {(searchQuery || filterType !== "ALL" || filterHlsStatus !== "ALL") && (
-              <button
-                onClick={() => {
-                  setSearchQuery("");
-                  setFilterType("ALL");
-                  setFilterHlsStatus("ALL");
-                  setCurrentPage(1);
-                }}
-                className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-              >
-                Limpar
-              </button>
-            )}
           </div>
-          <div className="flex gap-2">
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value as TitleType | "ALL")}
-              className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 focus:border-emerald-600 focus:outline-none"
+
+          <div className="lg:col-span-2 flex bg-white/5 p-1.5 rounded-2xl border border-white/5">
+            <button
+              onClick={() => setViewMode("list")}
+              className={cn(
+                "flex-1 flex items-center justify-center h-10 rounded-xl gap-2 text-[10px] font-black uppercase tracking-widest transition-all",
+                viewMode === "list" ? "bg-primary text-white shadow-lg" : "text-zinc-500 hover:text-white"
+              )}
             >
-              <option value="ALL">Todos os tipos</option>
-              <option value="MOVIE">🎬 Filmes</option>
-              <option value="SERIES">📺 Séries</option>
-              <option value="ANIME">🎌 Animes</option>
-              <option value="OTHER">📦 Outros</option>
-            </select>
-            <select
-              value={filterHlsStatus}
-              onChange={(e) => setFilterHlsStatus(e.target.value as "ALL" | "WITH_HLS" | "WITHOUT_HLS")}
-              className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100 focus:border-emerald-600 focus:outline-none"
+              <List size={14} />
+              Lista
+            </button>
+            <button
+              onClick={() => setViewMode("grid")}
+              className={cn(
+                "flex-1 flex items-center justify-center h-10 rounded-xl gap-2 text-[10px] font-black uppercase tracking-widest transition-all",
+                viewMode === "grid" ? "bg-primary text-white shadow-lg" : "text-zinc-500 hover:text-white"
+              )}
             >
-              <option value="ALL">Todos os status</option>
-              <option value="WITH_HLS">✅ Com HLS</option>
-              <option value="WITHOUT_HLS">⚪ Sem HLS</option>
-            </select>
+              <LayoutGrid size={14} />
+              Grid
+            </button>
+          </div>
+
+          <div className="lg:col-span-4 flex gap-3">
+            <div className="flex-1 relative group">
+              <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600" size={14} />
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value as TitleType | "ALL")}
+                className="w-full h-14 bg-white/5 border border-white/5 rounded-2xl pl-12 pr-4 text-[10px] font-black uppercase tracking-widest text-zinc-400 appearance-none focus:outline-none focus:border-primary/50 transition-all cursor-pointer"
+              >
+                <option value="ALL">Categorias</option>
+                <option value="MOVIE">Filmes</option>
+                <option value="SERIES">Séries</option>
+                <option value="ANIME">Animes</option>
+              </select>
+            </div>
+            <div className="flex-1 relative group">
+              <Settings2 className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600" size={14} />
+              <select
+                value={filterHlsStatus}
+                onChange={(e) => setFilterHlsStatus(e.target.value as "ALL" | "WITH_HLS" | "WITHOUT_HLS")}
+                className="w-full h-14 bg-white/5 border border-white/5 rounded-2xl pl-12 pr-4 text-[10px] font-black uppercase tracking-widest text-zinc-400 appearance-none focus:outline-none focus:border-primary/50 transition-all cursor-pointer"
+              >
+                <option value="ALL">Status HLS</option>
+                <option value="WITH_HLS">Pronto</option>
+                <option value="WITHOUT_HLS">Pendente</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="lg:col-span-2">
+            <button
+              onClick={() => { setSearchQuery(""); setFilterType("ALL"); setFilterHlsStatus("ALL"); }}
+              disabled={!searchQuery && filterType === "ALL" && filterHlsStatus === "ALL"}
+              className="w-full h-14 bg-white/5 border border-white/5 rounded-2xl text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white hover:bg-white/10 transition-all disabled:opacity-0 disabled:pointer-events-none"
+            >
+              Limpar Filtros
+            </button>
           </div>
         </div>
 
@@ -759,9 +772,7 @@ export default function AdminCatalogPage() {
                 CRF atual: {transcodeCrf} · Apagar origem: {deleteSourceAfterTranscode ? "sim" : "não"}
               </span>
             </div>
-            <span className="text-[10px] text-zinc-400">
-              {showTranscodeOptions ? "▴" : "▾"}
-            </span>
+            <span className="text-[10px] text-zinc-400">{showTranscodeOptions ? "▴" : "▾"}</span>
           </button>
           {showTranscodeOptions && (
             <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-zinc-300">
@@ -797,10 +808,8 @@ export default function AdminCatalogPage() {
         ) : (
           <>
             {(() => {
-              // APLICAR FILTROS
               const safeList = Array.isArray(titles) ? titles : [];
               const filtered = safeList.filter((t) => {
-                // Filtro de busca
                 if (searchQuery) {
                   const query = searchQuery.toLowerCase();
                   const matchName = t.name.toLowerCase().includes(query);
@@ -808,18 +817,12 @@ export default function AdminCatalogPage() {
                   const matchSlug = t.slug.toLowerCase().includes(query);
                   if (!matchName && !matchOriginal && !matchSlug) return false;
                 }
-                
-                // Filtro de tipo
                 if (filterType !== "ALL" && t.type !== filterType) return false;
-                
-                // Filtro de HLS
                 if (filterHlsStatus === "WITH_HLS" && hlsStatus[t.id] !== "hls_ready") return false;
                 if (filterHlsStatus === "WITHOUT_HLS" && hlsStatus[t.id] === "hls_ready") return false;
-                
                 return true;
               });
 
-              // PAGINAÇÃO
               const totalPages = Math.ceil(filtered.length / itemsPerPage);
               const startIndex = (currentPage - 1) * itemsPerPage;
               const endIndex = startIndex + itemsPerPage;
@@ -829,284 +832,123 @@ export default function AdminCatalogPage() {
                 <>
                   <div className="flex items-center justify-between text-xs text-zinc-400">
                     <span>{filtered.length} de {safeList.length} título(s)</span>
-                    {totalPages > 1 && (
-                      <span>
-                        Página {currentPage} de {totalPages}
-                      </span>
-                    )}
+                    {totalPages > 1 && <span>Página {currentPage} de {totalPages}</span>}
                   </div>
 
-                  {/* GRID VIEW */}
                   {viewMode === "grid" ? (
                     <CatalogGridView
-                      titles={paginatedTitles}
+                      titles={paginatedTitles as any}
                       hlsStatus={hlsStatus}
                       pendingSummary={pendingEpisodesSummary}
                       selectedIds={selectedIds}
                       onToggleSelect={(id) => {
-                        if (selectedIds.includes(id)) {
-                          setSelectedIds(selectedIds.filter(sid => sid !== id));
-                        } else {
-                          setSelectedIds([...selectedIds, id]);
-                        }
+                        if (selectedIds.includes(id)) setSelectedIds(selectedIds.filter(sid => sid !== id));
+                        else setSelectedIds([...selectedIds, id]);
                       }}
-                      onEdit={(title) => {
-                        setEditingId(title.id);
-                      }}
+                      onEdit={(title: any) => startEdit(title)}
                       onDelete={(id) => handleDelete(id)}
                       onTranscode={(id, type) => handleTranscode(id, type as TitleType)}
                     />
                   ) : (
-                    /* LIST VIEW */
-                    <div className="max-h-[520px] overflow-y-auto rounded-md border border-zinc-800">
+                    <div className="overflow-hidden rounded-2xl border border-white/5 bg-zinc-950/50 backdrop-blur-3xl shadow-2xl">
                       <table className="w-full border-collapse text-left">
-                      <thead className="bg-zinc-900 text-[11px] uppercase text-zinc-400">
-                        <tr>
-                          <th className="px-3 py-2 w-8">
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.length === paginatedTitles.length && paginatedTitles.length > 0}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedIds(paginatedTitles.map(t => t.id));
-                                } else {
-                                  setSelectedIds([]);
-                                }
-                              }}
-                              className="h-4 w-4 accent-emerald-500"
-                            />
-                          </th>
-                          <th className="px-3 py-2">Pôster</th>
-                          <th className="px-3 py-2">Nome</th>
-                          <th className="px-3 py-2">Tipo</th>
-                          <th className="px-3 py-2">TMDb</th>
-                          <th className="px-3 py-2">HLS</th>
-                          <th className="px-3 py-2 text-right">Ações</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-800 bg-zinc-950">
-                        {paginatedTitles.length === 0 ? (
+                        <thead className="bg-white/5 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
                           <tr>
-                            <td colSpan={8} className="px-3 py-8 text-center text-xs text-zinc-500">
-                              Nenhum título encontrado com os filtros aplicados.
-                            </td>
+                            <th className="px-6 py-5 w-12 text-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.length === paginatedTitles.length && paginatedTitles.length > 0}
+                                onChange={(e) => {
+                                  if (e.target.checked) setSelectedIds(paginatedTitles.map((t: any) => t.id));
+                                  else setSelectedIds([]);
+                                }}
+                                className="w-4 h-4 rounded border-white/10 bg-black/40 text-primary focus:ring-primary/50"
+                              />
+                            </th>
+                            <th className="px-6 py-5 whitespace-nowrap">Pôster</th>
+                            <th className="px-6 py-5 w-full">Informações</th>
+                            <th className="px-6 py-5 whitespace-nowrap text-center">Tipo</th>
+                            <th className="px-6 py-5 whitespace-nowrap text-center">Status HLS</th>
+                            <th className="px-6 py-5 whitespace-nowrap text-right pr-12">Ações</th>
                           </tr>
-                        ) : (
-                          paginatedTitles.map((t) => (
-                  <tr key={t.id} className="align-top text-[11px]">
-                    <td className="px-3 py-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(t.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedIds([...selectedIds, t.id]);
-                          } else {
-                            setSelectedIds(selectedIds.filter(id => id !== t.id));
-                          }
-                        }}
-                        className="h-4 w-4 accent-emerald-500"
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      {t.posterUrl ? (
-                        <img
-                          src={t.posterUrl}
-                          alt={t.name}
-                          className="h-16 w-11 rounded object-cover shadow-md"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="flex h-16 w-11 items-center justify-center rounded bg-zinc-800 text-[10px] text-zinc-500">
-                          N/A
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="font-medium text-zinc-100">{t.name}</div>
-                      {t.releaseDate && (
-                        <div className="text-[10px] text-zinc-500">
-                          {t.releaseDate.slice(0, 10)}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-zinc-400">{t.type}</td>
-                    <td className="px-3 py-2 text-zinc-400">
-                      {t.tmdbId ? `#${t.tmdbId}` : "-"}
-                    </td>
-                    <td className="px-3 py-2">
-                      {hlsStatus[t.id] === "hls_ready" ? (
-                        <span className="inline-flex items-center rounded-md border border-emerald-700 px-2 py-0.5 text-[10px] text-emerald-300 bg-emerald-900/40">
-                          🟢 Pronto
-                        </span>
-                      ) : hlsStatus[t.id] === "upload_pending" ? (
-                        <span className="inline-flex items-center rounded-md border border-yellow-700 px-2 py-0.5 text-[10px] text-yellow-300 bg-yellow-900/40">
-                          🟡 Pendente
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-md border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-500 bg-zinc-900/40">
-                          ⚪ Sem vídeo
-                        </span>
-                      )}
-                      {(t.type === "SERIES" || t.type === "ANIME") &&
-                        pendingEpisodesSummary[t.id] &&
-                        pendingEpisodesSummary[t.id].pending > 0 && (
-                          <div className="mt-1 text-[10px] text-amber-300">
-                            {pendingEpisodesSummary[t.id].pending} ep(s) sem upload
-                            {pendingEpisodesSummary[t.id].total
-                              ? ` / ${pendingEpisodesSummary[t.id].total}`
-                              : ""}
-                          </div>
-                        )}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {(t.type === "SERIES" || t.type === "ANIME") && (
-                          <Link
-                            href={`/admin/catalog/${t.id}`}
-                            className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-200 hover:bg-zinc-800"
-                          >
-                            Temporadas
-                          </Link>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            startEdit(t);
-                            setShowTitleModal(true);
-                          }}
-                          className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-200 hover:bg-zinc-800"
-                        >
-                          Editar
-                        </button>
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setOpenActionsId((prev) => (prev === t.id ? null : t.id))
-                            }
-                            className="rounded-md border border-zinc-700 px-2 py-1 text-[10px] text-zinc-200 hover:bg-zinc-800"
-                          >
-                            ⋯
-                          </button>
-                          {openActionsId === t.id && (
-                            <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-zinc-700 bg-zinc-900/95 backdrop-blur-xl p-2 text-left shadow-2xl">
-                              <div className="mb-2 px-2 py-1 text-[10px] font-semibold uppercase text-zinc-500 border-b border-zinc-800">
-                                AÇÕES
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenActionsId(null);
-                                  handleFetchSubtitle(t.id, "pt-BR");
-                                }}
-                                disabled={subtitleLoadingId === t.id}
-                                className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[11px] text-zinc-200 hover:bg-gradient-to-r hover:from-blue-600/20 hover:to-blue-700/20 hover:border-blue-500/30 border border-transparent transition-all disabled:opacity-60"
-                              >
-                                <span className="text-sm">📥</span>
-                                <span className="flex-1 text-left">
-                                  {subtitleLoadingId === t.id
-                                    ? "Baixando legenda..."
-                                    : "Baixar legenda PT-BR"}
-                                </span>
-                              </button>
-                              {hlsStatus[t.id] === "hls_ready" ? (
-                                <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] text-emerald-400 bg-emerald-900/20 border border-emerald-700/30">
-                                  <span className="text-sm">✅</span>
-                                  <span>HLS pronto</span>
-                                </div>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenActionsId(null);
-                                    handleTranscode(t.id, t.type);
-                                  }}
-                                  disabled={transcodingId === t.id}
-                                  className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[11px] text-emerald-300 hover:bg-gradient-to-r hover:from-emerald-600/20 hover:to-emerald-700/20 hover:border-emerald-500/30 border border-transparent transition-all disabled:opacity-60"
-                                >
-                                  <span className="text-sm">🎬</span>
-                                  <span className="flex-1 text-left">
-                                    {transcodingId === t.id
-                                      ? transcodingStatus === "running" &&
-                                        transcodingProgress !== null
-                                        ? `Gerando HLS... ${Math.round(transcodingProgress)}%`
-                                        : "Gerando HLS..."
-                                      : "Gerar HLS"}
-                                  </span>
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenActionsId(null);
-                                  handleDelete(t.id);
-                                }}
-                                className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[11px] text-red-300 hover:bg-gradient-to-r hover:from-red-600/20 hover:to-red-700/20 hover:border-red-500/30 border border-transparent transition-all"
-                              >
-                                <span className="text-sm">🗑️</span>
-                                <span className="flex-1 text-left">Excluir</span>
-                              </button>
-                            </div>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-800 bg-zinc-950">
+                          {paginatedTitles.length === 0 ? (
+                            <tr><td colSpan={8} className="px-3 py-8 text-center text-xs text-zinc-500">Nenhum título encontrado.</td></tr>
+                          ) : (
+                            paginatedTitles.map((t) => (
+                              <tr key={t.id} className="align-top text-[11px]">
+                                <td className="px-6 py-5 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedIds.includes(t.id)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) setSelectedIds([...selectedIds, t.id]);
+                                      else setSelectedIds(selectedIds.filter(id => id !== t.id));
+                                    }}
+                                    className="w-4 h-4 rounded border-white/10 bg-black/40 text-primary focus:ring-primary/50"
+                                  />
+                                </td>
+                                <td className="px-6 py-4">
+                                  {t.posterUrl ? (
+                                    <img src={t.posterUrl} alt={t.name} className="h-16 w-11 rounded object-cover shadow-md" loading="lazy" />
+                                  ) : (
+                                    <div className="flex h-16 w-11 items-center justify-center rounded bg-zinc-800 text-[10px] text-zinc-500">N/A</div>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="font-bold text-white text-sm tracking-tight">{t.name}</div>
+                                  <div className="text-[10px] font-black uppercase text-zinc-600 mt-1">{t.releaseDate ? t.releaseDate.slice(0, 10) : "S/ DATA"}</div>
+                                </td>
+                                <td className="px-6 py-4 text-center">
+                                  <span className="px-3 py-1 bg-white/5 border border-white/5 rounded-full text-[9px] font-black uppercase text-zinc-400">{t.type}</span>
+                                </td>
+                                <td className="px-6 py-4 text-center">
+                                  {hlsStatus[t.id] === "hls_ready" ? (
+                                    <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase text-emerald-500 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">READY</span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase text-zinc-500 bg-white/5 px-3 py-1 rounded-full border border-white/5">PENDING</span>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4 text-right pr-12">
+                                  <div className="flex items-center justify-end gap-2">
+                                    {(t.type === "SERIES" || t.type === "ANIME") && (
+                                      <Link href={`/admin/catalog/${t.id}`} className="px-4 py-2 bg-white/5 border border-white/5 rounded-xl text-[9px] font-black uppercase text-zinc-400 hover:text-white hover:bg-white/10 transition-all">Sessões</Link>
+                                    )}
+                                    <button onClick={() => { startEdit(t); setShowTitleModal(true); }} className="px-4 py-2 bg-white/5 border border-white/5 rounded-xl text-[9px] font-black uppercase text-zinc-400 hover:text-white hover:bg-white/10 transition-all">Editar</button>
+                                    <div className="relative">
+                                      <button onClick={() => setOpenActionsId(prev => prev === t.id ? null : t.id)} className={cn("p-2 rounded-xl border transition-all", openActionsId === t.id ? "bg-white text-black border-white" : "bg-white/5 border-white/5 text-zinc-400 hover:text-white")}><MoreHorizontal size={14} /></button>
+                                      {openActionsId === t.id && (
+                                        <div className="absolute right-0 z-20 mt-2 w-48 rounded-2xl border border-white/10 bg-zinc-950/95 backdrop-blur-2xl p-2 shadow-2xl">
+                                          <button onClick={() => { setOpenActionsId(null); handleFetchSubtitle(t.id, "pt-BR"); }} disabled={subtitleLoadingId === t.id} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase text-zinc-400 hover:bg-white/5 hover:text-white transition-all"><span>📥</span>Legendas</button>
+                                          <button onClick={() => { setOpenActionsId(null); handleTranscode(t.id, t.type); }} disabled={transcodingId === t.id} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase text-zinc-400 hover:bg-white/5 hover:text-white transition-all"><span>🎬</span>Gerar HLS</button>
+                                          <div className="h-px bg-white/5 my-1" />
+                                          <button onClick={() => { setOpenActionsId(null); handleDelete(t.id); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase text-red-500/70 hover:bg-red-500/10 hover:text-red-500 transition-all"><span>🗑️</span>Excluir</button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
                           )}
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
+                        </tbody>
+                      </table>
                     </div>
                   )}
-                  
-                  {/* PAGINAÇÃO */}
+
                   {totalPages > 1 && (
-                    <div className="flex items-center justify-center gap-2 mt-3">
-                      <button
-                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                        disabled={currentPage === 1}
-                        className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        ← Anterior
-                      </button>
-                      
-                      <div className="flex items-center gap-1">
+                    <div className="flex items-center justify-center gap-3 mt-8 bg-white/5 backdrop-blur-3xl border border-white/5 p-4 rounded-2xl w-fit mx-auto shadow-2xl">
+                      <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/5 bg-white/5 text-zinc-500 transition-all hover:border-white/20 hover:text-white disabled:opacity-30"><ChevronLeft size={18} /></button>
+                      <div className="flex items-center gap-2">
                         {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                          let pageNum;
-                          if (totalPages <= 5) {
-                            pageNum = i + 1;
-                          } else if (currentPage <= 3) {
-                            pageNum = i + 1;
-                          } else if (currentPage >= totalPages - 2) {
-                            pageNum = totalPages - 4 + i;
-                          } else {
-                            pageNum = currentPage - 2 + i;
-                          }
-                          
+                          let pageNum = totalPages <= 5 ? i + 1 : (currentPage <= 3 ? i + 1 : (currentPage >= totalPages - 2 ? totalPages - 4 + i : currentPage - 2 + i));
                           return (
-                            <button
-                              key={pageNum}
-                              onClick={() => setCurrentPage(pageNum)}
-                              className={`rounded-md px-3 py-1 text-xs ${
-                                currentPage === pageNum
-                                  ? "bg-emerald-600 text-white font-semibold"
-                                  : "border border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
-                              }`}
-                            >
-                              {pageNum}
-                            </button>
+                            <button key={pageNum} onClick={() => setCurrentPage(pageNum)} className={cn("flex h-10 w-10 items-center justify-center rounded-xl text-[10px] font-black uppercase transition-all", currentPage === pageNum ? "bg-white text-black shadow-lg" : "border border-white/5 bg-white/5 text-zinc-500 hover:text-white")}>{pageNum}</button>
                           );
                         })}
                       </div>
-                      
-                      <button
-                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                        disabled={currentPage === totalPages}
-                        className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Próxima →
-                      </button>
+                      <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/5 bg-white/5 text-zinc-500 transition-all hover:border-white/20 hover:text-white disabled:opacity-30"><ChevronRight size={18} /></button>
                     </div>
                   )}
                 </>
@@ -1114,317 +956,99 @@ export default function AdminCatalogPage() {
             })()}
           </>
         )}
-        
-        <BulkActions
-          selectedIds={selectedIds}
-          onClearSelection={() => setSelectedIds([])}
-          onRefresh={loadTitles}
-        />
+
+        <BulkActions selectedIds={selectedIds} onClearSelection={() => setSelectedIds([])} onRefresh={loadTitles} />
       </div>
 
       {showTitleModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4 py-8">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-xs shadow-xl">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold text-zinc-100">
-                  {editingId ? "Editar título" : "Novo título a partir do TMDb"}
-                </h3>
-                <p className="mt-1 text-[11px] text-zinc-400">
-                  Busque no TMDb, selecione um resultado e ajuste apenas o necessário antes de salvar.
-                </p>
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-white/10 bg-zinc-950 p-8 text-xs shadow-2xl custom-scrollbar">
+            <div className="mb-8 flex items-start justify-between gap-6">
+              <div className="space-y-1">
+                <h3 className="text-2xl font-black text-white uppercase tracking-tighter">{editingId ? "Ajustar Título" : "Injetar no Catálogo"}</h3>
+                <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Sincronização TMDb & IA</p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowTitleModal(false);
-                  resetForm();
-                }}
-                className="rounded-md border border-zinc-700 px-2 py-1 text-[11px] text-zinc-300 hover:bg-zinc-800"
-              >
-                Fechar
-              </button>
+              <button onClick={() => { setShowTitleModal(false); resetForm(); }} className="p-3 bg-white/5 border border-white/5 rounded-2xl text-zinc-400 hover:text-white hover:bg-white/10"><X size={20} /></button>
             </div>
 
-            <div className="mb-4 space-y-2 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
-              <form onSubmit={handleTmdbSearch} className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Buscar no TMDb por nome do filme ou série"
-                  value={tmdbQuery}
-                  onChange={(e) => setTmdbQuery(e.target.value)}
-                  className="flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-50 outline-none focus:border-zinc-500"
-                />
-                <button
-                  type="submit"
-                  disabled={tmdbLoading || !tmdbQuery.trim()}
-                  className="rounded-md bg-zinc-100 px-3 py-1.5 text-[11px] font-semibold text-zinc-900 hover:bg-white disabled:opacity-60"
-                >
-                  {tmdbLoading ? "Buscando..." : "Buscar"}
-                </button>
-              </form>
-              {tmdbResults.length > 0 && (
-                <div className="max-h-56 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-950">
-                  <ul className="divide-y divide-zinc-800 text-[11px]">
+            {!editingId && (
+              <div className="mb-8 space-y-4 bg-white/5 p-6 rounded-3xl border border-white/5">
+                <form onSubmit={handleTmdbSearch} className="flex gap-3">
+                  <div className="relative flex-1 group">
+                    <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-zinc-700 group-focus-within:text-primary transition-colors" size={18} />
+                    <input type="text" placeholder="Nome do título (Filme, Série ou Anime)..." value={tmdbQuery} onChange={(e) => setTmdbQuery(e.target.value)} className="w-full h-14 bg-black/40 border border-white/5 rounded-2xl pl-14 pr-6 text-sm text-white focus:outline-none focus:border-primary/50 transition-all" />
+                  </div>
+                  <button type="submit" disabled={tmdbLoading || !tmdbQuery.trim()} className="h-14 px-8 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-[11px] hover:bg-zinc-200 transition-all disabled:opacity-50">{tmdbLoading ? "Buscando..." : "Explorar"}</button>
+                </form>
+                {tmdbResults.length > 0 && (
+                  <div className="grid grid-cols-1 gap-2">
                     {tmdbResults.map((r) => (
-                      <li key={`${r.type}-${r.tmdbId}`}>
-                        <button
-                          type="button"
-                          onClick={() => applyTmdbResult(r)}
-                          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-zinc-900"
-                        >
-                          <div>
-                            <div className="font-semibold text-zinc-100">{r.name}</div>
-                            <div className="text-[10px] text-zinc-400">
-                              {r.releaseDate ? r.releaseDate.slice(0, 4) : "s/ano"} · {r.type}
-                            </div>
-                          </div>
-                          {r.posterUrl && (
-                            <img
-                              src={r.posterUrl}
-                              alt={r.name}
-                              className="h-14 w-10 rounded border border-zinc-800 object-cover"
-                            />
-                          )}
-                        </button>
-                      </li>
+                      <button key={`${r.type}-${r.tmdbId}`} onClick={() => applyTmdbResult(r)} className="flex items-center gap-4 p-3 rounded-2xl bg-black/40 border border-white/5 hover:border-primary/30 transition-all text-left group">
+                        {r.posterUrl && <img src={r.posterUrl} alt={r.name} className="h-16 w-11 rounded-lg object-cover shadow-2xl" />}
+                        <div className="flex-1">
+                          <div className="font-bold text-white group-hover:text-primary transition-colors">{r.name}</div>
+                          <div className="text-[9px] font-black uppercase text-zinc-600 mt-1">{r.type} • {r.releaseDate?.slice(0, 4) || "N/A"}</div>
+                        </div>
+                        <Plus size={20} className="text-zinc-700" />
+                      </button>
                     ))}
-                  </ul>
-                </div>
-              )}
-            </div>
+                  </div>
+                )}
+              </div>
+            )}
 
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="block text-zinc-300">TMDb ID</label>
-                  <input
-                    type="number"
-                    value={form.tmdbId}
-                    onChange={(e) => setForm({ ...form, tmdbId: e.target.value })}
-                    placeholder="Selecione um resultado ou informe o ID manualmente"
-                    className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
-                  />
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">TMDb ID</label>
+                  <input type="number" value={form.tmdbId} onChange={(e) => setForm({ ...form, tmdbId: e.target.value })} className="w-full h-12 bg-white/5 border border-white/5 rounded-2xl px-6 text-sm text-white focus:outline-none focus:border-primary/50 transition-all" />
                 </div>
-                <div className="space-y-1">
-                  <label className="block text-zinc-300">Tipo</label>
-                  <select
-                    value={form.type}
-                    onChange={(e) =>
-                      setForm({ ...form, type: e.target.value as TitleType })
-                    }
-                    className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
-                  >
-                    <option value="MOVIE">Filme</option>
-                    <option value="SERIES">Série</option>
-                    <option value="ANIME">Anime</option>
-                    <option value="OTHER">Outro</option>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Categoria</label>
+                  <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as TitleType })} className="w-full h-12 bg-white/5 border border-white/5 rounded-2xl px-6 text-xs font-black uppercase tracking-widest text-white appearance-none focus:outline-none focus:border-primary/50 cursor-pointer">
+                    <option value="MOVIE">Filme</option><option value="SERIES">Série</option><option value="ANIME">Anime</option><option value="OTHER">Outro</option>
                   </select>
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-zinc-300">Nome</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      name: e.target.value,
-                      slug: form.slug || slugify(e.target.value),
-                    })
-                  }
-                  required
-                  className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
-                />
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Nome de Exibição</label>
+                <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value, slug: form.slug || slugify(e.target.value) })} required className="w-full h-12 bg-white/5 border border-white/5 rounded-2xl px-6 text-sm text-white focus:outline-none focus:border-primary/50 transition-all" />
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-zinc-300">Slug</label>
-                <input
-                  type="text"
-                  value={form.slug}
-                  onChange={(e) => setForm({ ...form, slug: e.target.value })}
-                  required
-                  className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label className="block text-zinc-300">Nome original</label>
-                  <input
-                    type="text"
-                    value={form.originalName}
-                    onChange={(e) =>
-                      setForm({ ...form, originalName: e.target.value })
-                    }
-                    className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
-                  />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Slug URL</label>
+                  <input type="text" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} required className="w-full h-12 bg-white/5 border border-white/5 rounded-2xl px-6 text-sm text-white focus:outline-none focus:border-primary/50 transition-all" />
                 </div>
-                <div className="space-y-1">
-                  <label className="block text-zinc-300">Data de lançamento</label>
-                  <input
-                    type="date"
-                    value={form.releaseDate}
-                    onChange={(e) =>
-                      setForm({ ...form, releaseDate: e.target.value })
-                    }
-                    className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
-                  />
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Lançamento</label>
+                  <input type="date" value={form.releaseDate} onChange={(e) => setForm({ ...form, releaseDate: e.target.value })} className="w-full h-12 bg-white/5 border border-white/5 rounded-2xl px-6 text-xs text-white focus:outline-none focus:border-primary/50 transition-all" />
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="block text-zinc-300">Sinopse</label>
-                  <button
-                    type="button"
-                    onClick={handleGenerateAi}
-                    disabled={aiGenerating || !form.name.trim()}
-                    className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] font-semibold text-zinc-100 hover:bg-zinc-800 disabled:opacity-60"
-                  >
-                    {aiGenerating ? "Gerando..." : "✨ Gerar com IA"}
-                  </button>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Sinopse Narrativa</label>
+                  <button type="button" onClick={handleGenerateAi} disabled={aiGenerating || !form.name.trim()} className="text-[9px] font-black uppercase text-primary hover:text-red-400 transition-colors disabled:opacity-50 flex items-center gap-1.5"><Sparkles size={12} />{aiGenerating ? "Redigindo..." : "Refinar com IA"}</button>
                 </div>
-                <textarea
-                  rows={3}
-                  value={form.overview}
-                  onChange={(e) => setForm({ ...form, overview: e.target.value })}
-                  className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
-                />
-
-                {aiError && <div className="text-[11px] text-red-300">{aiError}</div>}
-
-                {aiSuggestion && (
-                  <div className="space-y-1 text-[11px] text-zinc-300">
-                    {aiSuggestion.tagline && (
-                      <div>
-                        <span className="text-zinc-500">Tagline:</span> {aiSuggestion.tagline}
-                      </div>
-                    )}
-                    {Array.isArray(aiSuggestion.tags) && aiSuggestion.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {aiSuggestion.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="rounded border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[10px] text-zinc-200"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {aiSuggestion.model && (
-                      <div className="text-[10px] text-zinc-500">model: {aiSuggestion.model}</div>
-                    )}
-                  </div>
-                )}
+                <textarea rows={4} value={form.overview} onChange={(e) => setForm({ ...form, overview: e.target.value })} className="w-full bg-white/5 border border-white/5 rounded-2xl p-6 text-xs leading-relaxed text-zinc-300 focus:outline-none focus:border-primary/50 transition-all custom-scrollbar" />
               </div>
 
-              <div className="space-y-1">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="block text-zinc-300">Tagline</label>
-                  <button
-                    type="button"
-                    onClick={handleGenerateAiTagline}
-                    disabled={aiGeneratingTagline || !form.name.trim()}
-                    className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] font-semibold text-zinc-100 hover:bg-zinc-800 disabled:opacity-60"
-                  >
-                    {aiGeneratingTagline ? "Gerando..." : "✨ Gerar Tagline"}
-                  </button>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Poster URL</label>
+                  <input type="text" value={form.posterUrl} onChange={(e) => setForm({ ...form, posterUrl: e.target.value })} className="w-full h-12 bg-white/5 border border-white/5 rounded-2xl px-6 text-[10px] text-zinc-400 focus:outline-none focus:border-primary/50 transition-all" />
                 </div>
-                <input
-                  type="text"
-                  value={form.tagline}
-                  onChange={(e) => setForm({ ...form, tagline: e.target.value })}
-                  className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="block text-zinc-300">Poster URL</label>
-                  <input
-                    type="text"
-                    value={form.posterUrl}
-                    onChange={(e) => setForm({ ...form, posterUrl: e.target.value })}
-                    className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
-                  />
-                  {form.posterUrl && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <img
-                        src={form.posterUrl}
-                        alt={form.name || "Poster"}
-                        className="h-20 w-14 rounded border border-zinc-800 object-cover"
-                      />
-                      <span className="text-[10px] text-zinc-500">
-                        Pré-visualização do poster
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-zinc-300">Backdrop URL</label>
-                  <input
-                    type="text"
-                    value={form.backdropUrl}
-                    onChange={(e) =>
-                      setForm({ ...form, backdropUrl: e.target.value })
-                    }
-                    className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
-                  />
-                  {form.backdropUrl && (
-                    <div className="mt-2 flex flex-col gap-1">
-                      <img
-                        src={form.backdropUrl}
-                        alt={form.name || "Backdrop"}
-                        className="h-16 w-full rounded border border-zinc-800 object-cover"
-                      />
-                      <span className="text-[10px] text-zinc-500">
-                        Pré-visualização do backdrop
-                      </span>
-                    </div>
-                  )}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Wasabi HLS Code</label>
+                  <input type="text" placeholder="id-wasabi/" value={form.hlsPath} onChange={(e) => setForm({ ...form, hlsPath: e.target.value })} className="w-full h-12 bg-white/5 border border-white/5 rounded-2xl px-6 text-[10px] text-zinc-400 focus:outline-none focus:border-primary/50 transition-all" />
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-zinc-300">Caminho HLS (Wasabi)</label>
-                <input
-                  type="text"
-                  placeholder="ex: movie-id/"
-                  value={form.hlsPath}
-                  onChange={(e) => setForm({ ...form, hlsPath: e.target.value })}
-                  className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-zinc-50 outline-none focus:border-zinc-500"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowTitleModal(false);
-                    resetForm();
-                  }}
-                  className="rounded-md border border-zinc-700 px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-zinc-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="rounded-md bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-white disabled:opacity-70"
-                >
-                  {saving
-                    ? editingId
-                      ? "Salvando..."
-                      : "Criando..."
-                    : editingId
-                    ? "Salvar alterações"
-                    : "Criar título"}
-                </button>
+              <div className="flex items-center justify-end gap-4 pt-6 mt-6 border-t border-white/5">
+                <button type="button" onClick={() => { setShowTitleModal(false); resetForm(); }} className="h-14 px-8 rounded-2xl text-[11px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all">Cancelar</button>
+                <button type="submit" disabled={saving} className="h-14 px-12 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-[11px] hover:bg-zinc-200 transition-all shadow-2xl active:scale-[0.98] disabled:opacity-50">{saving ? "Processando..." : (editingId ? "Salvar Alterações" : "Injetar Título")}</button>
               </div>
             </form>
           </div>
