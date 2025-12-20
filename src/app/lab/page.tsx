@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 
 import { authOptions } from "@/lib/auth";
+import { hasLabAccess } from "@/lib/lab-access";
 import LabClient from "./LabClient";
 
 export const dynamic = "force-dynamic";
@@ -13,10 +14,17 @@ export default async function LabPage() {
     redirect("/login");
   }
 
-  const isAdmin = session?.user?.role === "ADMIN";
-  const enabled = isAdmin || process.env.NEXT_PUBLIC_LAB_ENABLED === "true";
+  const userId = session?.user?.id;
+  const userRole = session?.user?.role;
+  const isAdmin = userRole === "ADMIN";
 
-  if (!enabled) {
+  if (!userId) {
+    redirect("/login");
+  }
+
+  const hasAccess = await hasLabAccess(userId, userRole);
+
+  if (!hasAccess) {
     redirect("/");
   }
 

@@ -367,18 +367,55 @@ async function callClaudeHaiku(text: string) {
     return { ok: false as const, error: "CLAUDE_KEY não configurada." };
   }
 
-  const model = (process.env.CLAUDE_MODEL || "claude-3-haiku-20240307").trim();
+  const model = (process.env.CLAUDE_MODEL || "claude-haiku-4-5-20251001").trim();
 
-  const system = `Você é um assistente de recomendação do catálogo. Converta o texto do usuário em JSON puro (sem markdown) no formato: {"seeds": string[], "mediaPreference": "movie"|"tv"|"both", "movieGenreIds": number[], "tvGenreIds": number[], "excludeMovieGenreIds": number[], "excludeTvGenreIds": number[], "minYear": number|null, "maxYear": number|null}. Use apenas IDs de gênero do TMDB. Se não tiver certeza, deixe arrays vazios e use mediaPreference="both".
+  const system = `Você é um assistente especializado em recomendações de filmes e séries. Sua tarefa é analisar o pedido do usuário e extrair informações estruturadas.
 
-Para filmes, IDs comuns: Ação=28, Aventura=12, Animação=16, Comédia=35, Crime=80, Documentário=99, Drama=18, Família=10751, Fantasia=14, História=36, Terror=27, Música=10402, Mistério=9648, Romance=10749, Ficção científica=878, Thriller=53, Guerra=10752.
-Para séries: Ação e aventura=10759, Animação=16, Comédia=35, Crime=80, Documentário=99, Drama=18, Família=10751, Mistério=9648, Romance=10749, Ficção científica e fantasia=10765, Reality=10764, War & Politics=10768.
+RESPONDA APENAS COM JSON VÁLIDO (sem markdown, sem \`\`\`json, sem explicações):
+{
+  "seeds": string[],
+  "mediaPreference": "movie" | "tv" | "both",
+  "movieGenreIds": number[],
+  "tvGenreIds": number[],
+  "excludeMovieGenreIds": number[],
+  "excludeTvGenreIds": number[],
+  "minYear": number | null,
+  "maxYear": number | null
+}
 
-Regras:
-- mediaPreference: use "movie" se o usuário pedir explicitamente filme/cinema; use "tv" se pedir série/anime/episódio; use "both" se estiver genérico.
-- seeds deve conter nomes de obras citadas (ex.: John Wick), no máximo 5.
-- Não invente nomes.
-- Responda SOMENTE JSON.`;
+REGRAS CRÍTICAS:
+1. seeds: Títulos mencionados pelo usuário. IMPORTANTE: Se o usuário mencionar um nome que parece ser um título (como "Vincenzo", "Squid Game", "Crash Landing on You", "Goblin"), adicione ao seeds mesmo que tenha erros de digitação. Corrija erros óbvios (ex: "Vicenzo" → "Vincenzo"). Máximo 5.
+2. DORAMA/K-DRAMA: Se o usuário mencionar "dorama", "kdrama", "k-drama" ou "coreano", use mediaPreference="tv" e adicione o nome mencionado aos seeds.
+3. NÃO invente títulos extras. Apenas corrija erros de digitação do que o usuário escreveu.
+4. mediaPreference: "movie" se pedir filme/cinema, "tv" se pedir série/anime/dorama/episódio, "both" se genérico.
+5. Use APENAS estes IDs de gênero TMDB:
+
+FILMES: Ação=28, Aventura=12, Animação=16, Comédia=35, Crime=80, Documentário=99, Drama=18, Família=10751, Fantasia=14, História=36, Terror=27, Música=10402, Mistério=9648, Romance=10749, Ficção científica=878, Thriller=53, Guerra=10752, Faroeste=37
+
+SÉRIES: Ação e Aventura=10759, Animação=16, Comédia=35, Crime=80, Documentário=99, Drama=18, Família=10751, Kids=10762, Mistério=9648, News=10763, Reality=10764, Ficção e Fantasia=10765, Soap=10766, Talk=10767, War & Politics=10768, Faroeste=37
+
+6. excludeMovieGenreIds/excludeTvGenreIds: use quando o usuário disser "sem terror", "não quero comédia", etc.
+7. minYear/maxYear: extraia se o usuário mencionar década/ano (ex: "anos 90" = minYear:1990, maxYear:1999).
+8. Se não tiver certeza sobre algo, deixe vazio ou null.
+
+EXEMPLOS:
+
+Usuário: "filmes de ação como John Wick"
+Resposta: {"seeds":["John Wick"],"mediaPreference":"movie","movieGenreIds":[28],"tvGenreIds":[],"excludeMovieGenreIds":[],"excludeTvGenreIds":[],"minYear":null,"maxYear":null}
+
+Usuário: "séries de drama e mistério"
+Resposta: {"seeds":[],"mediaPreference":"tv","movieGenreIds":[],"tvGenreIds":[18,9648],"excludeMovieGenreIds":[],"excludeTvGenreIds":[],"minYear":null,"maxYear":null}
+
+Usuário: "algo parecido com Stranger Things mas sem terror"
+Resposta: {"seeds":["Stranger Things"],"mediaPreference":"tv","movieGenreIds":[],"tvGenreIds":[10765],"excludeMovieGenreIds":[],"excludeTvGenreIds":[27],"minYear":null,"maxYear":null}
+
+Usuário: "Vicenzo dorama"
+Resposta: {"seeds":["Vincenzo"],"mediaPreference":"tv","movieGenreIds":[],"tvGenreIds":[18,80],"excludeMovieGenreIds":[],"excludeTvGenreIds":[],"minYear":null,"maxYear":null}
+
+Usuário: "séries coreanas como Squid Game"
+Resposta: {"seeds":["Squid Game"],"mediaPreference":"tv","movieGenreIds":[],"tvGenreIds":[18],"excludeMovieGenreIds":[],"excludeTvGenreIds":[],"minYear":null,"maxYear":null}
+
+RESPONDA APENAS O JSON, NADA MAIS.`;
 
   const upstreamRes = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -389,8 +426,8 @@ Regras:
     },
     body: JSON.stringify({
       model,
-      max_tokens: 350,
-      temperature: 0.2,
+      max_tokens: 400,
+      temperature: 0.1,
       system,
       messages: [
         {
@@ -628,6 +665,7 @@ export async function POST(request: NextRequest) {
     const parsedRaw = safeJsonParse(claude.contentText);
     const parsed: AiParsed = parsedRaw && typeof parsedRaw === "object" ? parsedRaw : {};
 
+    // Validação rigorosa do mediaPreference
     const mediaPreference: "movie" | "tv" | "both" =
       parsed.mediaPreference === "movie" || parsed.mediaPreference === "tv" || parsed.mediaPreference === "both"
         ? parsed.mediaPreference
@@ -640,19 +678,39 @@ export async function POST(request: NextRequest) {
           ? new Set<"movie" | "tv">(["tv"])
           : new Set<"movie" | "tv">(["movie", "tv"]);
 
+    // Validação rigorosa dos seeds - apenas strings não vazias
     const seedTitles = Array.isArray(parsed.seeds)
-      ? parsed.seeds.filter((s) => typeof s === "string").slice(0, 5)
+      ? parsed.seeds
+          .filter((s) => typeof s === "string" && s.trim().length > 0)
+          .map((s) => s.trim())
+          .slice(0, 5)
       : [];
 
-    const movieGenreIds = normalizeIntArray(parsed.movieGenreIds, 8);
-    const tvGenreIds = normalizeIntArray(parsed.tvGenreIds, 8);
-    const excludeMovieGenreIds = normalizeIntArray(parsed.excludeMovieGenreIds, 8);
-    const excludeTvGenreIds = normalizeIntArray(parsed.excludeTvGenreIds, 8);
+    // Validação de IDs de gênero - apenas números válidos do TMDB
+    const validMovieGenres = [28, 12, 16, 35, 80, 99, 18, 10751, 14, 36, 27, 10402, 9648, 10749, 878, 53, 10752, 37];
+    const validTvGenres = [10759, 16, 35, 80, 99, 18, 10751, 10762, 9648, 10763, 10764, 10765, 10766, 10767, 10768, 37];
 
-    const minYear = typeof parsed.minYear === "number" ? parsed.minYear : null;
-    const maxYear = typeof parsed.maxYear === "number" ? parsed.maxYear : null;
+    const movieGenreIds = normalizeIntArray(parsed.movieGenreIds, 8).filter(id => validMovieGenres.includes(id));
+    const tvGenreIds = normalizeIntArray(parsed.tvGenreIds, 8).filter(id => validTvGenres.includes(id));
+    const excludeMovieGenreIds = normalizeIntArray(parsed.excludeMovieGenreIds, 8).filter(id => validMovieGenres.includes(id));
+    const excludeTvGenreIds = normalizeIntArray(parsed.excludeTvGenreIds, 8).filter(id => validTvGenres.includes(id));
+
+    // Validação de anos
+    const currentYear = new Date().getFullYear();
+    let minYear = typeof parsed.minYear === "number" && parsed.minYear >= 1900 && parsed.minYear <= currentYear + 2 ? parsed.minYear : null;
+    let maxYear = typeof parsed.maxYear === "number" && parsed.maxYear >= 1900 && parsed.maxYear <= currentYear + 2 ? parsed.maxYear : null;
+    
+    // Garantir que minYear <= maxYear
+    if (minYear && maxYear && minYear > maxYear) {
+      [minYear, maxYear] = [maxYear, minYear];
+    }
 
     const seeds = await resolveSeedsFromTitles(seedTitles, 4, allowedMediaTypes);
+
+    // Fallback: se não encontrou seeds e não tem gêneros, usar trending
+    if (seeds.length === 0 && movieGenreIds.length === 0 && tvGenreIds.length === 0) {
+      console.log("[AI Recommendations] Nenhum seed ou gênero encontrado, usando fallback para trending");
+    }
 
     const seedSignals = await Promise.all(seeds.map((s) => fetchSeedSignals(s)));
 

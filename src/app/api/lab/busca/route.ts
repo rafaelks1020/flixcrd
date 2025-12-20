@@ -84,10 +84,14 @@ interface TmdbSearchResult {
   id: number;
   title?: string;
   name?: string;
+  original_title?: string;
+  original_name?: string;
   poster_path: string | null;
   backdrop_path: string | null;
   overview: string;
   vote_average: number;
+  vote_count?: number;
+  popularity?: number;
   release_date?: string;
   first_air_date?: string;
   media_type: string;
@@ -98,12 +102,59 @@ interface LabSearchResult {
   tmdbId: number;
   imdbId: string | null;
   name: string;
+  originalName?: string;
   posterUrl: string | null;
   backdropUrl: string | null;
   overview: string;
   voteAverage: number;
   releaseDate: string | null;
   type: string;
+  popularity?: number;
+  _relevanceScore?: number;
+}
+
+function calculateRelevanceScore(item: TmdbSearchResult, query: string): number {
+  const q = query.toLowerCase().trim();
+  const title = (item.title || item.name || "").toLowerCase();
+  const originalTitle = (item.original_title || item.original_name || "").toLowerCase();
+  const overview = (item.overview || "").toLowerCase();
+  
+  let score = 0;
+  
+  // Match exato no título (peso alto)
+  if (title === q) score += 100;
+  else if (title.startsWith(q)) score += 80;
+  else if (title.includes(q)) score += 50;
+  
+  // Match no título original
+  if (originalTitle === q) score += 90;
+  else if (originalTitle.startsWith(q)) score += 70;
+  else if (originalTitle.includes(q)) score += 40;
+  
+  // Match na sinopse (peso menor)
+  if (overview.includes(q)) score += 20;
+  
+  // Boost por popularidade e avaliação
+  const popularity = typeof item.popularity === "number" ? item.popularity : 0;
+  const voteAverage = typeof item.vote_average === "number" ? item.vote_average : 0;
+  const voteCount = typeof item.vote_count === "number" ? item.vote_count : 0;
+  
+  score += Math.min(30, popularity * 0.1);
+  score += Math.min(20, voteAverage * 2);
+  score += Math.min(15, voteCount * 0.01);
+  
+  // Penalidade para itens sem poster
+  if (!item.poster_path) score -= 10;
+  
+  // Boost para lançamentos recentes (últimos 3 anos)
+  const releaseDate = item.release_date || item.first_air_date;
+  if (releaseDate) {
+    const year = parseInt(releaseDate.substring(0, 4), 10);
+    const currentYear = new Date().getFullYear();
+    if (year >= currentYear - 3) score += 10;
+  }
+  
+  return score;
 }
 
 export async function GET(request: NextRequest) {
@@ -155,10 +206,18 @@ export async function GET(request: NextRequest) {
       const tmdbResults: TmdbSearchResult[] = data.results || [];
       if (!totalPages) totalPages = data?.total_pages || 0;
 
-      for (const item of tmdbResults) {
-        if (item.media_type !== "movie" && item.media_type !== "tv") continue;
-        if (!availableIds.has(item.id)) continue;
-        if (seenTmdbIds.has(item.id)) continue;
+      // Calcular relevância e ordenar
+      const scoredItems = tmdbResults
+        .filter(item => item.media_type === "movie" || item.media_type === "tv")
+        .filter(item => availableIds.has(item.id))
+        .filter(item => !seenTmdbIds.has(item.id))
+        .map(item => ({
+          item,
+          score: calculateRelevanceScore(item, q)
+        }))
+        .sort((a, b) => b.score - a.score);
+
+      for (const { item, score } of scoredItems) {
         seenTmdbIds.add(item.id);
 
         results.push({
@@ -166,12 +225,15 @@ export async function GET(request: NextRequest) {
           tmdbId: item.id,
           imdbId: null,
           name: item.title || item.name || "Sem título",
+          originalName: item.original_title || item.original_name || undefined,
           posterUrl: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
           backdropUrl: item.backdrop_path ? `https://image.tmdb.org/t/p/original${item.backdrop_path}` : null,
           overview: item.overview || "",
           voteAverage: item.vote_average || 0,
+          popularity: item.popularity,
           releaseDate: item.release_date || item.first_air_date || null,
           type: item.media_type === "movie" ? "MOVIE" : "SERIES",
+          _relevanceScore: score,
         });
 
         if (results.length >= limit) break;
@@ -187,6 +249,41 @@ export async function GET(request: NextRequest) {
     const hasMore = totalPages ? tmdbPage <= totalPages : false;
     const nextPage = hasMore ? tmdbPageEnd + 1 : null;
 
+    // Gerar sugestões se poucos resultados
+    const suggestions: string[] = [];
+    if (results.length < 3 && q.length > 2) {
+      // Sugestões baseadas em correções comuns
+      const commonMisspellings: Record<string, string> = {
+        "starnger": "stranger",
+        "breking": "breaking",
+        "avengers": "vingadores",
+        "spiderman": "homem aranha",
+        "batman": "batman",
+        "superman": "superman",
+        "starwars": "star wars",
+        "gameofthrones": "game of thrones",
+        "harrypotter": "harry potter",
+      };
+
+      const normalized = q.toLowerCase().replace(/\s+/g, "");
+      if (commonMisspellings[normalized]) {
+        suggestions.push(commonMisspellings[normalized]);
+      }
+
+      // Sugerir termos relacionados se busca for muito específica
+      if (q.includes("filme") || q.includes("movie")) {
+        suggestions.push(q.replace(/filme|movie/gi, "").trim());
+      }
+      if (q.includes("série") || q.includes("series")) {
+        suggestions.push(q.replace(/série|series/gi, "").trim());
+      }
+
+      // Remover duplicatas e filtrar vazios
+      const uniqueSuggestions = [...new Set(suggestions)].filter(s => s && s !== q);
+      suggestions.length = 0;
+      suggestions.push(...uniqueSuggestions.slice(0, 3));
+    }
+
     return NextResponse.json({
       results,
       page,
@@ -196,6 +293,8 @@ export async function GET(request: NextRequest) {
       tmdbPageEnd,
       hasMore,
       nextPage,
+      suggestions: suggestions.length > 0 ? suggestions : undefined,
+      query: q,
     });
   } catch (err) {
     console.error("Lab /busca error:", err);

@@ -157,23 +157,36 @@ export default function LabTitleClient({
     loadSeason();
   }, [title, tmdbId, selectedSeason]);
 
-  function handlePlay() {
+  async function handlePlay() {
     if (!title) return;
 
     if (title.type === "MOVIE") {
-      // Filme: usar IMDb ID
-      const id = title.imdbId || title.tmdbId;
+      // Verificar se existe no banco principal
+      try {
+        const checkRes = await fetch(`/api/lab/check-internal?tmdbId=${title.tmdbId}&type=movie`);
+        if (checkRes.ok) {
+          const data = await checkRes.json();
+          if (data.found && data.internalId) {
+            // Existe no banco, redirecionar para player principal
+            router.push(`/watch/${data.internalId}`);
+            return;
+          }
+        }
+        } catch (err) {
+        console.error('Erro ao verificar título no banco:', err);
+      }
 
+      // Não existe no banco, usar player LAB
       upsertLabContinue({
-        key: makeLabTitleKey("movie", title.tmdbId),
-        watchUrl: `/lab/watch?type=filme&id=${id}&tmdb=${title.tmdbId}`,
+        key: titleKey,
+        watchUrl: `/lab/watch?type=filme&id=${title.tmdbId}`,
         title: title.name,
         posterUrl: title.posterUrl,
         watchType: "filme",
         contentId: String(title.tmdbId),
       });
 
-      router.push(`/lab/watch?type=filme&id=${id}&tmdb=${title.tmdbId}`);
+      router.push(`/lab/watch?type=filme&id=${title.tmdbId}`);
     } else {
       // Série: ir para o primeiro episódio
       upsertLabContinue({
@@ -191,12 +204,28 @@ export default function LabTitleClient({
     }
   }
 
-  function handlePlayEpisode(episodeNumber: number) {
-    if (!title) return;
+  async function handlePlayEpisode(episodeNumber: number) {
+    if (!title || !selectedSeason) return;
 
+    // Verificar se existe no banco principal
+    try {
+      const checkRes = await fetch(`/api/lab/check-internal?tmdbId=${title.tmdbId}&type=tv&season=${selectedSeason}&episode=${episodeNumber}`);
+      if (checkRes.ok) {
+        const data = await checkRes.json();
+        if (data.found && data.internalId && data.episodeId) {
+          // Existe no banco, redirecionar para player principal
+          router.push(`/watch/${data.internalId}?episodeId=${data.episodeId}`);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao verificar episódio no banco:', err);
+    }
+
+    // Não existe no banco, usar player LAB
     upsertLabContinue({
-      key: makeLabTitleKey("tv", title.tmdbId),
-      watchUrl: `/lab/watch?type=serie&id=${title.tmdbId}&season=${selectedSeason}&episode=${episodeNumber}&tmdb=${title.tmdbId}`,
+      key: titleKey,
+      watchUrl: `/lab/watch?type=serie&id=${title.tmdbId}&season=${selectedSeason}&episode=${episodeNumber}`,
       title: title.name,
       posterUrl: title.posterUrl,
       watchType: "serie",

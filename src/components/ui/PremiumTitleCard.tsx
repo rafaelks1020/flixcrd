@@ -119,7 +119,7 @@ export default function PremiumTitleCard({
 
                 <div className="flex items-center gap-2 overflow-hidden">
                   <Link
-                    href={`/watch/${id}`}
+                    href={linkHref}
                     className="w-8 h-8 rounded-full bg-white text-black flex items-center justify-center hover:bg-zinc-200 transition-transform active:scale-90 shadow-xl"
                   >
                     <Play size={14} fill="currentColor" />
