@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
+import { getSettings } from "@/lib/settings";
 import { hasActiveSubscription } from "@/lib/subscription";
 import BrowseClient from "./BrowseClient";
 
@@ -20,6 +21,17 @@ export default async function BrowsePage() {
       if (!hasAccess) {
         redirect("/subscribe");
       }
+    }
+  }
+
+  // Verificar Provider Global
+  const settings = await getSettings();
+  if ((settings as any).streamingProvider === "LAB") {
+    const { hasLabAccess } = await import("@/lib/lab-access");
+    const hasAccess = await hasLabAccess(session.user.id, session.user.role);
+
+    if (hasAccess) {
+      redirect("/lab");
     }
   }
 

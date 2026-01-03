@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthUser } from "@/lib/auth-mobile";
 import { prisma } from "@/lib/prisma";
+import { getAppSettings } from "@/lib/app-settings";
+import { isExplicitContent } from "@/lib/content-filter";
 
-const SUPERFLIX_API = "https://superflixapi.run";
 const TMDB_API = "https://api.themoviedb.org/3";
 const TMDB_KEY = process.env.TMDB_API_KEY || "";
 
@@ -70,8 +71,8 @@ async function fetchSeedSignals(seed: Seed): Promise<SeedSignals> {
   const genreIds = uniqueInts(
     Array.isArray(detailsJson?.genres)
       ? (detailsJson.genres
-          .map((g: any) => parseInt(String(g?.id ?? ""), 10))
-          .filter((n: number) => Number.isFinite(n)) as number[])
+        .map((g: any) => parseInt(String(g?.id ?? ""), 10))
+        .filter((n: number) => Number.isFinite(n)) as number[])
       : [],
     8
   );
@@ -166,6 +167,8 @@ async function fetchAvailableIds(): Promise<AvailableIds> {
     return availableIdsCache.ids;
   }
 
+  const settings = await getAppSettings();
+  const SUPERFLIX_API = settings.superflixApiUrl;
   const urls = {
     movie: `${SUPERFLIX_API}/lista?category=movie&type=tmdb&format=json&order=desc`,
     serie: `${SUPERFLIX_API}/lista?category=serie&type=tmdb&format=json&order=desc`,
@@ -229,6 +232,7 @@ interface TmdbItem {
   genre_ids?: number[];
   release_date?: string;
   first_air_date?: string;
+  adult?: boolean;
 }
 
 type SeedSignals = {
@@ -473,7 +477,8 @@ function normalizeLoose(s: string) {
 async function resolveSeedsFromTitles(
   titles: string[],
   limit: number,
-  allowedMediaTypes: Set<"movie" | "tv">
+  allowedMediaTypes: Set<"movie" | "tv">,
+  includeAdult: boolean
 ): Promise<Seed[]> {
   const out: Seed[] = [];
   const seen = new Set<string>();
@@ -482,7 +487,7 @@ async function resolveSeedsFromTitles(
     const q = String(raw || "").trim();
     if (!q) continue;
 
-    const url = `${TMDB_API}/search/multi?api_key=${TMDB_KEY}&language=pt-BR&query=${encodeURIComponent(q)}&page=1&include_adult=false`;
+    const url = `${TMDB_API}/search/multi?api_key=${TMDB_KEY}&language=pt-BR&query=${encodeURIComponent(q)}&page=1&include_adult=${includeAdult}`;
     const res = await fetch(url, { next: { revalidate: 300 } });
     if (!res.ok) continue;
     const json = await res.json().catch(() => null);
@@ -540,6 +545,7 @@ async function fetchTmdbDiscover(params: {
   minYear?: number | null;
   maxYear?: number | null;
   page?: number;
+  includeAdult?: boolean;
 }): Promise<TmdbItem[]> {
   const page = clampInt(params.page, 1, 1, 10);
   const withGenres = params.withGenres.filter((n) => Number.isFinite(n)).slice(0, 8);
@@ -557,7 +563,7 @@ async function fetchTmdbDiscover(params: {
   qp.set("api_key", TMDB_KEY);
   qp.set("language", "pt-BR");
   qp.set("sort_by", "popularity.desc");
-  qp.set("include_adult", "false");
+  qp.set("include_adult", String(!!params.includeAdult));
   qp.set("page", String(page));
 
   if (withGenres.length) qp.set("with_genres", withGenres.join("|"));
@@ -597,12 +603,6 @@ export async function POST(request: NextRequest) {
 
     if (!user?.id) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
-    }
-
-    const enabled = user.role === "ADMIN" || process.env.NEXT_PUBLIC_LAB_ENABLED === "true";
-
-    if (!enabled) {
-      return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
     }
 
     if (!TMDB_KEY) {
@@ -681,9 +681,9 @@ export async function POST(request: NextRequest) {
     // Validação rigorosa dos seeds - apenas strings não vazias
     const seedTitles = Array.isArray(parsed.seeds)
       ? parsed.seeds
-          .filter((s) => typeof s === "string" && s.trim().length > 0)
-          .map((s) => s.trim())
-          .slice(0, 5)
+        .filter((s) => typeof s === "string" && s.trim().length > 0)
+        .map((s) => s.trim())
+        .slice(0, 5)
       : [];
 
     // Validação de IDs de gênero - apenas números válidos do TMDB
@@ -699,13 +699,16 @@ export async function POST(request: NextRequest) {
     const currentYear = new Date().getFullYear();
     let minYear = typeof parsed.minYear === "number" && parsed.minYear >= 1900 && parsed.minYear <= currentYear + 2 ? parsed.minYear : null;
     let maxYear = typeof parsed.maxYear === "number" && parsed.maxYear >= 1900 && parsed.maxYear <= currentYear + 2 ? parsed.maxYear : null;
-    
+
     // Garantir que minYear <= maxYear
     if (minYear && maxYear && minYear > maxYear) {
       [minYear, maxYear] = [maxYear, minYear];
     }
 
-    const seeds = await resolveSeedsFromTitles(seedTitles, 4, allowedMediaTypes);
+    const settings = await getAppSettings();
+    const hideAdult = settings.hideAdultContent;
+
+    const seeds = await resolveSeedsFromTitles(seedTitles, 4, allowedMediaTypes, !hideAdult);
 
     // Fallback: se não encontrou seeds e não tem gêneros, usar trending
     if (seeds.length === 0 && movieGenreIds.length === 0 && tvGenreIds.length === 0) {
@@ -748,6 +751,14 @@ export async function POST(request: NextRequest) {
 
         for (const item of recItems) {
           if (typeof item?.id !== "number") continue;
+          if (hideAdult) {
+            if (item.adult) continue;
+            if (isExplicitContent({
+              name: item.title || item.name || "",
+              overview: item.overview || "",
+              adult: item.adult
+            })) continue;
+          }
           if (!isAvailable(availableIds, seed.mediaType, item.id)) continue;
 
           const desiredGenres = seed.mediaType === "movie" ? desiredMovieGenres : desiredTvGenres;
@@ -809,6 +820,7 @@ export async function POST(request: NextRequest) {
             minYear,
             maxYear,
             page,
+            includeAdult: !hideAdult,
           });
           discoverResults.push(...items.map((item) => ({ mediaType: "movie" as const, item })));
         }
@@ -829,6 +841,7 @@ export async function POST(request: NextRequest) {
             minYear,
             maxYear,
             page,
+            includeAdult: !hideAdult,
           });
           discoverResults.push(...items.map((item) => ({ mediaType: "tv" as const, item })));
         }
@@ -838,6 +851,12 @@ export async function POST(request: NextRequest) {
         const item = row.item;
         if (typeof item?.id !== "number") continue;
         if (!isAvailable(availableIds, row.mediaType, item.id)) continue;
+
+        if (hideAdult && isExplicitContent({
+          name: item.title || item.name || "",
+          overview: item.overview || "",
+          adult: item.adult
+        })) continue;
 
         const desiredGenres = row.mediaType === "movie" ? desiredMovieGenres : desiredTvGenres;
         const excludedGenres = row.mediaType === "movie" ? excludeMovieGenreIds : excludeTvGenreIds;
@@ -957,12 +976,6 @@ export async function GET(request: NextRequest) {
 
     if (!user?.id) {
       return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
-    }
-
-    const enabled = user.role === "ADMIN" || process.env.NEXT_PUBLIC_LAB_ENABLED === "true";
-
-    if (!enabled) {
-      return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
     }
 
     const url = new URL(request.url);

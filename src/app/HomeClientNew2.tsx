@@ -200,6 +200,48 @@ export default function HomeClientNew2({
     }
   }, [isLoggedIn, activeProfileId]);
 
+  async function handleClearContinueWatching() {
+    if (!activeProfileId) return;
+
+    if (!confirm("Tem certeza que deseja limpar todo o seu histórico de 'Continuar Assistindo'?")) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/user/continue-watching?profileId=${activeProfileId}`, {
+        method: 'DELETE'
+      });
+
+      if (res.ok) {
+        setContinueWatching([]);
+      } else {
+        alert("Erro ao limpar histórico.");
+      }
+    } catch (error) {
+      console.error("Erro ao limpar histórico:", error);
+      alert("Erro ao limpar histórico.");
+    }
+  }
+
+  async function handleRemoveContinueWatching(titleId: string) {
+    if (!activeProfileId) return;
+
+    try {
+      const res = await fetch(`/api/user/continue-watching?profileId=${activeProfileId}&titleId=${titleId}`, {
+        method: 'DELETE'
+      });
+
+      if (res.ok) {
+        setContinueWatching(prev => prev.filter(t => t.id !== titleId));
+      } else {
+        console.error("Erro ao remover título do histórico.");
+      }
+    } catch (error) {
+      console.error("Erro ao remover título do histórico:", error);
+    }
+  }
+
+
   return (
     <div
       className="min-h-screen bg-black text-white selection:bg-red-500/30"
@@ -277,7 +319,19 @@ export default function HomeClientNew2({
         {/* Continuar Assistindo */}
         {continueWatching.length > 0 && (
           <div id="continue-watching">
-            <PremiumTitleRow title="Continuar Assistindo" titles={continueWatching} />
+            <div className="flex items-center justify-between px-4 md:px-12 -mb-8">
+              <PremiumTitleRow
+                title="Continuar Assistindo"
+                titles={continueWatching}
+                onDelete={handleRemoveContinueWatching}
+              />
+              <button
+                onClick={handleClearContinueWatching}
+                className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-red-500 transition-colors bg-white/5 px-4 py-2 rounded-full border border-white/5 hover:border-red-500/20"
+              >
+                Limpar Histórico
+              </button>
+            </div>
           </div>
         )}
 

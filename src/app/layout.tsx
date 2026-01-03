@@ -92,7 +92,7 @@ export default async function RootLayout({
             </div>
           </div>
         ) : (
-          <Providers>
+          <Providers settings={settings}>
             <GhostSpotlight />
             <SpotlightSearch />
             {children}

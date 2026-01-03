@@ -7,21 +7,26 @@ import ServiceWorkerRegister from './ServiceWorkerRegister';
 import Toast from './ui/Toast';
 import PresenceHeartbeat from './PresenceHeartbeat';
 
+import { SettingsProvider } from "@/context/SettingsContext";
+
 interface ProvidersProps {
   children: React.ReactNode;
+  settings: any;
 }
 
-export default function Providers({ children }: ProvidersProps) {
+export default function Providers({ children, settings }: ProvidersProps) {
   const pathname = usePathname();
   const showToast = !pathname.startsWith('/admin');
 
   return (
     <SessionProvider>
-      {showToast ? <Toast /> : null}
-      <PresenceHeartbeat />
-      <ServiceWorkerRegister />
-      <TVNavigation />
-      {children}
+      <SettingsProvider settings={settings}>
+        {showToast ? <Toast /> : null}
+        <PresenceHeartbeat />
+        <ServiceWorkerRegister />
+        <TVNavigation />
+        {children}
+      </SettingsProvider>
     </SessionProvider>
   );
 }

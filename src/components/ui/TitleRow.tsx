@@ -19,19 +19,20 @@ interface TitleRowProps {
   title: string;
   titles: Title[];
   onAddFavorite?: (titleId: string) => void;
+  onDelete?: (titleId: string) => void;
 }
 
-export default function TitleRow({ title, titles, onAddFavorite }: TitleRowProps) {
+export default function TitleRow({ title, titles, onAddFavorite, onDelete }: TitleRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(true);
 
   const scroll = (direction: "left" | "right") => {
     if (!rowRef.current) return;
-    
+
     const scrollAmount = rowRef.current.clientWidth * 0.8;
     const newScrollLeft = rowRef.current.scrollLeft + (direction === "right" ? scrollAmount : -scrollAmount);
-    
+
     rowRef.current.scrollTo({
       left: newScrollLeft,
       behavior: "smooth",
@@ -83,6 +84,7 @@ export default function TitleRow({ title, titles, onAddFavorite }: TitleRowProps
             <TitleCard
               {...title}
               onAddFavorite={onAddFavorite ? () => onAddFavorite(title.id) : undefined}
+              onDelete={onDelete ? () => onDelete(title.id) : undefined}
             />
           </div>
         ))}

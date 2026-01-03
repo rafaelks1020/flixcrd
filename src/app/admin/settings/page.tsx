@@ -12,8 +12,21 @@ interface SettingsState {
   transcoderCrf: number;
   deleteSourceAfterTranscode: boolean;
   labEnabled: boolean;
-}
 
+  // Streaming
+  streamingProvider: "LAB" | "WASABI";
+  superflixApiUrl: string;
+
+  // Content
+  hideAdultContent: boolean;
+  adultContentPin: string;
+
+  // Categories
+  enableMovies: boolean;
+  enableSeries: boolean;
+  enableAnimes: boolean;
+  enableDoramas: boolean;
+}
 
 interface VersionInfo {
   name?: string;
@@ -35,6 +48,14 @@ export default function SettingsPage() {
     transcoderCrf: 20,
     deleteSourceAfterTranscode: true,
     labEnabled: false,
+    streamingProvider: "LAB",
+    superflixApiUrl: "https://superflixapi.run",
+    hideAdultContent: false,
+    adultContentPin: "",
+    enableMovies: true,
+    enableSeries: true,
+    enableAnimes: true,
+    enableDoramas: true,
   });
 
   const [loading, setLoading] = useState(false);
@@ -59,12 +80,19 @@ export default function SettingsPage() {
           allowRegistration: Boolean(data.allowRegistration ?? true),
           maxUploadSize: Number.isFinite(data.maxUploadSize) ? data.maxUploadSize : 10,
           transcoderCrf: Number.isFinite(data.transcoderCrf) ? data.transcoderCrf : 20,
-          deleteSourceAfterTranscode: Boolean(
-            typeof data.deleteSourceAfterTranscode === "boolean"
-              ? data.deleteSourceAfterTranscode
-              : true,
-          ),
+          deleteSourceAfterTranscode: Boolean(data.deleteSourceAfterTranscode ?? true),
           labEnabled: Boolean(data.labEnabled),
+
+          streamingProvider: data.streamingProvider || "LAB",
+          superflixApiUrl: data.superflixApiUrl || "https://superflixapi.run",
+
+          hideAdultContent: Boolean(data.hideAdultContent),
+          adultContentPin: data.adultContentPin || "",
+
+          enableMovies: data.enableMovies !== false,
+          enableSeries: data.enableSeries !== false,
+          enableAnimes: data.enableAnimes !== false,
+          enableDoramas: data.enableDoramas !== false,
         });
       } catch (error) {
         console.error("Erro ao carregar configurações", error);
@@ -108,17 +136,7 @@ export default function SettingsPage() {
         throw new Error(data?.error || "Erro ao salvar configurações");
       }
 
-      setSettings({
-        siteName: data.siteName,
-        siteDescription: data.siteDescription,
-        maintenanceMode: data.maintenanceMode,
-        allowRegistration: data.allowRegistration,
-        maxUploadSize: data.maxUploadSize,
-        transcoderCrf: data.transcoderCrf,
-        deleteSourceAfterTranscode: data.deleteSourceAfterTranscode,
-        labEnabled: data.labEnabled,
-      });
-
+      setSettings(prev => ({ ...prev, ...data }));
       toast.success("✅ Configurações salvas!");
     } catch (error: any) {
       console.error("Erro ao salvar configurações", error);
@@ -129,11 +147,11 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-4xl pb-20">
       <div>
         <h2 className="text-2xl font-semibold">⚙️ Configurações</h2>
         <p className="text-zinc-400 text-sm">
-          Configure o comportamento geral do sistema.
+          Configure o comportamento geral do sistema, streaming e integrações.
         </p>
       </div>
 
@@ -141,151 +159,271 @@ export default function SettingsPage() {
         <div className="text-sm text-zinc-400">Carregando configurações...</div>
       )}
 
-      {/* Geral */}
-      <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 space-y-4">
-        <h3 className="text-sm font-semibold">🌐 Geral</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-        <div className="space-y-2">
-          <label className="block text-xs text-zinc-300">Nome do Site</label>
-          <input
-            type="text"
-            value={settings.siteName}
-            onChange={(e) => setSettings({ ...settings, siteName: e.target.value })}
-            className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
-          />
-        </div>
+        {/* Coluna 1: Geral e Upload */}
+        <div className="space-y-6">
+          {/* Geral */}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-5 space-y-4">
+            <h3 className="text-sm font-semibold flex items-center gap-2">🌐 Geral</h3>
 
-        <div className="space-y-2">
-          <label className="block text-xs text-zinc-300">Descrição</label>
-          <textarea
-            value={settings.siteDescription}
-            onChange={(e) => setSettings({ ...settings, siteDescription: e.target.value })}
-            rows={3}
-            className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={settings.maintenanceMode}
-            onChange={(e) => setSettings({ ...settings, maintenanceMode: e.target.checked })}
-            className="h-4 w-4 accent-emerald-500"
-          />
-          <label className="text-sm text-zinc-300">Modo de Manutenção</label>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={settings.allowRegistration}
-            onChange={(e) => setSettings({ ...settings, allowRegistration: e.target.checked })}
-            className="h-4 w-4 accent-emerald-500"
-          />
-          <label className="text-sm text-zinc-300">Permitir Novos Cadastros</label>
-        </div>
-      </div>
-
-      {/* Upload */}
-      <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 space-y-4">
-        <h3 className="text-sm font-semibold">📤 Upload</h3>
-
-        <div className="space-y-2">
-          <label className="block text-xs text-zinc-300">Tamanho Máximo (GB)</label>
-          <input
-            type="number"
-            value={settings.maxUploadSize}
-            onChange={(e) => setSettings({ ...settings, maxUploadSize: parseInt(e.target.value) })}
-            min={1}
-            max={50}
-            className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
-          />
-          <p className="text-[10px] text-zinc-500">Limite por arquivo individual</p>
-        </div>
-      </div>
-
-      {/* Transcodificação */}
-      <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 space-y-4">
-        <h3 className="text-sm font-semibold">🎬 Transcodificação</h3>
-
-        <div className="space-y-2">
-          <label className="block text-xs text-zinc-300">CRF Padrão (Qualidade)</label>
-          <div className="flex items-center gap-4">
-            <input
-              type="range"
-              value={settings.transcoderCrf}
-              onChange={(e) => setSettings({ ...settings, transcoderCrf: parseInt(e.target.value) })}
-              min={16}
-              max={30}
-              className="flex-1"
-            />
-            <span className="text-sm font-mono text-zinc-300 w-8">{settings.transcoderCrf}</span>
-          </div>
-          <p className="text-[10px] text-zinc-500">16 = Alta qualidade | 23 = Padrão | 30 = Baixa qualidade</p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={settings.deleteSourceAfterTranscode}
-            onChange={(e) => setSettings({ ...settings, deleteSourceAfterTranscode: e.target.checked })}
-            className="h-4 w-4 accent-emerald-500"
-          />
-          <label className="text-sm text-zinc-300">Deletar arquivo original após transcodificação</label>
-        </div>
-      </div>
-
-      {/* Lab Integration */}
-      <div className="rounded-lg border border-purple-500/20 bg-purple-900/10 p-4 space-y-4">
-        <h3 className="text-sm font-semibold flex items-center gap-2">
-          🧪 Lab Integration <span className="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">BETA</span>
-        </h3>
-
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={settings.labEnabled}
-            onChange={(e) => setSettings({ ...settings, labEnabled: e.target.checked })}
-            className="h-4 w-4 accent-purple-500"
-          />
-          <div className="flex flex-col">
-            <label className="text-sm text-zinc-300">Habilitar Modo Lab (Superflix API)</label>
-            <span className="text-xs text-zinc-500">Quando ativo, o sistema usará a API do Lab como fonte principal de títulos.</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Versão */}
-      <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 space-y-3">
-        <h3 className="text-sm font-semibold">🏷️ Versão do Sistema</h3>
-
-        {versionError ? (
-          <div className="text-sm text-zinc-400">{versionError}</div>
-        ) : !versionInfo ? (
-          <div className="text-sm text-zinc-400">Carregando versão...</div>
-        ) : (
-          <div className="space-y-1 text-sm text-zinc-300">
-            <div>
-              <span className="text-zinc-400">Versão:</span> {versionInfo.version || "-"}
+            <div className="space-y-2">
+              <label className="block text-xs text-zinc-300">Nome do Site</label>
+              <input
+                type="text"
+                value={settings.siteName}
+                onChange={(e) => setSettings({ ...settings, siteName: e.target.value })}
+                className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
             </div>
-            <div>
-              <span className="text-zinc-400">Commit:</span> {versionInfo.commitSha ? versionInfo.commitSha.slice(0, 7) : "-"}
+
+            <div className="space-y-2">
+              <label className="block text-xs text-zinc-300">Descrição</label>
+              <textarea
+                value={settings.siteDescription}
+                onChange={(e) => setSettings({ ...settings, siteDescription: e.target.value })}
+                rows={3}
+                className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
             </div>
-            <div className="text-xs text-zinc-500">
-              {versionInfo.deploymentId ? `deploy: ${versionInfo.deploymentId}` : ""}
-              {versionInfo.region ? `${versionInfo.deploymentId ? " • " : ""}region: ${versionInfo.region}` : ""}
+
+            <div className="flex flex-col gap-3 pt-2">
+              <label className="flex items-center gap-3 p-2 rounded-md hover:bg-zinc-900/50 cursor-pointer transition-colors">
+                <input
+                  type="checkbox"
+                  checked={settings.maintenanceMode}
+                  onChange={(e) => setSettings({ ...settings, maintenanceMode: e.target.checked })}
+                  className="h-4 w-4 accent-emerald-500 rounded border-zinc-700 bg-zinc-800"
+                />
+                <div className="flex flex-col">
+                  <span className="text-sm text-zinc-300">Modo de Manutenção</span>
+                  <span className="text-xs text-zinc-500">Apenas admins podem acessar o site</span>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 p-2 rounded-md hover:bg-zinc-900/50 cursor-pointer transition-colors">
+                <input
+                  type="checkbox"
+                  checked={settings.allowRegistration}
+                  onChange={(e) => setSettings({ ...settings, allowRegistration: e.target.checked })}
+                  className="h-4 w-4 accent-emerald-500 rounded border-zinc-700 bg-zinc-800"
+                />
+                <div className="flex flex-col">
+                  <span className="text-sm text-zinc-300">Permitir Novos Cadastros</span>
+                  <span className="text-xs text-zinc-500">Usuários podem criar conta livremente</span>
+                </div>
+              </label>
             </div>
           </div>
-        )}
+
+          {/* Upload & Transcoding */}
+          {settings.streamingProvider !== "LAB" && (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-5 space-y-4">
+              <h3 className="text-sm font-semibold">🎬 Upload & Mídia</h3>
+
+              <div className="space-y-2">
+                <label className="block text-xs text-zinc-300">Tamanho Máximo (GB)</label>
+                <input
+                  type="number"
+                  value={settings.maxUploadSize}
+                  onChange={(e) => setSettings({ ...settings, maxUploadSize: parseInt(e.target.value) })}
+                  min={1}
+                  max={50}
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100"
+                />
+                <p className="text-[10px] text-zinc-500">Limite por arquivo individual</p>
+              </div>
+
+              <div className="pt-2 border-t border-zinc-800/50">
+                <div className="space-y-2 mt-3">
+                  <label className="block text-xs text-zinc-300">CRF Transcoder (Qualidade: {settings.transcoderCrf})</label>
+                  <input
+                    type="range"
+                    value={settings.transcoderCrf}
+                    onChange={(e) => setSettings({ ...settings, transcoderCrf: parseInt(e.target.value) })}
+                    min={16}
+                    max={30}
+                    className="w-full accent-emerald-500"
+                  />
+                  <p className="text-[10px] text-zinc-500 flex justify-between">
+                    <span>Alta (16)</span>
+                    <span>Baixa (30)</span>
+                  </p>
+                </div>
+
+                <label className="flex items-center gap-3 p-2 mt-2 rounded-md hover:bg-zinc-900/50 cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={settings.deleteSourceAfterTranscode}
+                    onChange={(e) => setSettings({ ...settings, deleteSourceAfterTranscode: e.target.checked })}
+                    className="h-4 w-4 accent-emerald-500 rounded border-zinc-700 bg-zinc-800"
+                  />
+                  <span className="text-sm text-zinc-300">Deletar original após converter</span>
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Coluna 2: Streaming e Integrações */}
+        <div className="space-y-6">
+
+          {/* Streaming Provider */}
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/10 p-5 space-y-5">
+            <h3 className="text-sm font-semibold flex items-center gap-2 text-emerald-400">
+              ⚡ Streaming Provider
+            </h3>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className={`
+                cursor-pointer rounded-lg border p-4 flex flex-col items-center gap-2 transition-all
+                ${settings.streamingProvider === "LAB"
+                  ? "border-emerald-500 bg-emerald-500/10 text-emerald-100"
+                  : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700"}
+              `}>
+                <input
+                  type="radio"
+                  name="provider"
+                  value="LAB"
+                  checked={settings.streamingProvider === "LAB"}
+                  onChange={() => setSettings({ ...settings, streamingProvider: "LAB" })}
+                  className="hidden"
+                />
+                <span className="font-bold">LAB (SuperFlix)</span>
+                <span className="text-[10px] opacity-70">Automático • API Externa</span>
+              </label>
+
+              <label className={`
+                cursor-pointer rounded-lg border p-4 flex flex-col items-center gap-2 transition-all
+                ${settings.streamingProvider === "WASABI"
+                  ? "border-emerald-500 bg-emerald-500/10 text-emerald-100"
+                  : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700"}
+              `}>
+                <input
+                  type="radio"
+                  name="provider"
+                  value="WASABI"
+                  checked={settings.streamingProvider === "WASABI"}
+                  onChange={() => setSettings({ ...settings, streamingProvider: "WASABI" })}
+                  className="hidden"
+                />
+                <span className="font-bold">WASABI (Self-Host)</span>
+                <span className="text-[10px] opacity-70">Manual • Armazenamento Próprio</span>
+              </label>
+            </div>
+
+            {settings.streamingProvider === "LAB" && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                <label className="block text-xs text-emerald-300">URL da API SuperFlix</label>
+                <input
+                  type="text"
+                  value={settings.superflixApiUrl}
+                  onChange={(e) => setSettings({ ...settings, superflixApiUrl: e.target.value })}
+                  placeholder="https://superflixapi.run"
+                  className="w-full rounded-md border border-emerald-500/30 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-100 placeholder:text-emerald-500/40 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+                <p className="text-[10px] text-emerald-500/60">
+                  Atualize aqui se o domínio da API mudar (ex: .run para .buzz).
+                </p>
+              </div>
+            )}
+
+            <label className="flex items-center gap-3 p-2 rounded-md hover:bg-zinc-900/50 cursor-pointer transition-colors border border-transparent hover:border-zinc-800">
+              <input
+                type="checkbox"
+                checked={settings.labEnabled}
+                onChange={(e) => setSettings({ ...settings, labEnabled: e.target.checked })}
+                className="h-4 w-4 accent-purple-500"
+              />
+              <div className="flex flex-col">
+                <span className="text-sm text-zinc-300">Feature Flag: LAB Enabled</span>
+                <span className="text-xs text-zinc-500">Habilita rotas e funcionalidades experimentais do LAB.</span>
+              </div>
+            </label>
+          </div>
+
+          {/* Categorias */}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-5 space-y-4">
+            <h3 className="text-sm font-semibold flex items-center gap-2">📂 Categorias Ativas</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { key: "enableMovies", label: "Filmes" },
+                { key: "enableSeries", label: "Séries" },
+                { key: "enableAnimes", label: "Animes" },
+                { key: "enableDoramas", label: "Doramas" },
+              ].map((cat) => (
+                <label key={cat.key} className="flex items-center gap-2 p-2 rounded border border-zinc-800 bg-zinc-900/50 cursor-pointer hover:bg-zinc-900 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={(settings as any)[cat.key]}
+                    onChange={(e) => setSettings({ ...settings, [cat.key]: e.target.checked })}
+                    className="h-4 w-4 accent-emerald-500 rounded"
+                  />
+                  <span className="text-sm text-zinc-300">{cat.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Content Safety */}
+          <div className="rounded-lg border border-red-900/20 bg-red-950/10 p-5 space-y-4">
+            <h3 className="text-sm font-semibold flex items-center gap-2 text-red-400">🔞 Filtro de Conteúdo</h3>
+
+            <label className="flex items-center gap-3 p-2 rounded-md hover:bg-red-950/20 cursor-pointer transition-colors">
+              <input
+                type="checkbox"
+                checked={settings.hideAdultContent}
+                onChange={(e) => setSettings({ ...settings, hideAdultContent: e.target.checked })}
+                className="h-4 w-4 accent-red-500 rounded border-red-900/50 bg-red-950/30"
+              />
+              <div className="flex flex-col">
+                <span className="text-sm text-red-200">Ocultar Conteúdo +18</span>
+                <span className="text-xs text-red-400/70">Bloqueia filmes e séries marcados como adulto.</span>
+              </div>
+            </label>
+
+            {settings.hideAdultContent && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
+                <label className="block text-xs text-red-300">PIN de Controle Parental (Opcional)</label>
+                <input
+                  type="text"
+                  value={settings.adultContentPin || ""}
+                  onChange={(e) => setSettings({ ...settings, adultContentPin: e.target.value })}
+                  placeholder="Ex: 1234"
+                  maxLength={4}
+                  className="w-32 rounded-md border border-red-500/30 bg-red-950/30 px-3 py-2 text-sm text-red-100 placeholder:text-red-500/40 focus:border-red-500 focus:outline-none"
+                />
+              </div>
+            )}
+          </div>
+
+        </div>
       </div>
 
-      <button
-        onClick={handleSave}
-        disabled={loading}
-        className="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-      >
-        {loading ? "Salvando..." : "💾 Salvar Configurações"}
-      </button>
+      {/* Versão (Rodapé) */}
+      <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 flex flex-wrap gap-6 items-center justify-between text-xs text-zinc-500">
+        <div className="flex gap-4">
+          <span>Versão: <span className="text-zinc-300">{versionInfo?.version || "-"}</span></span>
+          <span>Commit: <span className="text-zinc-300 font-mono">{versionInfo?.commitSha?.slice(0, 7) || "-"}</span></span>
+        </div>
+        <div>
+          {versionInfo?.deploymentId && <span>Deploy: {versionInfo.deploymentId}</span>}
+        </div>
+      </div>
+
+      <div className="fixed bottom-6 right-6 left-6 md:left-auto md:w-80">
+        <button
+          onClick={handleSave}
+          disabled={loading}
+          className="w-full shadow-xl shadow-emerald-500/10 rounded-lg bg-emerald-600 px-6 py-4 text-sm font-bold text-white hover:bg-emerald-500 transition-all active:scale-[0.98] disabled:opacity-70 disabled:pointer-events-none flex items-center justify-center gap-2"
+        >
+          {loading ? (
+            <span className="animate-spin h-4 w-4 border-2 border-white/30 border-t-white rounded-full" />
+          ) : (
+            "💾 Salvar Alterações"
+          )}
+        </button>
+      </div>
     </div>
   );
 }

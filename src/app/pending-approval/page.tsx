@@ -25,10 +25,9 @@ export default function PendingApprovalPage() {
         update();
       }, 15000);
 
-      update();
       return () => clearInterval(interval);
     }
-  }, [status, session, router, update]);
+  }, [status, router, update]); // Narrowed dependencies to avoid loop
 
   async function handleCheckStatus() {
     try {

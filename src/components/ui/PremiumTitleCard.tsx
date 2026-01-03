@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Info, Plus, Star } from "lucide-react";
+import { Play, Info, Plus, Star, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface PremiumTitleCardProps {
@@ -18,6 +18,7 @@ interface PremiumTitleCardProps {
   progress?: number;
   genres?: string[];
   showNewBadge?: boolean;
+  onDelete?: (id: string) => void;
 }
 
 export default function PremiumTitleCard({
@@ -31,6 +32,7 @@ export default function PremiumTitleCard({
   progress,
   genres,
   showNewBadge,
+  onDelete,
 }: PremiumTitleCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -133,6 +135,18 @@ export default function PremiumTitleCard({
                   <button className="w-8 h-8 rounded-full bg-zinc-900/80 backdrop-blur-xl border border-white/10 text-white flex items-center justify-center hover:bg-primary transition-all active:scale-90">
                     <Plus size={14} />
                   </button>
+                  {onDelete && (
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onDelete(id);
+                      }}
+                      className="w-8 h-8 rounded-full bg-red-600/20 backdrop-blur-xl border border-red-500/30 text-red-500 flex items-center justify-center hover:bg-red-600 hover:text-white transition-all active:scale-90"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between text-[8px] font-black uppercase tracking-widest text-zinc-500">

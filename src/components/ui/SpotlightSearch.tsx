@@ -42,8 +42,10 @@ export default function SpotlightSearch() {
         setLoading(true);
         try {
             const res = await fetch(`/api/titles?q=${encodeURIComponent(q)}&limit=6`);
-            const data = await res.json();
-            setResults(data || []);
+            const json = await res.json();
+            // Handle both array and object { data: [] } response formats
+            const searchData = Array.isArray(json) ? json : (json?.data || []);
+            setResults(searchData);
         } catch (error) {
             console.error("Search error:", error);
         } finally {
@@ -135,7 +137,16 @@ export default function SpotlightSearch() {
                                     {results.map((item) => (
                                         <button
                                             key={item.id}
-                                            onClick={() => router.push(`/title/${item.id}`)}
+                                            onClick={() => {
+                                                setIsOpen(false); // Close search when clicking
+                                                if (item.id.startsWith("lab-")) {
+                                                    const tmdbId = item.id.split("-").pop();
+                                                    const type = item.type === "MOVIE" ? "movie" : "tv";
+                                                    router.push(`/lab/title/${tmdbId}?type=${type}`);
+                                                } else {
+                                                    router.push(`/title/${item.id}`);
+                                                }
+                                            }}
                                             className="group flex items-center gap-4 w-full p-3 rounded-xl hover:bg-white/5 transition-all text-left border border-transparent hover:border-white/5"
                                         >
                                             <div className="w-16 h-20 flex-shrink-0 relative rounded-lg overflow-hidden bg-zinc-800">

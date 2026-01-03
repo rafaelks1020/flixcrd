@@ -3,11 +3,36 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { getOrCreateCustomer } from '@/lib/asaas';
 import { sendMail } from '@/lib/mailjet';
+import { rateLimit, getClientIP } from '@/lib/rate-limit-store';
 
 const db = prisma as any;
 
+// Rate limiter for auth endpoints (5 requests per 15 minutes)
+const authRateLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 5 });
+
 export async function POST(request: NextRequest) {
   try {
+    // Apply rate limiting
+    const ip = getClientIP(request);
+    const rateLimitResult = authRateLimit(ip);
+    
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { 
+          error: 'Too many authentication attempts, please try again later.',
+          limit: rateLimitResult.limit,
+          resetTime: rateLimitResult.resetTime
+        },
+        { 
+          status: 429,
+          headers: {
+            'X-RateLimit-Limit': rateLimitResult.limit.toString(),
+            'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
+            'X-RateLimit-Reset': rateLimitResult.resetTime.toString(),
+          }
+        }
+      );
+    }
     // Verificar se novos cadastros estão permitidos
     const settings = await db.settings.findFirst().catch(() => null);
     if (settings && settings.allowRegistration === false) {

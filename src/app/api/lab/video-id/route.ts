@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthUser } from "@/lib/auth-mobile";
-
-const SUPERFLIX_BASE = "https://superflixapi.run";
+import { getSuperflixUrl } from "@/lib/app-settings";
 
 export async function GET(request: NextRequest) {
   const user = await getAuthUser(request);
 
   if (!user?.id) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
-  }
-
-  const enabled = user.role === "ADMIN" || process.env.NEXT_PUBLIC_LAB_ENABLED === "true";
-
-  if (!enabled) {
-    return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -28,6 +21,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const SUPERFLIX_BASE = await getSuperflixUrl();
+
     let upstreamUrl = `${SUPERFLIX_BASE}/${type}/${id}`;
 
     if (type === "serie" && season && episode) {
@@ -37,7 +32,7 @@ export async function GET(request: NextRequest) {
     const res = await fetch(upstreamUrl, {
       headers: {
         "User-Agent": "FlixCRD-Lab/1.0",
-        Referer: "https://superflixapi.run/",
+        Referer: `${SUPERFLIX_BASE}/`,
       },
     });
 

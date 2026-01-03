@@ -21,9 +21,10 @@ interface PremiumTitleRowProps {
   title: string;
   titles: Title[];
   showNewBadge?: boolean;
+  onDelete?: (id: string) => void;
 }
 
-export default function PremiumTitleRow({ title, titles, showNewBadge }: PremiumTitleRowProps) {
+export default function PremiumTitleRow({ title, titles, showNewBadge, onDelete }: PremiumTitleRowProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -106,6 +107,7 @@ export default function PremiumTitleRow({ title, titles, showNewBadge }: Premium
               progress={item.progress}
               genres={item.genres?.map(g => g.name)}
               showNewBadge={showNewBadge}
+              onDelete={onDelete}
             />
           ))}
         </div>

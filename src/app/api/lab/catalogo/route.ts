@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthUser } from "@/lib/auth-mobile";
+import { getSuperflixUrl } from "@/lib/app-settings";
+import { isExplicitContent } from "@/lib/content-filter";
 
-const SUPERFLIX_API = "https://superflixapi.run";
 const TMDB_API = "https://api.themoviedb.org/3";
 const TMDB_KEY = process.env.TMDB_API_KEY || "";
 
@@ -18,6 +19,8 @@ interface TmdbMovie {
   vote_average: number;
   release_date?: string;
   first_air_date?: string;
+  adult?: boolean;
+  genre_ids?: number[];
 }
 
 interface LabTitle {
@@ -55,13 +58,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
 
-  const enabled = user.role === "ADMIN" || process.env.NEXT_PUBLIC_LAB_ENABLED === "true";
-
-  if (!enabled) {
-    return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
-  }
-
   try {
+    const SUPERFLIX_API = await getSuperflixUrl();
+
     const url = new URL(request.url);
     const type = url.searchParams.get("type") || "movie"; // movie, serie, anime
     const limit = parseInt(url.searchParams.get("limit") || "20");
@@ -90,7 +89,7 @@ export async function GET(request: NextRequest) {
     }
 
     const listaText = await listaRes.text();
-    
+
     // Parsear a resposta (pode ser array de IDs ou objeto)
     let ids: number[] = [];
     try {
@@ -118,6 +117,16 @@ export async function GET(request: NextRequest) {
       limitedIds.map(async (tmdbId) => {
         const details = await fetchTmdbDetails(tmdbId, mediaType);
         if (!details) return null;
+
+        // Filtro imediato de conteúdo adulto usando os metadados REAIS do TMDB
+        if (isExplicitContent({
+          name: details.title || details.name || "",
+          overview: details.overview || "",
+          adult: details.adult,
+          genre_ids: details.genre_ids
+        })) {
+          return null;
+        }
 
         const imdbId = details.imdb_id || details.external_ids?.imdb_id || null;
 

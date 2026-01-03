@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthUser } from "@/lib/auth-mobile";
+import { getAppSettings } from "@/lib/app-settings";
 
-const SUPERFLIX_API = "https://superflixapi.run";
 const TMDB_API = "https://api.themoviedb.org/3";
 const TMDB_KEY = process.env.TMDB_API_KEY || "";
 
-let availableIdsCache: { ids: Set<number>; cachedAt: number } | null = null;
+import { isExplicitContent } from "@/lib/content-filter";
+
+let availableIdsCache: { ids: Set<number>; cachedAt: number; apiUrl: string } | null = null;
 const AVAILABLE_IDS_TTL_MS = 5 * 60 * 1000;
 
 function clampInt(value: string | null, fallback: number, min: number, max: number) {
@@ -45,9 +47,9 @@ function parseIds(rawText: string): number[] {
     .filter((n) => !Number.isNaN(n));
 }
 
-async function fetchAvailableIds(): Promise<Set<number>> {
+async function fetchAvailableIds(SUPERFLIX_API: string): Promise<Set<number>> {
   const now = Date.now();
-  if (availableIdsCache && now - availableIdsCache.cachedAt < AVAILABLE_IDS_TTL_MS) {
+  if (availableIdsCache && now - availableIdsCache.cachedAt < AVAILABLE_IDS_TTL_MS && availableIdsCache.apiUrl === SUPERFLIX_API) {
     return availableIdsCache.ids;
   }
 
@@ -55,6 +57,7 @@ async function fetchAvailableIds(): Promise<Set<number>> {
     `${SUPERFLIX_API}/lista?category=movie&type=tmdb&format=json&order=desc`,
     `${SUPERFLIX_API}/lista?category=serie&type=tmdb&format=json&order=desc`,
     `${SUPERFLIX_API}/lista?category=anime&type=tmdb&format=json&order=desc`,
+    `${SUPERFLIX_API}/lista?category=dorama&type=tmdb&format=json&order=desc`,
   ];
 
   const settled = await Promise.allSettled(
@@ -76,7 +79,7 @@ async function fetchAvailableIds(): Promise<Set<number>> {
     }
   }
 
-  availableIdsCache = { ids, cachedAt: now };
+  availableIdsCache = { ids, cachedAt: now, apiUrl: SUPERFLIX_API };
   return ids;
 }
 
@@ -95,6 +98,8 @@ interface TmdbSearchResult {
   release_date?: string;
   first_air_date?: string;
   media_type: string;
+  adult?: boolean;
+  genre_ids?: number[];
 }
 
 interface LabSearchResult {
@@ -113,39 +118,39 @@ interface LabSearchResult {
   _relevanceScore?: number;
 }
 
-function calculateRelevanceScore(item: TmdbSearchResult, query: string): number {
+function calculateRelevanceScore(item: TmdbSearchResult, query: string, isAvailable: boolean): number {
   const q = query.toLowerCase().trim();
   const title = (item.title || item.name || "").toLowerCase();
   const originalTitle = (item.original_title || item.original_name || "").toLowerCase();
   const overview = (item.overview || "").toLowerCase();
-  
+
   let score = 0;
-  
+
   // Match exato no título (peso alto)
   if (title === q) score += 100;
   else if (title.startsWith(q)) score += 80;
   else if (title.includes(q)) score += 50;
-  
+
   // Match no título original
   if (originalTitle === q) score += 90;
   else if (originalTitle.startsWith(q)) score += 70;
   else if (originalTitle.includes(q)) score += 40;
-  
+
   // Match na sinopse (peso menor)
   if (overview.includes(q)) score += 20;
-  
+
   // Boost por popularidade e avaliação
   const popularity = typeof item.popularity === "number" ? item.popularity : 0;
   const voteAverage = typeof item.vote_average === "number" ? item.vote_average : 0;
   const voteCount = typeof item.vote_count === "number" ? item.vote_count : 0;
-  
+
   score += Math.min(30, popularity * 0.1);
   score += Math.min(20, voteAverage * 2);
   score += Math.min(15, voteCount * 0.01);
-  
+
   // Penalidade para itens sem poster
   if (!item.poster_path) score -= 10;
-  
+
   // Boost para lançamentos recentes (últimos 3 anos)
   const releaseDate = item.release_date || item.first_air_date;
   if (releaseDate) {
@@ -153,30 +158,35 @@ function calculateRelevanceScore(item: TmdbSearchResult, query: string): number 
     const currentYear = new Date().getFullYear();
     if (year >= currentYear - 3) score += 10;
   }
-  
+
+  // SUPER BOOST para itens disponíveis no SuperFlix
+  if (isAvailable) score += 500;
+
   return score;
 }
 
 export async function GET(request: NextRequest) {
+  const url = new URL(request.url);
+  const q = url.searchParams.get("q") || "";
+
+  console.log(`[Lab Search] Incoming request for query: "${q}"`);
+
   const user = await getAuthUser(request);
 
   if (!user?.id) {
+    console.warn("[Lab Search] Unauthorized access attempt (no user id)");
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
 
-  const enabled = user.role === "ADMIN" || process.env.NEXT_PUBLIC_LAB_ENABLED === "true";
-
-  if (!enabled) {
-    return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
-  }
-
   if (!TMDB_KEY) {
+    console.error("[Lab Search] TMDB_API_KEY is missing in environment");
     return NextResponse.json({ error: "TMDB_API_KEY não configurada." }, { status: 500 });
   }
 
   try {
-    const url = new URL(request.url);
-    const q = url.searchParams.get("q") || "";
+    const settings = await getAppSettings();
+    const SUPERFLIX_API = settings.superflixApiUrl;
+    const includeAdult = !settings.hideAdultContent;
 
     const page = clampInt(url.searchParams.get("page"), 1, 1, 500);
     const limit = clampInt(url.searchParams.get("limit"), 20, 5, 40);
@@ -185,68 +195,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ results: [], page, limit, totalPages: 0, scannedPages: 0 });
     }
 
-    const availableIds = await fetchAvailableIds();
+    const availableIds = await fetchAvailableIds(SUPERFLIX_API);
 
-    const results: LabSearchResult[] = [];
-    const seenTmdbIds = new Set<number>();
-    let tmdbPage = page;
-    let scannedPages = 0;
-    let totalPages = 0;
+    const { performLabSearch } = await import("@/lib/lab-search");
+    const { results, totalPages, tmdbPageEnd, hasMore } = await performLabSearch(q, {
+      page,
+      limit,
+      includeAdult,
+      availableIds
+    });
 
-    while (results.length < limit && scannedPages < 4) {
-      const searchUrl = `${TMDB_API}/search/multi?api_key=${TMDB_KEY}&language=pt-BR&query=${encodeURIComponent(q)}&page=${tmdbPage}&include_adult=false`;
-
-      const res = await fetch(searchUrl, { next: { revalidate: 120 } });
-
-      if (!res.ok) {
-        return NextResponse.json({ error: "Erro na busca", results: [] });
-      }
-
-      const data = await res.json();
-      const tmdbResults: TmdbSearchResult[] = data.results || [];
-      if (!totalPages) totalPages = data?.total_pages || 0;
-
-      // Calcular relevância e ordenar
-      const scoredItems = tmdbResults
-        .filter(item => item.media_type === "movie" || item.media_type === "tv")
-        .filter(item => availableIds.has(item.id))
-        .filter(item => !seenTmdbIds.has(item.id))
-        .map(item => ({
-          item,
-          score: calculateRelevanceScore(item, q)
-        }))
-        .sort((a, b) => b.score - a.score);
-
-      for (const { item, score } of scoredItems) {
-        seenTmdbIds.add(item.id);
-
-        results.push({
-          id: `lab-${item.media_type}-${item.id}`,
-          tmdbId: item.id,
-          imdbId: null,
-          name: item.title || item.name || "Sem título",
-          originalName: item.original_title || item.original_name || undefined,
-          posterUrl: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
-          backdropUrl: item.backdrop_path ? `https://image.tmdb.org/t/p/original${item.backdrop_path}` : null,
-          overview: item.overview || "",
-          voteAverage: item.vote_average || 0,
-          popularity: item.popularity,
-          releaseDate: item.release_date || item.first_air_date || null,
-          type: item.media_type === "movie" ? "MOVIE" : "SERIES",
-          _relevanceScore: score,
-        });
-
-        if (results.length >= limit) break;
-      }
-
-      scannedPages += 1;
-      tmdbPage += 1;
-      if (!totalPages || tmdbPage > totalPages) break;
-      if (tmdbResults.length === 0) break;
-    }
-
-    const tmdbPageEnd = tmdbPage - 1;
-    const hasMore = totalPages ? tmdbPage <= totalPages : false;
     const nextPage = hasMore ? tmdbPageEnd + 1 : null;
 
     // Gerar sugestões se poucos resultados
@@ -265,9 +223,9 @@ export async function GET(request: NextRequest) {
         "harrypotter": "harry potter",
       };
 
-      const normalized = q.toLowerCase().replace(/\s+/g, "");
-      if (commonMisspellings[normalized]) {
-        suggestions.push(commonMisspellings[normalized]);
+      const normalizedSug = q.toLowerCase().replace(/\s+/g, "");
+      if (commonMisspellings[normalizedSug]) {
+        suggestions.push(commonMisspellings[normalizedSug]);
       }
 
       // Sugerir termos relacionados se busca for muito específica
@@ -289,7 +247,7 @@ export async function GET(request: NextRequest) {
       page,
       limit,
       totalPages,
-      scannedPages,
+      scannedPages: tmdbPageEnd - page + 1,
       tmdbPageEnd,
       hasMore,
       nextPage,

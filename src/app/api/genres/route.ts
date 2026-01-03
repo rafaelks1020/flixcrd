@@ -1,14 +1,20 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
+import cache from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 
-// Cache por 5 minutos
-export const revalidate = 300;
-
 export async function GET() {
   try {
+    // Try cache first
+    const cacheKey = "genres:all";
+    const cached = await cache.get(cacheKey);
+    
+    if (cached) {
+      return NextResponse.json(JSON.parse(cached));
+    }
+
     const genres = await prisma.genre.findMany({
       orderBy: { name: "asc" },
       include: {
@@ -24,6 +30,9 @@ export async function GET() {
       const isTerror = name === "terror" || name === "horror";
       return g._count.TitleGenre > 0 && !isTerror;
     });
+
+    // Cache for 10 minutes (600 seconds)
+    await cache.set(cacheKey, JSON.stringify(filtered), 600);
 
     return NextResponse.json(filtered);
   } catch (error) {

@@ -24,6 +24,7 @@ import {
 import StatsCard from "@/components/admin/StatsCard";
 import UptimeChart from "@/components/admin/UptimeChart";
 import { cn } from "@/lib/utils";
+import { useSettings } from "@/context/SettingsContext";
 
 interface Title {
   id: string;
@@ -34,6 +35,8 @@ interface Title {
 }
 
 export default function AdminHomePage() {
+  const settings = useSettings();
+  const isLab = settings.streamingProvider === "LAB";
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     titlesCount: 0,
@@ -75,11 +78,11 @@ export default function AdminHomePage() {
   const hlsPercentage = stats.titlesCount > 0 ? Math.round((stats.titlesWithHlsCount / stats.titlesCount) * 100) : 0;
 
   const quickActions = [
-    { href: "/admin/catalog", label: "Catálogo", desc: "Manage metadata & TMDB sync", icon: Film, color: "from-primary/20" },
-    { href: "/admin/upload-v2", label: "Upload Center", desc: "Wasabi & S3 storage sync", icon: CloudUpload, color: "from-blue-500/20" },
-    { href: "/admin/jobs", label: "HLS Forge", icon: Cpu, desc: "Transcoding queue status", color: "from-orange-500/20" },
+    { href: "/admin/catalog", label: "Catálogo", desc: "Manage metadata & TMDB sync", icon: Film, color: "from-primary/20", hideIfLab: true },
+    { href: "/admin/upload-v2", label: "Upload Center", desc: "Wasabi & S3 storage sync", icon: CloudUpload, color: "from-blue-500/20", hideIfLab: true },
+    { href: "/admin/jobs", label: "HLS Forge", icon: Cpu, desc: "Transcoding queue status", color: "from-orange-500/20", hideIfLab: true },
     { href: "/admin/users", label: "Users", icon: UserPlus, desc: "Access & permission control", color: "from-emerald-500/20" },
-  ];
+  ].filter(a => !isLab || !a.hideIfLab);
 
   if (loading) return (
     <div className="flex h-[80vh] items-center justify-center">
@@ -110,20 +113,24 @@ export default function AdminHomePage() {
 
       {/* Main Stats Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <StatsCard
-          title="Catálogo Total"
-          value={stats.titlesCount}
-          icon={Database}
-          color="red"
-          trend={{ value: `${stats.moviesCount} Movies`, isPositive: true }}
-        />
-        <StatsCard
-          title="HLS Ready"
-          value={`${hlsPercentage}%`}
-          icon={PlayCircle}
-          color="green"
-          trend={{ value: `${stats.titlesWithHlsCount} Ready`, isPositive: true }}
-        />
+        {!isLab && (
+          <StatsCard
+            title="Catálogo Total"
+            value={stats.titlesCount}
+            icon={Database}
+            color="red"
+            trend={{ value: `${stats.moviesCount} Movies`, isPositive: true }}
+          />
+        )}
+        {!isLab && (
+          <StatsCard
+            title="HLS Ready"
+            value={`${hlsPercentage}%`}
+            icon={PlayCircle}
+            color="green"
+            trend={{ value: `${stats.titlesWithHlsCount} Ready`, isPositive: true }}
+          />
+        )}
         <StatsCard
           title="User Base"
           value={stats.usersCount}
@@ -217,17 +224,19 @@ export default function AdminHomePage() {
             </div>
           )}
 
-          <div className="mt-auto pt-6 border-t border-white/5">
-            <div className="bg-primary/5 rounded-2xl p-4 border border-primary/20">
-              <div className="flex items-center gap-3 mb-2">
-                <TrendingUp className="text-primary" size={16} />
-                <span className="text-[10px] font-black uppercase tracking-widest text-primary">Conversion Insight</span>
+          {!isLab && (
+            <div className="mt-auto pt-6 border-t border-white/5">
+              <div className="bg-primary/5 rounded-2xl p-4 border border-primary/20">
+                <div className="flex items-center gap-3 mb-2">
+                  <TrendingUp className="text-primary" size={16} />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-primary">Conversion Insight</span>
+                </div>
+                <p className="text-[11px] font-medium text-zinc-400 leading-relaxed">
+                  Catálogo está <span className="text-white font-bold">{hlsPercentage}%</span> otimizado para streaming adaptativo. Priorize transcodificação de séries pendentes.
+                </p>
               </div>
-              <p className="text-[11px] font-medium text-zinc-400 leading-relaxed">
-                Catálogo está <span className="text-white font-bold">{hlsPercentage}%</span> otimizado para streaming adaptativo. Priorize transcodificação de séries pendentes.
-              </p>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

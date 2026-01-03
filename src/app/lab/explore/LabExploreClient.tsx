@@ -10,7 +10,7 @@ import PremiumTitleRow from "@/components/ui/PremiumTitleRow";
 import BrowseHero from "@/components/ui/BrowseHero";
 import { getLabContinue, getLabMyList, getLabWatchLater } from "../labStorage";
 
-type Category = "movie" | "serie" | "anime";
+type Category = "movie" | "serie" | "anime" | "dorama";
 
 type Sort = "most_watched" | "most_liked" | "most_voted" | "newest";
 
@@ -50,19 +50,23 @@ function dedupeLabTitles(list: LabTitle[]) {
 
 // ExploreHeroSection removed (replaced by BrowseHero)
 
+interface LabExploreClientProps {
+  isLoggedIn: boolean;
+  isAdmin: boolean;
+  initialCategory?: Category;
+}
+
 export default function LabExploreClient({
   isLoggedIn,
   isAdmin,
-}: {
-  isLoggedIn: boolean;
-  isAdmin: boolean;
-}) {
+  initialCategory,
+}: LabExploreClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlQuery = (searchParams.get("q") || "").trim();
   const searchMode = urlQuery.length >= 2;
 
-  const [category, setCategory] = useState<Category>("movie");
+  const [category, setCategory] = useState<Category>(initialCategory || "movie");
   const [sort, setSort] = useState<Sort>("most_watched");
   const [year, setYear] = useState("");
   const [genre, setGenre] = useState("");
@@ -214,7 +218,7 @@ export default function LabExploreClient({
     async function loadSmart() {
       try {
         setTrendingError(null);
-        const tRes = await fetch("/api/lab/trending?type=all&time=week&limit=24", { cache: "no-store" });
+        const tRes = await fetch(`/api/lab/trending?category=${category}&type=all&time=week&limit=24`, { cache: "no-store" });
         if (tRes.ok) {
           const tJson = await tRes.json();
           const list = Array.isArray(tJson?.results) ? (tJson.results as LabTitle[]) : [];
@@ -257,7 +261,7 @@ export default function LabExploreClient({
           return;
         }
 
-        const rRes = await fetch(`/api/lab/recommendations?limit=24&seeds=${encodeURIComponent(uniqueSeeds.join(","))}`, {
+        const rRes = await fetch(`/api/lab/recommendations?category=${category}&limit=24&seeds=${encodeURIComponent(uniqueSeeds.join(","))}`, {
           cache: "no-store",
         });
 
@@ -291,7 +295,7 @@ export default function LabExploreClient({
   }
 
   const titleForRow = useMemo(() => {
-    const catLabel = category === "movie" ? "Filmes" : category === "serie" ? "Séries" : "Animes";
+    const catLabel = category === "movie" ? "Filmes" : category === "serie" ? "Séries" : category === "anime" ? "Animes" : "Doramas";
     const sortLabel =
       sort === "most_watched"
         ? "Mais assistidos"
@@ -402,6 +406,13 @@ export default function LabExploreClient({
                   className={cn("px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border", category === "anime" ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/20" : "bg-zinc-900/50 text-zinc-400 border-white/5 hover:bg-zinc-800 hover:text-white")}
                 >
                   Animes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resetAndLoad("dorama", sort)}
+                  className={cn("px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border", category === "dorama" ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/20" : "bg-zinc-900/50 text-zinc-400 border-white/5 hover:bg-zinc-800 hover:text-white")}
+                >
+                  Doramas
                 </button>
               </div>
 

@@ -7,8 +7,6 @@ import Link from "next/link";
 import PremiumNavbar from "@/components/ui/PremiumNavbar";
 import { makeLabTitleKey, upsertLabContinue } from "../labStorage";
 
-const SUPERFLIX_BASE = "https://superflixapi.run";
-
 interface LabWatchClientProps {
   isLoggedIn: boolean;
   isAdmin: boolean;
@@ -17,6 +15,7 @@ interface LabWatchClientProps {
   initialSeason: string;
   initialEpisode: string;
   tmdbId?: string;
+  superflixApiUrl: string;
 }
 
 export default function LabWatchClient({
@@ -27,6 +26,7 @@ export default function LabWatchClient({
   initialSeason,
   initialEpisode,
   tmdbId,
+  superflixApiUrl,
 }: LabWatchClientProps) {
   const router = useRouter();
   const [season, setSeason] = useState(initialSeason);
@@ -88,7 +88,7 @@ export default function LabWatchClient({
   function buildEmbedUrl() {
     // Usar endpoint /filme/ ou /serie/ direto (como na documentação)
     // Evita problemas de origin/proxy que podem quebrar os cliques no player.
-    let url = `${SUPERFLIX_BASE}/${type}/${encodeURIComponent(contentId)}`;
+    let url = `${superflixApiUrl}/${type}/${encodeURIComponent(contentId)}`;
 
     if (type === "serie") {
       url += `/${encodeURIComponent(season)}/${encodeURIComponent(episode)}`;

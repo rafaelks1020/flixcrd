@@ -54,6 +54,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
+      // Verify user actually exists to avoid foreign key violation if recently deleted
+      const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+      if (!userExists) {
+        return NextResponse.json({ error: "Usuário não encontrado." }, { status: 404 });
+      }
+
       await prisma.userPresenceSession.create({
         data: {
           userId,

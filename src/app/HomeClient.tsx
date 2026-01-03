@@ -136,8 +136,10 @@ export default function HomeClient({
       }
     }
 
-    loadData();
-  }, [isLoggedIn, activeProfileId, handleProfileNotFound]);
+    if (!isLoggedIn || activeProfileId) {
+      loadData();
+    }
+  }, [isLoggedIn, activeProfileId]);
 
   const handleAddFavorite = async (titleId: string) => {
     if (!activeProfileId) {
@@ -165,6 +167,26 @@ export default function HomeClient({
       }
     } catch (error) {
       toast.error("Erro ao adicionar favorito");
+    }
+  };
+
+  const handleRemoveContinueWatching = async (titleId: string) => {
+    if (!activeProfileId) return;
+
+    try {
+      const res = await fetch(`/api/user/continue-watching?profileId=${activeProfileId}&titleId=${titleId}`, {
+        method: 'DELETE'
+      });
+
+      if (res.ok) {
+        setContinueWatching(prev => prev.filter(t => t.id !== titleId));
+        toast.success("Removido do histórico");
+      } else {
+        toast.error("Erro ao remover título");
+      }
+    } catch (error) {
+      console.error("Erro ao remover título:", error);
+      toast.error("Erro de conexão");
     }
   };
 
@@ -197,6 +219,7 @@ export default function HomeClient({
                   progress: item.progressPercent,
                 }))}
                 onAddFavorite={handleAddFavorite}
+                onDelete={handleRemoveContinueWatching}
               />
             )}
 

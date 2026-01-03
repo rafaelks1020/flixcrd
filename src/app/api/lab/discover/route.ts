@@ -1,9 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-
 import { getAuthUser } from "@/lib/auth-mobile";
+import { getAppSettings } from "@/lib/app-settings";
+import { isExplicitContent } from "@/lib/content-filter";
 
-const SUPERFLIX_API = "https://superflixapi.run";
 const TMDB_API = "https://api.themoviedb.org/3";
+
+interface LabTitle {
+  id: string;
+  tmdbId: number;
+  imdbId: string | null;
+  name: string;
+  posterUrl: string | null;
+  backdropUrl: string | null;
+  overview: string;
+  voteAverage: number;
+  releaseDate: string | null;
+  type: string;
+}
+
+// Reuse availability fetching logic from other routes or centralize it
+let availableIdsCache: { ids: Set<number>; cachedAt: number; apiUrl: string } | null = null;
+const AVAILABLE_IDS_TTL_MS = 5 * 60 * 1000;
 
 function parseIds(rawText: string): number[] {
   try {
@@ -35,173 +52,126 @@ function parseIds(rawText: string): number[] {
     .filter((n) => !Number.isNaN(n));
 }
 
-function clampInt(value: string | null, fallback: number, min: number, max: number) {
-  const n = parseInt(value || "", 10);
-  if (Number.isNaN(n)) return fallback;
-  return Math.max(min, Math.min(max, n));
-}
-
-function mapSort(sort: string, mediaType: "movie" | "tv") {
-  switch (sort) {
-    case "most_watched":
-      return "popularity.desc";
-    case "most_liked":
-      return "vote_average.desc";
-    case "most_voted":
-      return "vote_count.desc";
-    case "newest":
-      return mediaType === "movie" ? "primary_release_date.desc" : "first_air_date.desc";
-    default:
-      return "popularity.desc";
+async function fetchAvailableIds(SUPERFLIX_API: string): Promise<Set<number>> {
+  const now = Date.now();
+  if (availableIdsCache && now - availableIdsCache.cachedAt < AVAILABLE_IDS_TTL_MS && availableIdsCache.apiUrl === SUPERFLIX_API) {
+    return availableIdsCache.ids;
   }
+
+  const urls = [
+    `${SUPERFLIX_API}/lista?category=movie&type=tmdb&format=json&order=desc`,
+    `${SUPERFLIX_API}/lista?category=serie&type=tmdb&format=json&order=desc`,
+    `${SUPERFLIX_API}/lista?category=anime&type=tmdb&format=json&order=desc`,
+    `${SUPERFLIX_API}/lista?category=dorama&type=tmdb&format=json&order=desc`,
+  ];
+
+  const settled = await Promise.allSettled(
+    urls.map((u) =>
+      fetch(u, {
+        headers: { "User-Agent": "FlixCRD-Lab/1.0" },
+        next: { revalidate: 300 },
+      })
+    )
+  );
+
+  const ids = new Set<number>();
+  for (const res of settled) {
+    if (res.status !== "fulfilled") continue;
+    if (!res.value.ok) continue;
+    const text = await res.value.text();
+    for (const id of parseIds(text)) {
+      ids.add(id);
+    }
+  }
+
+  availableIdsCache = { ids, cachedAt: now, apiUrl: SUPERFLIX_API };
+  return ids;
 }
 
 export async function GET(request: NextRequest) {
   const user = await getAuthUser(request);
-
-  if (!user?.id) {
-    return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
-  }
-
-  const enabled = user.role === "ADMIN" || process.env.NEXT_PUBLIC_LAB_ENABLED === "true";
-
-  if (!enabled) {
-    return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
-  }
+  if (!user?.id) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
 
   const TMDB_KEY = process.env.TMDB_API_KEY || "";
-  if (!TMDB_KEY) {
-    return NextResponse.json({ error: "TMDB_API_KEY não configurada." }, { status: 500 });
+  const url = new URL(request.url);
+  const settings = await getAppSettings();
+
+  const category = url.searchParams.get("category") || "movie";
+  let mediaType: "movie" | "tv" = (category === "movie") ? "movie" : "tv";
+  const page = url.searchParams.get("page") || "1";
+  const sort = url.searchParams.get("sort") || "popularity.desc";
+
+  // Build TMDB filters
+  const params = new URLSearchParams();
+  params.set("api_key", TMDB_KEY);
+  params.set("language", "pt-BR");
+  params.set("sort_by", sort);
+  params.set("page", page);
+  params.set("include_adult", "false");
+
+  if (category === "anime") {
+    mediaType = "tv";
+    params.set("with_genres", "16"); // Animation
+    params.set("with_keywords", "210024|287501"); // anime, manga related keywords if needed
+  } else if (category === "dorama") {
+    mediaType = "tv";
+    params.set("with_original_language", "ko|ja");
+    params.set("with_genres", "18"); // Drama
+  } else if (category === "serie") {
+    mediaType = "tv";
+    params.set("without_genres", "16"); // Hide animes from global series mostly
   }
 
   try {
-    const url = new URL(request.url);
+    const availableIds = await fetchAvailableIds(settings.superflixApiUrl);
 
-    const category = (url.searchParams.get("category") || "movie").toLowerCase();
-    const sort = (url.searchParams.get("sort") || "most_watched").toLowerCase();
-    const year = url.searchParams.get("year");
-    const genre = url.searchParams.get("genre");
+    const tmdbUrl = `${TMDB_API}/discover/${mediaType}?${params.toString()}`;
+    const res = await fetch(tmdbUrl);
+    const data = await res.json();
 
-    const page = clampInt(url.searchParams.get("page"), 1, 1, 500);
-    const limit = clampInt(url.searchParams.get("limit"), 24, 6, 48);
+    let results = Array.isArray(data.results) ? data.results : [];
 
-    let mediaType: "movie" | "tv" = "movie";
-    let superflixCategory = "movie";
+    // Filter results based on settings and availability
+    results = results.filter((item: any) => {
+      // availability
+      if (!availableIds.has(item.id)) return false;
 
-    if (category === "serie" || category === "series" || category === "tv") {
-      mediaType = "tv";
-      superflixCategory = "serie";
-    }
+      // explicit content
+      if (settings.hideAdultContent) {
+        if (isExplicitContent({
+          name: item.title || item.name || "",
+          overview: item.overview || "",
+          adult: item.adult,
+          genre_ids: item.genre_ids
+        })) return false;
+      }
 
-    if (category === "anime" || category === "animes") {
-      mediaType = "tv";
-      superflixCategory = "anime";
-    }
-
-    const listaUrl = `${SUPERFLIX_API}/lista?category=${superflixCategory}&type=tmdb&format=json&order=desc`;
-    const listaRes = await fetch(listaUrl, {
-      headers: { "User-Agent": "FlixCRD-Lab/1.0" },
-      next: { revalidate: 300 },
+      return true;
     });
 
-    if (!listaRes.ok) {
-      return NextResponse.json({ error: "Falha ao consultar /lista." }, { status: 502 });
-    }
-
-    const listaText = await listaRes.text();
-    const ids = parseIds(listaText);
-    const idsSet = new Set(ids);
-
-    const sortBy = mapSort(sort, mediaType);
-
-    const results: any[] = [];
-    const seenTmdbIds = new Set<number>();
-    let tmdbPage = page;
-    let scannedPages = 0;
-    let totalPages = 0;
-
-    while (results.length < limit && scannedPages < 6) {
-      const params = new URLSearchParams({
-        api_key: TMDB_KEY,
-        language: "pt-BR",
-        sort_by: sortBy,
-        page: String(tmdbPage),
-        include_adult: "false",
-        include_video: "false",
-      });
-
-      if (genre) params.set("with_genres", genre);
-
-      if (year) {
-        if (mediaType === "movie") {
-          params.set("primary_release_year", year);
-        } else {
-          params.set("first_air_date_year", year);
-        }
-      }
-
-      if (category === "anime" || category === "animes") {
-        params.set("with_genres", params.get("with_genres") ? `${params.get("with_genres")},16` : "16");
-        params.set("with_original_language", "ja");
-      }
-
-      params.set("vote_count.gte", "20");
-
-      const tmdbUrl = `${TMDB_API}/discover/${mediaType}?${params.toString()}`;
-      const tmdbRes = await fetch(tmdbUrl, { next: { revalidate: 300 } });
-
-      if (!tmdbRes.ok) {
-        return NextResponse.json({ error: "Falha ao consultar TMDB." }, { status: 502 });
-      }
-
-      const tmdbJson = await tmdbRes.json();
-      const pageResults: any[] = Array.isArray(tmdbJson?.results) ? tmdbJson.results : [];
-      if (!totalPages) totalPages = tmdbJson?.total_pages || 0;
-
-      for (const item of pageResults) {
-        const tmdbId = item?.id;
-        if (typeof tmdbId !== "number") continue;
-        if (!idsSet.has(tmdbId)) continue;
-        if (seenTmdbIds.has(tmdbId)) continue;
-        seenTmdbIds.add(tmdbId);
-
-        results.push({
-          id: `lab-${mediaType}-${tmdbId}`,
-          tmdbId,
-          name: item?.title || item?.name || "Sem título",
-          posterUrl: item?.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
-          backdropUrl: item?.backdrop_path ? `https://image.tmdb.org/t/p/original${item.backdrop_path}` : null,
-          overview: item?.overview || "",
-          voteAverage: typeof item?.vote_average === "number" ? item.vote_average : 0,
-          releaseDate: item?.release_date || item?.first_air_date || null,
-          type: mediaType === "movie" ? "MOVIE" : "SERIES",
-        });
-
-        if (results.length >= limit) break;
-      }
-
-      scannedPages += 1;
-      tmdbPage += 1;
-      if (tmdbPage > (totalPages || 500)) break;
-      if (pageResults.length === 0) break;
-    }
-
-    const tmdbPageEnd = tmdbPage - 1;
-    const hasMore = totalPages ? tmdbPage <= totalPages : false;
+    // Map to LabTitle format expected by frontend
+    const mappedResults: LabTitle[] = results.map((item: any) => ({
+      id: `lab-${mediaType}-${item.id}`,
+      tmdbId: item.id,
+      imdbId: null,
+      name: item.title || item.name || "Sem título",
+      posterUrl: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
+      backdropUrl: item.backdrop_path ? `https://image.tmdb.org/t/p/original${item.backdrop_path}` : null,
+      overview: item.overview || "",
+      voteAverage: item.vote_average || 0,
+      releaseDate: item.release_date || item.first_air_date || null,
+      type: mediaType === "movie" ? "MOVIE" : "SERIES",
+    }));
 
     return NextResponse.json({
-      page,
-      limit,
-      results,
-      scannedPages,
-      totalPages,
-      tmdbPageEnd,
-      hasMore,
-      superflixCategory,
-      sort,
+      results: mappedResults,
+      page: data.page,
+      total_pages: data.total_pages,
+      total_results: data.total_results,
+      hasMore: data.page < data.total_pages
     });
-  } catch (err) {
-    console.error("Lab /discover error:", err);
-    return NextResponse.json({ error: "Erro ao montar catálogo inteligente." }, { status: 500 });
+  } catch (error) {
+    console.error("Discover error:", error);
+    return NextResponse.json({ error: "Erro ao buscar do TMDB" }, { status: 500 });
   }
 }

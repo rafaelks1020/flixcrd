@@ -236,7 +236,7 @@ model Request {
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   User             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  AssignedAdmin    User?                @relation("RequestAssignedAdmin", fields: [assignedAdminId], references: [id])
+  AssignedAdmin    User?                @relation("RequestAssignedAdmin", fields: [assignedAdminId], references: [id], onDelete: SetNull)
   RequestFollower  RequestFollower[]
   RequestHistory   RequestHistory[]
   RequestUpload    RequestUpload?
@@ -341,6 +341,24 @@ model Settings {
   transcoderCrf              Int      @default(20)
   deleteSourceAfterTranscode Boolean  @default(true)
   labEnabled                 Boolean  @default(false)
+  
+  // Streaming Provider Toggle
+  streamingProvider          String   @default("LAB") // "LAB" | "WASABI"
+  
+  // SuperFlixAPI Configuration
+  superflixApiUrl            String   @default("https://superflixapi.buzz")
+  superflixApiHost           String   @default("superflixapi.buzz")
+  
+  // Content Filtering
+  hideAdultContent           Boolean  @default(true)
+  adultContentPin            String?
+  
+  // Categories Enabled
+  enableMovies               Boolean  @default(true)
+  enableSeries               Boolean  @default(true)
+  enableAnimes               Boolean  @default(true)
+  enableDoramas              Boolean  @default(true)
+  
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
 }
@@ -360,7 +378,7 @@ model Subscription {
   price               Float     @default(10.00)
   Payment             Payment[]
   PixPayment          PixPayment[]
-  User                User      @relation(fields: [userId], references: [id])
+  User                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Title {

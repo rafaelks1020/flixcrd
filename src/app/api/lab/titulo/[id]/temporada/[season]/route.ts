@@ -55,12 +55,6 @@ export async function GET(
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
 
-  const enabled = user.role === "ADMIN" || process.env.NEXT_PUBLIC_LAB_ENABLED === "true";
-
-  if (!enabled) {
-    return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
-  }
-
   try {
     const { id, season } = await params;
 

@@ -31,7 +31,7 @@ import PremiumHero from "@/components/ui/PremiumHero";
 import PremiumTitleRow from "@/components/ui/PremiumTitleRow";
 import TitleCard from "@/components/ui/TitleCard";
 import { SkeletonRow } from "@/components/ui/SkeletonCard";
-import { getLabContinue, getLabMyList, getLabWatchLater } from "./labStorage";
+import { getLabContinue, getLabMyList, getLabWatchLater, removeLabContinue } from "./labStorage";
 import { cn } from "@/lib/utils";
 
 interface LabTitle {
@@ -64,7 +64,7 @@ interface LabClientProps {
   isAdmin: boolean;
 }
 
-type Category = "movie" | "serie" | "anime";
+type Category = "movie" | "serie" | "anime" | "dorama";
 type Sort = "most_watched" | "most_liked" | "most_voted" | "newest";
 
 interface Genre {
@@ -267,6 +267,17 @@ export default function LabClient({ isLoggedIn, isAdmin }: LabClientProps) {
       })).filter((t: LabTitle) => Boolean(t.tmdbId));
       setAiResults(dedupeLabTitles(mapped));
     } catch { setAiError("Erro ao gerar recomendações."); } finally { setAiLoading(false); }
+  }
+
+  function handleClearHistory() {
+    if (!confirm("Tem certeza que deseja limpar todo o seu histórico no modo LAB?")) return;
+    localStorage.removeItem("lab_continue_v1");
+    setLabContinue([]);
+  }
+
+  function handleRemoveContinue(key: string) {
+    const next = removeLabContinue(key);
+    setLabContinue(next);
   }
 
   useEffect(() => {
@@ -492,7 +503,30 @@ export default function LabClient({ isLoggedIn, isAdmin }: LabClientProps) {
           ) : (
             <>
               <AnimatePresence>{aiResults.length > 0 && (<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6"><div className="max-w-7xl mx-auto px-4 md:px-8 flex items-baseline justify-between border-l-2 border-primary pl-6"><h2 className="text-2xl font-black text-white uppercase tracking-tighter">Sintonizado com você</h2><button onClick={() => setAiResults([])} className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white">Ocultar</button></div><PremiumTitleRow title="LAB AI Recommendations" titles={aiResults.map(mapLabTitleToPremium)} /></motion.div>)}</AnimatePresence>
-              {labContinue.length > 0 && <PremiumTitleRow title="Continuar Assistindo" titles={labContinue.map(it => ({ id: it.key, href: it.watchUrl, name: it.title || "Continuar", posterUrl: it.posterUrl, type: it.watchType === "filme" ? "MOVIE" : "SERIES" }))} />}
+              {labContinue.length > 0 && (
+                <div className="space-y-6">
+                  <div className="max-w-7xl mx-auto px-4 md:px-8 flex items-baseline justify-between border-l-2 border-primary pl-6">
+                    <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Continuar Assistindo</h2>
+                    <button
+                      onClick={handleClearHistory}
+                      className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-red-500 transition-colors"
+                    >
+                      Limpar Histórico
+                    </button>
+                  </div>
+                  <PremiumTitleRow
+                    title="Continuar Assistindo"
+                    onDelete={handleRemoveContinue}
+                    titles={labContinue.map(it => ({
+                      id: it.key,
+                      href: it.watchUrl,
+                      name: it.title || "Continuar",
+                      posterUrl: it.posterUrl,
+                      type: it.watchType === "filme" ? "MOVIE" : "SERIES"
+                    }))}
+                  />
+                </div>
+              )}
               {labMyList.length > 0 && <PremiumTitleRow title="Sua Coleção Premium" titles={labMyList.map(it => ({ id: it.key, href: `/lab/title/${it.tmdbId}?type=${it.mediaType}`, name: it.title, posterUrl: it.posterUrl, type: it.type }))} />}
               <div className="space-y-20 pt-8">
                 {filmes.length > 0 && (<div className="space-y-6"><div className="max-w-7xl mx-auto px-4 md:px-8 border-l-2 border-primary pl-6"><h2 className="text-2xl font-black text-white uppercase tracking-tighter">Obras Cinematográficas</h2><p className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.2em] mt-1">Acervo Lab de Filmes</p></div><PremiumTitleRow title="Lab Movies" titles={filmes.map(mapLabTitleToPremium)} /></div>)}

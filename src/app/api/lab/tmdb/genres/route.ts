@@ -11,12 +11,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
 
-  const enabled = user.role === "ADMIN" || process.env.NEXT_PUBLIC_LAB_ENABLED === "true";
-
-  if (!enabled) {
-    return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
-  }
-
   const TMDB_KEY = process.env.TMDB_API_KEY || "";
   if (!TMDB_KEY) {
     return NextResponse.json({ error: "TMDB_API_KEY não configurada." }, { status: 500 });

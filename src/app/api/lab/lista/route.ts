@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthUser } from "@/lib/auth-mobile";
-
-const API_BASE = "https://superflixapi.run";
+import { getSuperflixUrl } from "@/lib/app-settings";
 
 export async function GET(request: NextRequest) {
   const user = await getAuthUser(request);
@@ -11,13 +10,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
 
-  const enabled = user.role === "ADMIN" || process.env.NEXT_PUBLIC_LAB_ENABLED === "true";
-
-  if (!enabled) {
-    return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
-  }
-
   try {
+    const API_BASE = await getSuperflixUrl();
+
     const url = new URL(request.url);
     const category = url.searchParams.get("category") || "movie";
     const type = url.searchParams.get("type") || "tmdb";

@@ -41,9 +41,10 @@ export default function SearchBar({ initialQuery = "", onSearch }: SearchBarProp
     setLoading(true);
     timeoutRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+        const res = await fetch(`/api/titles?q=${encodeURIComponent(query)}`);
         if (res.ok) {
-          const data = await res.json();
+          const json = await res.json();
+          const data = Array.isArray(json) ? json : (json?.data || []);
           setResults(data.slice(0, 6)); // Limit to 6 results
           setShowResults(true);
         }

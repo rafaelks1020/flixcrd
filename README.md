@@ -1,53 +1,156 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FlixCRD Web Platform
 
-## Getting Started
+Plataforma de streaming completa com Next.js, TypeScript, e Prisma.
 
-First, run the development server:
+## 🚀 Features
 
+- **Streaming HLS**: Player de vídeo com suporte a múltiplas qualidades
+- **Autenticação**: Sistema completo com NextAuth
+- **Admin Panel**: Gestão de conteúdo e usuários
+- **Transcoder**: Serviço de conversão de vídeo para HLS
+- **Mobile App**: Aplicativo React Native companion
+
+## 📋 Pré-requisitos
+
+- Node.js 18+
+- PostgreSQL 15+
+- Redis (opcional, para cache)
+- Docker & Docker Compose (recomendado)
+
+## 🛠️ Setup Rápido
+
+### 1. Clone o repositório
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <repository-url>
+cd flixcrd-web
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Configure as variáveis de ambiente
+```bash
+cp .env.example .env
+# Edite .env com suas credenciais
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Instale as dependências
+```bash
+npm install
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 4. Configure o banco de dados
+```bash
+# Gere o Prisma client
+npm run prisma:generate
 
-## Learn More
+# Rode as migrations (se necessário)
+npm run prisma:migrate
 
-To learn more about Next.js, take a look at the following resources:
+# Popule o banco com dados iniciais
+npm run prisma:seed
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 5. Inicie o desenvolvimento
+```bash
+npm run dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Acesse http://localhost:3000
 
-## Deploy on Vercel
+## 🐳 Docker Setup
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Development
+```bash
+docker-compose up -d
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Production
+```bash
+docker-compose -f docker-compose.prod.yml up -d
+```
 
-## Versionamento e Changelog
+## 🧪 Testes
 
-Este projeto usa:
+```bash
+# Rodar todos os testes
+npm test
 
-- **SemVer**: `MAJOR.MINOR.PATCH` (ex: `1.2.3`)
-- **Conventional Commits** (ex: `feat: ...`, `fix: ...`) para derivar a versão automaticamente
-- **Release Please** (GitHub Actions) para gerar:
-  - PR de release
-  - bump de versão em `package.json`
-  - `CHANGELOG.md`
-  - tag `vX.Y.Z` + GitHub Release
+# Rodar com coverage
+npm run test:coverage
 
-Arquivos relevantes:
+# Watch mode
+npm run test:watch
+```
 
-- `CHANGELOG.md` (principal)
-- `docs/ops/RELEASING.md` (como soltar versão)
+## 📊 Estrutura do Projeto
+
+```
+src/
+├── app/                 # App Router (Next.js 13+)
+│   ├── api/            # API routes
+│   ├── admin/          # Admin panel
+│   └── (auth)/         # Auth pages
+├── components/         # React components
+├── lib/               # Utilities e configs
+├── __tests__/         # Test files
+└── middleware.ts      # Next.js middleware
+```
+
+## 🔧 Variáveis de Ambiente
+
+Veja `.env.example` para todas as variáveis necessárias:
+
+- **Database**: PostgreSQL connection string
+- **Auth**: NextAuth configuration
+- **Storage**: Wasabi S3 credentials
+- **External APIs**: TMDB, OpenSubtitles
+- **Push Notifications**: VAPID keys
+
+## 🚀 Deploy
+
+### Vercel (Recomendado)
+```bash
+# Instale Vercel CLI
+npm i -g vercel
+
+# Deploy
+vercel --prod
+```
+
+### Docker
+```bash
+# Build image
+docker build -t flixcrd-web .
+
+# Run container
+docker run -p 3000:3000 flixcrd-web
+```
+
+## 📈 Monitoramento
+
+- **Health Check**: `/api/health`
+- **Logs**: Estruturados com Winston
+- **Metrics**: Prometheus endpoint (se configurado)
+
+## 🔒 Segurança
+
+- **Helmet**: Headers de segurança
+- **Rate Limiting**: Proteção contra abuse
+- **Input Validation**: Zod schemas
+- **Audit Trail**: Logs de ações sensíveis
+
+## 📚 Documentação
+
+- [API Docs](./docs/api/) - Documentação das APIs
+- [Architecture](./docs/architecture/) - Arquitetura do sistema
+- [Operations](./docs/ops/) - Guias operacionais
+
+## 🤝 Contribuindo
+
+1. Fork o projeto
+2. Crie uma feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit suas mudanças (`git commit -m 'Add amazing feature'`)
+4. Push para a branch (`git push origin feature/amazing-feature`)
+5. Abra um Pull Request
+
+## 📄 Licença
+
+Este projeto está sob licença privada.

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { authOptions } from "@/lib/auth";
 import { hasLabAccess } from "@/lib/lab-access";
+import { getSuperflixUrl } from "@/lib/app-settings";
 import LabWatchClient from "./LabWatchClient";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +34,7 @@ export default async function LabWatchPage({ searchParams }: PageProps) {
   }
 
   const params = await searchParams;
+  const superflixApiUrl = await getSuperflixUrl();
 
   return (
     <LabWatchClient
@@ -43,6 +45,8 @@ export default async function LabWatchPage({ searchParams }: PageProps) {
       initialSeason={params.season || "1"}
       initialEpisode={params.episode || "1"}
       tmdbId={params.tmdb || ""}
+      superflixApiUrl={superflixApiUrl}
     />
   );
 }
+

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthUser } from "@/lib/auth-mobile";
+import { getSuperflixHost } from "@/lib/app-settings";
 
-const UPSTREAM_DEFAULT_HOST = "superflixapi.run";
-const ALLOWED_HOSTS = new Set(["superflixapi.run", "superflixapi.mom"]);
+// Legacy hosts still allowed for backwards compatibility
+const ALLOWED_HOSTS = new Set(["superflixapi.run", "superflixapi.mom", "superflixapi.buzz"]);
 
 function shouldRewrite(contentType: string) {
   const ct = contentType.toLowerCase();
@@ -25,19 +26,19 @@ function injectBase(html: string, baseHref: string) {
   return html + injection;
 }
 
-function rewriteText(body: string, origin: string) {
+function rewriteText(body: string, origin: string, defaultHost: string) {
   const proxyDefault = `${origin}/api/lab/proxy`;
   const proxyHost = (host: string) => `${origin}/api/lab/proxy/__host/${host}`;
 
   let out = body;
 
-  out = out.replaceAll("https://superflixapi.run", proxyHost("superflixapi.run"));
-  out = out.replaceAll("http://superflixapi.run", proxyHost("superflixapi.run"));
-  out = out.replaceAll("//superflixapi.run", proxyHost("superflixapi.run"));
-
-  out = out.replaceAll("https://superflixapi.mom", proxyHost("superflixapi.mom"));
-  out = out.replaceAll("http://superflixapi.mom", proxyHost("superflixapi.mom"));
-  out = out.replaceAll("//superflixapi.mom", proxyHost("superflixapi.mom"));
+  // Rewrite all known SuperFlixAPI domains
+  const domains = ["superflixapi.run", "superflixapi.mom", "superflixapi.buzz"];
+  for (const domain of domains) {
+    out = out.replaceAll(`https://${domain}`, proxyHost(domain));
+    out = out.replaceAll(`http://${domain}`, proxyHost(domain));
+    out = out.replaceAll(`//${domain}`, proxyHost(domain));
+  }
 
   out = out.replace(
     /(href|src|action)=(["'])\/(?!api\/lab\/proxy\/)/g,
@@ -46,7 +47,7 @@ function rewriteText(body: string, origin: string) {
   out = out.replace(/url\(\/(?!api\/lab\/proxy\/)/g, "url(/api/lab/proxy/");
 
   // fallback: caso apareçam links absolutos só com base origin
-  out = out.replaceAll(`${origin}/api/lab/proxy/__host/${UPSTREAM_DEFAULT_HOST}`, proxyDefault);
+  out = out.replaceAll(`${origin}/api/lab/proxy/__host/${defaultHost}`, proxyDefault);
 
   return out;
 }
@@ -97,15 +98,17 @@ async function handleProxy(
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
 
-  const enabled = user.role === "ADMIN" || process.env.NEXT_PUBLIC_LAB_ENABLED === "true";
-
-  if (!enabled) {
-    return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
-  }
-
   const { path } = await params;
   const url = new URL(request.url);
   const origin = `${url.protocol}//${url.host}`;
+
+  // Get default host from settings
+  const UPSTREAM_DEFAULT_HOST = await getSuperflixHost();
+
+  // Ensure current host is in allowed set
+  if (!ALLOWED_HOSTS.has(UPSTREAM_DEFAULT_HOST)) {
+    ALLOWED_HOSTS.add(UPSTREAM_DEFAULT_HOST);
+  }
 
   let host = UPSTREAM_DEFAULT_HOST;
   let upstreamPath = path;
@@ -187,7 +190,7 @@ async function handleProxy(
 
   if (shouldRewrite(contentType)) {
     const raw = await upstreamRes.text();
-    let rewritten = rewriteText(raw, origin);
+    let rewritten = rewriteText(raw, origin, UPSTREAM_DEFAULT_HOST);
 
     if (contentType.toLowerCase().includes("text/html")) {
       rewritten = stripHtmlCspMeta(rewritten);

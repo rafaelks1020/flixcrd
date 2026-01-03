@@ -36,60 +36,70 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { useSettings } from "@/context/SettingsContext";
 
 interface NavSection {
   title: string;
   icon: any;
-  items: { href: string; label: string; icon: any }[];
+  items: { href: string; label: string; icon: any; hideIfLab?: boolean }[];
 }
-
-const navSections: NavSection[] = [
-  {
-    title: "Visão Geral",
-    icon: LayoutDashboard,
-    items: [
-      { href: "/admin", label: "Dashboard", icon: Home },
-      { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
-      { href: "/admin/status", label: "System Status", icon: Activity },
-    ],
-  },
-  {
-    title: "Intelligence",
-    icon: Film,
-    items: [
-      { href: "/admin/catalog", label: "Catálogo", icon: Film },
-      { href: "/admin/upload-v2", label: "Upload Center", icon: UploadCloud },
-      { href: "/admin/jobs", label: "HLS Forge", icon: Wrench },
-      { href: "/admin/subtitles", label: "Legendas", icon: Subtitles },
-      { href: "/admin/solicitacoes", label: "Requests", icon: MessageSquare },
-    ],
-  },
-  {
-    title: "Comunidade",
-    icon: Users,
-    items: [
-      { href: "/admin/users", label: "Management", icon: Users },
-      { href: "/admin/payments", label: "Billing", icon: CreditCard },
-      { href: "/admin/approvals", label: "Kyc / Approvals", icon: CheckSquare },
-      { href: "/admin/notifications", label: "Broadcast", icon: Bell },
-    ],
-  },
-  {
-    title: "Core System",
-    icon: Settings,
-    items: [
-      { href: "/admin/quick-actions", label: "Quick Actions", icon: Zap },
-      { href: "/admin/logs", label: "Runtime Logs", icon: History },
-      { href: "/admin/email-logs", label: "Mail Queue", icon: Mail },
-      { href: "/admin/changelog", label: "Versions", icon: FileText },
-      { href: "/admin/settings", label: "Preferences", icon: Settings },
-    ],
-  },
-];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const settings = useSettings();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const isLab = settings.streamingProvider === "LAB";
+
+  const rawNavSections: NavSection[] = [
+    {
+      title: "Visão Geral",
+      icon: LayoutDashboard,
+      items: [
+        { href: "/admin", label: "Dashboard", icon: Home },
+        { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+        { href: "/admin/status", label: "System Status", icon: Activity },
+      ],
+    },
+    {
+      title: "Intelligence",
+      icon: Film,
+      items: [
+        { href: "/admin/catalog", label: "Catálogo", icon: Film, hideIfLab: true },
+        { href: "/admin/upload-v2", label: "Upload Center", icon: UploadCloud, hideIfLab: true },
+        { href: "/admin/jobs", label: "HLS Forge", icon: Wrench, hideIfLab: true },
+        { href: "/admin/subtitles", label: "Legendas", icon: Subtitles, hideIfLab: true },
+        { href: "/admin/solicitacoes", label: "Requests", icon: MessageSquare },
+      ],
+    },
+    {
+      title: "Comunidade",
+      icon: Users,
+      items: [
+        { href: "/admin/users", label: "Management", icon: Users },
+        { href: "/admin/payments", label: "Billing", icon: CreditCard },
+        { href: "/admin/approvals", label: "Kyc / Approvals", icon: CheckSquare },
+        { href: "/admin/notifications", label: "Broadcast", icon: Bell },
+      ],
+    },
+    {
+      title: "Core System",
+      icon: Settings,
+      items: [
+        { href: "/admin/quick-actions", label: "Quick Actions", icon: Zap },
+        { href: "/admin/logs", label: "Runtime Logs", icon: History },
+        { href: "/admin/email-logs", label: "Mail Queue", icon: Mail },
+        { href: "/admin/changelog", label: "Versions", icon: FileText },
+        { href: "/admin/settings", label: "Preferences", icon: Settings },
+      ],
+    },
+  ];
+
+  const navSections = rawNavSections.map(section => ({
+    ...section,
+    items: section.items.filter(item => !isLab || !item.hideIfLab)
+  })).filter(section => section.items.length > 0);
+
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     navSections.forEach((s) => { initial[s.title] = true; });

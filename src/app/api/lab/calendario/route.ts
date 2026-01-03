@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthUser } from "@/lib/auth-mobile";
-
-const API_BASE = "https://superflixapi.run";
+import { getSuperflixUrl } from "@/lib/app-settings";
 
 function toStr(v: any): string {
   if (v === null || v === undefined) return "";
@@ -25,8 +24,8 @@ function normalizeCalendarItems(raw: any) {
   const list = Array.isArray(raw)
     ? raw
     : raw && typeof raw === "object"
-    ? (Array.isArray(raw.items) ? raw.items : Array.isArray(raw.data) ? raw.data : Array.isArray(raw.results) ? raw.results : [])
-    : [];
+      ? (Array.isArray(raw.items) ? raw.items : Array.isArray(raw.data) ? raw.data : Array.isArray(raw.results) ? raw.results : [])
+      : [];
 
   const dedup = new Map<string, any>();
   for (const it of list) {
@@ -73,13 +72,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
 
-  const enabled = user.role === "ADMIN" || process.env.NEXT_PUBLIC_LAB_ENABLED === "true";
-
-  if (!enabled) {
-    return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
-  }
-
   try {
+    const API_BASE = await getSuperflixUrl();
     const apiUrl = `${API_BASE}/calendario.php`;
 
     const res = await fetch(apiUrl, {

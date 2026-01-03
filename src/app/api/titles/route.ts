@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
+import cache from "@/lib/cache";
 
-const SUPERFLIX_API = "https://superflixapi.run";
+import { getAppSettings } from "@/lib/app-settings";
+
 const TMDB_API = "https://api.themoviedb.org/3";
 
 function parseIds(rawText: string): number[] {
@@ -30,6 +32,9 @@ async function fetchFromLab(type: string | null, page: number, pageSize: number)
 
   const mediaType = type === "SERIES" ? "tv" : "movie";
   const superflixCategory = type === "SERIES" ? "serie" : "movie";
+
+  const settings = await getAppSettings();
+  const SUPERFLIX_API = settings.superflixApiUrl;
 
   const listaRes = await fetch(`${SUPERFLIX_API}/lista?category=${superflixCategory}&type=tmdb&format=json&order=desc`, {
     headers: { "User-Agent": "FlixCRD-Lab/1.0" },
@@ -109,24 +114,64 @@ export async function GET(request: NextRequest) {
   const pageSize = Math.min(limit, 200);
   const skip = (page - 1) * pageSize;
 
+  // Create cache key
+  const cacheKey = `titles:${JSON.stringify({ q, type, genre, page, limit })}`;
+
+  // Try to get from cache first
+  const cached = await cache.get(cacheKey);
+  if (cached) {
+    return NextResponse.json(JSON.parse(cached));
+  }
+
   // Check Lab Mode
   const settings = await getSettings();
-  const labEnabled = Boolean(settings.labEnabled);
+  const labEnabled = (settings as any).streamingProvider === "LAB";
 
-  if (labEnabled && !q && !genre) {
+  if (labEnabled || q) {
     try {
-      const labResult = await fetchFromLab(type ?? null, page, pageSize);
-      return NextResponse.json({
-        data: labResult.data,
-        page,
-        limit: pageSize,
-        total: labResult.total,
-        totalPages: labResult.totalPages,
-        source: "lab",
-      });
+      if (q) {
+        console.log(`[Titles API] Direct LAB Search for "${q}"`);
+        const settings = await getAppSettings();
+        const { performLabSearch } = await import("@/lib/lab-search");
+
+        // We need availableIds for the boost
+        const listaRes = await fetch(`${settings.superflixApiUrl}/lista?category=movie&type=tmdb&format=json`, {
+          headers: { "User-Agent": "FlixCRD-Lab/1.0" },
+          next: { revalidate: 300 },
+        });
+        const ids = listaRes.ok ? parseIds(await listaRes.text()) : [];
+        const availableIds = new Set(ids);
+
+        const labData = await performLabSearch(q, {
+          page: 1,
+          limit: pageSize,
+          includeAdult: !settings.hideAdultContent,
+          availableIds
+        });
+
+        return NextResponse.json({
+          data: labData.results || [],
+          page: 1,
+          limit: pageSize,
+          total: labData.results?.length || 0,
+          totalPages: 1,
+          source: "lab",
+        });
+      }
+
+      if (!q && !genre) {
+        const labResult = await fetchFromLab(type ?? null, page, pageSize);
+        return NextResponse.json({
+          data: labResult.data,
+          page,
+          limit: pageSize,
+          total: labResult.total,
+          totalPages: labResult.totalPages,
+          source: "lab",
+        });
+      }
     } catch (err) {
       console.error("Lab fetch error, falling back to DB:", err);
-      // Fall through to DB fetch
     }
   }
 
@@ -191,14 +236,19 @@ export async function GET(request: NextRequest) {
     }))
   }));
 
-  return NextResponse.json({
+  const response = {
     data: titlesWithMappedGenres,
     page,
     limit: pageSize,
     total,
     totalPages: Math.ceil(total / pageSize),
     source: "db",
-  });
+  };
+
+  // Cache the result for 5 minutes (300 seconds)
+  await cache.set(cacheKey, JSON.stringify(response), 300);
+
+  return NextResponse.json(response);
 }
 
 export async function POST(request: NextRequest) {

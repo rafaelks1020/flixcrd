@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
+import { invalidateSettingsCache } from "@/lib/app-settings";
 
 async function requireAdmin() {
   const session: any = await getServerSession(authOptions as any);
@@ -54,6 +55,15 @@ export async function PUT(request: NextRequest) {
       transcoderCrf,
       deleteSourceAfterTranscode,
       labEnabled,
+      // New fields
+      streamingProvider,
+      superflixApiUrl,
+      hideAdultContent,
+      adultContentPin,
+      enableMovies,
+      enableSeries,
+      enableAnimes,
+      enableDoramas,
     } = body as {
       siteName?: string;
       siteDescription?: string;
@@ -63,12 +73,22 @@ export async function PUT(request: NextRequest) {
       transcoderCrf?: number;
       deleteSourceAfterTranscode?: boolean;
       labEnabled?: boolean;
+      // New fields
+      streamingProvider?: string;
+      superflixApiUrl?: string;
+      hideAdultContent?: boolean;
+      adultContentPin?: string | null;
+      enableMovies?: boolean;
+      enableSeries?: boolean;
+      enableAnimes?: boolean;
+      enableDoramas?: boolean;
     };
 
     const current = await getSettings();
 
-    const data: any = {};
+    const data: Record<string, unknown> = {};
 
+    // Original fields
     if (typeof siteName === "string") data.siteName = siteName;
     if (typeof siteDescription === "string") data.siteDescription = siteDescription;
     if (typeof maintenanceMode === "boolean") data.maintenanceMode = maintenanceMode;
@@ -78,10 +98,41 @@ export async function PUT(request: NextRequest) {
     if (typeof deleteSourceAfterTranscode === "boolean") data.deleteSourceAfterTranscode = deleteSourceAfterTranscode;
     if (typeof labEnabled === "boolean") data.labEnabled = labEnabled;
 
+    // Streaming Provider
+    if (typeof streamingProvider === "string" && ["LAB", "WASABI"].includes(streamingProvider)) {
+      data.streamingProvider = streamingProvider;
+    }
+
+    // SuperFlixAPI URL (also extract host)
+    if (typeof superflixApiUrl === "string" && superflixApiUrl.trim()) {
+      try {
+        const url = new URL(superflixApiUrl.trim());
+        data.superflixApiUrl = url.origin; // https://superflixapi.buzz
+        data.superflixApiHost = url.host;   // superflixapi.buzz
+      } catch {
+        // Invalid URL, ignore
+      }
+    }
+
+    // Content Filtering
+    if (typeof hideAdultContent === "boolean") data.hideAdultContent = hideAdultContent;
+    if (adultContentPin !== undefined) {
+      data.adultContentPin = adultContentPin || null;
+    }
+
+    // Categories
+    if (typeof enableMovies === "boolean") data.enableMovies = enableMovies;
+    if (typeof enableSeries === "boolean") data.enableSeries = enableSeries;
+    if (typeof enableAnimes === "boolean") data.enableAnimes = enableAnimes;
+    if (typeof enableDoramas === "boolean") data.enableDoramas = enableDoramas;
+
     const updated = await prisma.settings.update({
       where: { id: current.id },
       data,
     });
+
+    // Invalidate cache so changes take effect immediately
+    invalidateSettingsCache();
 
     return NextResponse.json(updated);
   } catch (error) {
@@ -92,3 +143,4 @@ export async function PUT(request: NextRequest) {
     );
   }
 }
+
