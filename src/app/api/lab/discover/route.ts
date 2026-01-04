@@ -17,76 +17,7 @@ interface LabTitle {
   releaseDate: string | null;
   type: string;
 }
-
-// Reuse availability fetching logic from other routes or centralize it
-let availableIdsCache: { ids: Set<number>; cachedAt: number; apiUrl: string } | null = null;
-const AVAILABLE_IDS_TTL_MS = 5 * 60 * 1000;
-
-function parseIds(rawText: string): number[] {
-  try {
-    const parsed = JSON.parse(rawText);
-    if (Array.isArray(parsed)) {
-      return parsed
-        .map((id: string | number) => parseInt(String(id), 10))
-        .filter((n: number) => !Number.isNaN(n));
-    }
-    if (parsed && typeof parsed === "object") {
-      if (Array.isArray((parsed as any).ids)) {
-        return (parsed as any).ids
-          .map((id: string | number) => parseInt(String(id), 10))
-          .filter((n: number) => !Number.isNaN(n));
-      }
-      if (Array.isArray((parsed as any).data)) {
-        return (parsed as any).data
-          .map((item: any) => parseInt(String(item?.id ?? item?.tmdb_id ?? ""), 10))
-          .filter((n: number) => !Number.isNaN(n));
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  return rawText
-    .split(/[\n,]/)
-    .map((s) => parseInt(s.trim(), 10))
-    .filter((n) => !Number.isNaN(n));
-}
-
-async function fetchAvailableIds(SUPERFLIX_API: string): Promise<Set<number>> {
-  const now = Date.now();
-  if (availableIdsCache && now - availableIdsCache.cachedAt < AVAILABLE_IDS_TTL_MS && availableIdsCache.apiUrl === SUPERFLIX_API) {
-    return availableIdsCache.ids;
-  }
-
-  const urls = [
-    `${SUPERFLIX_API}/lista?category=movie&type=tmdb&format=json&order=desc`,
-    `${SUPERFLIX_API}/lista?category=serie&type=tmdb&format=json&order=desc`,
-    `${SUPERFLIX_API}/lista?category=anime&type=tmdb&format=json&order=desc`,
-    `${SUPERFLIX_API}/lista?category=dorama&type=tmdb&format=json&order=desc`,
-  ];
-
-  const settled = await Promise.allSettled(
-    urls.map((u) =>
-      fetch(u, {
-        headers: { "User-Agent": "FlixCRD-Lab/1.0" },
-        next: { revalidate: 300 },
-      })
-    )
-  );
-
-  const ids = new Set<number>();
-  for (const res of settled) {
-    if (res.status !== "fulfilled") continue;
-    if (!res.value.ok) continue;
-    const text = await res.value.text();
-    for (const id of parseIds(text)) {
-      ids.add(id);
-    }
-  }
-
-  availableIdsCache = { ids, cachedAt: now, apiUrl: SUPERFLIX_API };
-  return ids;
-}
+import { getAvailableTmdbIds } from "@/lib/superflix";
 
 export async function GET(request: NextRequest) {
   const user = await getAuthUser(request);
@@ -117,13 +48,33 @@ export async function GET(request: NextRequest) {
     mediaType = "tv";
     params.set("with_original_language", "ko|ja");
     params.set("with_genres", "18"); // Drama
+  } else if (category === "c-drama") {
+    mediaType = "tv";
+    params.set("with_original_language", "zh");
+    params.set("with_genres", "18");
+  } else if (category === "k-drama") {
+    mediaType = "tv";
+    params.set("with_original_language", "ko");
+    params.set("with_genres", "18");
+  } else if (category === "j-drama") {
+    mediaType = "tv";
+    params.set("with_original_language", "ja");
+    params.set("with_genres", "18");
+  } else if (category === "hindi-drama") {
+    mediaType = "tv";
+    params.set("with_original_language", "hi");
+    params.set("with_genres", "18");
+  } else if (category === "lakorn") {
+    mediaType = "tv";
+    params.set("with_original_language", "th");
+    params.set("with_genres", "18");
   } else if (category === "serie") {
     mediaType = "tv";
     params.set("without_genres", "16"); // Hide animes from global series mostly
   }
 
   try {
-    const availableIds = await fetchAvailableIds(settings.superflixApiUrl);
+    const availableIds = await getAvailableTmdbIds();
 
     const tmdbUrl = `${TMDB_API}/discover/${mediaType}?${params.toString()}`;
     const res = await fetch(tmdbUrl);

@@ -11,7 +11,19 @@ import BrowseHero from "@/components/ui/BrowseHero";
 import { Sparkles } from "lucide-react";
 import { getLabContinue, getLabMyList, getLabWatchLater } from "../labStorage";
 
-type Category = "movie" | "serie" | "anime" | "dorama";
+type Category = "movie" | "serie" | "anime" | "dorama" | "c-drama" | "k-drama" | "j-drama" | "hindi-drama" | "lakorn";
+
+const CATEGORY_LABELS: Record<string, string> = {
+  movie: "Filmes",
+  serie: "Séries",
+  anime: "Animes",
+  dorama: "Doramas",
+  "c-drama": "C-Dramas",
+  "k-drama": "K-Dramas",
+  "j-drama": "J-Dramas",
+  "hindi-drama": "Hindi-Dramas",
+  lakorn: "Lakorns",
+};
 
 type Sort = "most_watched" | "most_liked" | "most_voted" | "newest";
 
@@ -298,7 +310,7 @@ export default function LabExploreClient({
   }
 
   const titleForRow = useMemo(() => {
-    const catLabel = category === "movie" ? "Filmes" : category === "serie" ? "Séries" : category === "anime" ? "Animes" : "Doramas";
+    const catLabel = CATEGORY_LABELS[category] || "Explorar";
     const sortLabel =
       sort === "most_watched"
         ? "Mais assistidos"
@@ -417,6 +429,41 @@ export default function LabExploreClient({
                 >
                   Doramas
                 </button>
+                <button
+                  type="button"
+                  onClick={() => resetAndLoad("c-drama", sort)}
+                  className={cn("px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border", category === "c-drama" ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/20" : "bg-zinc-900/50 text-zinc-400 border-white/5 hover:bg-zinc-800 hover:text-white")}
+                >
+                  C-Drama
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resetAndLoad("k-drama", sort)}
+                  className={cn("px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border", category === "k-drama" ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/20" : "bg-zinc-900/50 text-zinc-400 border-white/5 hover:bg-zinc-800 hover:text-white")}
+                >
+                  K-Drama
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resetAndLoad("j-drama", sort)}
+                  className={cn("px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border", category === "j-drama" ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/20" : "bg-zinc-900/50 text-zinc-400 border-white/5 hover:bg-zinc-800 hover:text-white")}
+                >
+                  J-Drama
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resetAndLoad("hindi-drama", sort)}
+                  className={cn("px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border", category === "hindi-drama" ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/20" : "bg-zinc-900/50 text-zinc-400 border-white/5 hover:bg-zinc-800 hover:text-white")}
+                >
+                  Hindi-Drama
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resetAndLoad("lakorn", sort)}
+                  className={cn("px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border", category === "lakorn" ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/20" : "bg-zinc-900/50 text-zinc-400 border-white/5 hover:bg-zinc-800 hover:text-white")}
+                >
+                  Lakorn
+                </button>
               </div>
 
               <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-2">
@@ -502,7 +549,7 @@ export default function LabExploreClient({
                   <div className="mb-8 bg-primary/10 border border-primary/20 rounded-xl p-4 flex items-center gap-3">
                     <Sparkles size={16} className="text-primary animate-pulse" />
                     <p className="text-[10px] font-bold uppercase tracking-widest text-primary-foreground/80">
-                      Nenhum resultado em "{category === 'movie' ? 'Filmes' : category === 'serie' ? 'Séries' : category === 'anime' ? 'Animes' : 'Doramas'}", mas encontramos {otherCount} itens em outras categorias. Tente mudar a aba!
+                      Nenhum resultado em "{CATEGORY_LABELS[category] || category}", mas encontramos {otherCount} itens em outras categorias. Tente mudar a aba!
                     </p>
                   </div>
                 ) : null;

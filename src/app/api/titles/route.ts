@@ -133,14 +133,10 @@ export async function GET(request: NextRequest) {
         console.log(`[Titles API] Direct LAB Search for "${q}"`);
         const settings = await getAppSettings();
         const { performLabSearch } = await import("@/lib/lab-search");
+        const { getAvailableTmdbIds } = await import("@/lib/superflix");
 
-        // We need availableIds for the boost
-        const listaRes = await fetch(`${settings.superflixApiUrl}/lista?category=movie&type=tmdb&format=json`, {
-          headers: { "User-Agent": "FlixCRD-Lab/1.0" },
-          next: { revalidate: 300 },
-        });
-        const ids = listaRes.ok ? parseIds(await listaRes.text()) : [];
-        const availableIds = new Set(ids);
+        // Use o utilitário centralizado que busca todas as categorias (filmes, séries, animes, doramas)
+        const availableIds = await getAvailableTmdbIds();
 
         const labData = await performLabSearch(q, {
           page: 1,

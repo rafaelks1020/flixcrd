@@ -7,80 +7,7 @@ import { isExplicitContent } from "@/lib/content-filter";
 const TMDB_API = "https://api.themoviedb.org/3";
 const TMDB_KEY = process.env.TMDB_API_KEY || "";
 
-let availableIdsCache: { ids: Set<number>; cachedAt: number; apiUrl: string } | null = null;
-const AVAILABLE_IDS_TTL_MS = 5 * 60 * 1000;
-
-function clampInt(value: string | null, fallback: number, min: number, max: number) {
-  const n = parseInt(value || "", 10);
-  if (Number.isNaN(n)) return fallback;
-  return Math.max(min, Math.min(max, n));
-}
-
-function parseIds(rawText: string): number[] {
-  try {
-    const parsed = JSON.parse(rawText);
-    if (Array.isArray(parsed)) {
-      return parsed
-        .map((id: string | number) => parseInt(String(id), 10))
-        .filter((n: number) => !Number.isNaN(n));
-    }
-    if (parsed && typeof parsed === "object") {
-      if (Array.isArray((parsed as any).ids)) {
-        return (parsed as any).ids
-          .map((id: string | number) => parseInt(String(id), 10))
-          .filter((n: number) => !Number.isNaN(n));
-      }
-      if (Array.isArray((parsed as any).data)) {
-        return (parsed as any).data
-          .map((item: any) => parseInt(String(item?.id ?? item?.tmdb_id ?? ""), 10))
-          .filter((n: number) => !Number.isNaN(n));
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  return rawText
-    .split(/[\n,]/)
-    .map((s) => parseInt(s.trim(), 10))
-    .filter((n) => !Number.isNaN(n));
-}
-
-async function fetchAvailableIds(SUPERFLIX_API: string): Promise<Set<number>> {
-  const now = Date.now();
-  if (availableIdsCache && now - availableIdsCache.cachedAt < AVAILABLE_IDS_TTL_MS && availableIdsCache.apiUrl === SUPERFLIX_API) {
-    return availableIdsCache.ids;
-  }
-
-  const urls = [
-    `${SUPERFLIX_API}/lista?category=movie&type=tmdb&format=json&order=desc`,
-    `${SUPERFLIX_API}/lista?category=serie&type=tmdb&format=json&order=desc`,
-    `${SUPERFLIX_API}/lista?category=anime&type=tmdb&format=json&order=desc`,
-    `${SUPERFLIX_API}/lista?category=dorama&type=tmdb&format=json&order=desc`,
-  ];
-
-  const settled = await Promise.allSettled(
-    urls.map((u) =>
-      fetch(u, {
-        headers: { "User-Agent": "FlixCRD-Lab/1.0" },
-        next: { revalidate: 300 },
-      })
-    )
-  );
-
-  const ids = new Set<number>();
-  for (const res of settled) {
-    if (res.status !== "fulfilled") continue;
-    if (!res.value.ok) continue;
-    const text = await res.value.text();
-    for (const id of parseIds(text)) {
-      ids.add(id);
-    }
-  }
-
-  availableIdsCache = { ids, cachedAt: now, apiUrl: SUPERFLIX_API };
-  return ids;
-}
+import { getAvailableTmdbIds } from "@/lib/superflix";
 
 interface TmdbTrendingItem {
   id: number;
@@ -95,6 +22,12 @@ interface TmdbTrendingItem {
   first_air_date?: string;
   adult?: boolean;
   genre_ids?: number[];
+}
+
+function clampInt(value: string | null, fallback: number, min: number, max: number) {
+  const n = parseInt(value || "", 10);
+  if (Number.isNaN(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
 }
 
 export async function GET(request: NextRequest) {
@@ -122,7 +55,7 @@ export async function GET(request: NextRequest) {
     const type: "movie" | "tv" | "all" = typeRaw === "movie" ? "movie" : typeRaw === "tv" ? "tv" : "all";
     const time: "day" | "week" = timeRaw === "day" ? "day" : "week";
 
-    const availableIds = await fetchAvailableIds(SUPERFLIX_API);
+    const availableIds = await getAvailableTmdbIds();
 
     const endpoint = `${TMDB_API}/trending/${type}/${time}?api_key=${TMDB_KEY}&language=pt-BR`;
     const res = await fetch(endpoint, { next: { revalidate: 180 } });

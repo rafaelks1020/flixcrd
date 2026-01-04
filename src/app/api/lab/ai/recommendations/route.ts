@@ -8,12 +8,9 @@ import { isExplicitContent } from "@/lib/content-filter";
 const TMDB_API = "https://api.themoviedb.org/3";
 const TMDB_KEY = process.env.TMDB_API_KEY || "";
 
+import { getAvailableTmdbIds } from "@/lib/superflix";
+
 export const dynamic = "force-dynamic";
-
-type AvailableIds = { movieIds: Set<number>; tvIds: Set<number> };
-
-let availableIdsCache: { ids: AvailableIds; cachedAt: number } | null = null;
-const AVAILABLE_IDS_TTL_MS = 5 * 60 * 1000;
 
 const rateWindowMs = 60 * 1000;
 const rateLimitMax = 12;
@@ -126,82 +123,8 @@ function safeJsonParse(input: string): any | null {
   return null;
 }
 
-function parseIds(rawText: string): number[] {
-  try {
-    const parsed = JSON.parse(rawText);
-    if (Array.isArray(parsed)) {
-      return parsed
-        .map((id: string | number) => parseInt(String(id), 10))
-        .filter((n: number) => !Number.isNaN(n));
-    }
-    if (parsed && typeof parsed === "object") {
-      if (Array.isArray((parsed as any).ids)) {
-        return (parsed as any).ids
-          .map((id: string | number) => parseInt(String(id), 10))
-          .filter((n: number) => !Number.isNaN(n));
-      }
-      if (Array.isArray((parsed as any).data)) {
-        return (parsed as any).data
-          .map((item: any) => parseInt(String(item?.id ?? item?.tmdb_id ?? ""), 10))
-          .filter((n: number) => !Number.isNaN(n));
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  return rawText
-    .split(/[\n,]/)
-    .map((s) => parseInt(s.trim(), 10))
-    .filter((n) => !Number.isNaN(n));
-}
-
-function isAvailable(available: AvailableIds, mediaType: "movie" | "tv", tmdbId: number) {
-  if (mediaType === "movie") return available.movieIds.has(tmdbId);
-  return available.tvIds.has(tmdbId);
-}
-
-async function fetchAvailableIds(): Promise<AvailableIds> {
-  const now = Date.now();
-  if (availableIdsCache && now - availableIdsCache.cachedAt < AVAILABLE_IDS_TTL_MS) {
-    return availableIdsCache.ids;
-  }
-
-  const settings = await getAppSettings();
-  const SUPERFLIX_API = settings.superflixApiUrl;
-  const urls = {
-    movie: `${SUPERFLIX_API}/lista?category=movie&type=tmdb&format=json&order=desc`,
-    serie: `${SUPERFLIX_API}/lista?category=serie&type=tmdb&format=json&order=desc`,
-    anime: `${SUPERFLIX_API}/lista?category=anime&type=tmdb&format=json&order=desc`,
-  };
-
-  const [movieRes, serieRes, animeRes] = await Promise.allSettled([
-    fetch(urls.movie, { headers: { "User-Agent": "FlixCRD-Lab/1.0" }, next: { revalidate: 300 } }),
-    fetch(urls.serie, { headers: { "User-Agent": "FlixCRD-Lab/1.0" }, next: { revalidate: 300 } }),
-    fetch(urls.anime, { headers: { "User-Agent": "FlixCRD-Lab/1.0" }, next: { revalidate: 300 } }),
-  ]);
-
-  const movieIds = new Set<number>();
-  const tvIds = new Set<number>();
-
-  if (movieRes.status === "fulfilled" && movieRes.value.ok) {
-    const text = await movieRes.value.text();
-    for (const id of parseIds(text)) movieIds.add(id);
-  }
-
-  if (serieRes.status === "fulfilled" && serieRes.value.ok) {
-    const text = await serieRes.value.text();
-    for (const id of parseIds(text)) tvIds.add(id);
-  }
-
-  if (animeRes.status === "fulfilled" && animeRes.value.ok) {
-    const text = await animeRes.value.text();
-    for (const id of parseIds(text)) tvIds.add(id);
-  }
-
-  const ids = { movieIds, tvIds };
-  availableIdsCache = { ids, cachedAt: now };
-  return ids;
+function isAvailable(available: Set<number>, mediaType: "movie" | "tv", tmdbId: number) {
+  return available.has(tmdbId);
 }
 
 type Seed = { mediaType: "movie" | "tv"; id: number; name?: string };
@@ -738,7 +661,7 @@ export async function POST(request: NextRequest) {
     const desiredMovieGenres = movieGenreIds.length ? movieGenreIds : seedMovieGenres;
     const desiredTvGenres = tvGenreIds.length ? tvGenreIds : seedTvGenres;
 
-    const availableIds = await fetchAvailableIds();
+    const availableIds = await getAvailableTmdbIds();
 
     const candidateLimit = Math.max(limit, Math.min(240, limit * 6));
     const out: any[] = [];

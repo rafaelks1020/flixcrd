@@ -76,38 +76,34 @@ export async function GET(request: NextRequest) {
       category = "anime";
       mediaType = "tv";
     }
-
-    // Buscar IDs da SuperFlixAPI
-    const listaUrl = `${SUPERFLIX_API}/lista?category=${category}&type=tmdb&format=json&order=desc`;
-    const listaRes = await fetch(listaUrl, {
-      headers: { "User-Agent": "FlixCRD-Lab/1.0" },
-      next: { revalidate: 300 },
-    });
-
-    if (!listaRes.ok) {
-      return NextResponse.json({ error: "Erro ao buscar lista", items: [] });
+    if (type === "dorama" || type === "doramas") {
+      category = "dorama";
+      mediaType = "tv";
+    }
+    if (type === "c-drama") {
+      category = "c-drama";
+      mediaType = "tv";
+    }
+    if (type === "k-drama") {
+      category = "k-drama";
+      mediaType = "tv";
+    }
+    if (type === "j-drama") {
+      category = "j-drama";
+      mediaType = "tv";
+    }
+    if (type === "hindi-drama") {
+      category = "hindi-drama";
+      mediaType = "tv";
+    }
+    if (type === "lakorn") {
+      category = "lakorn";
+      mediaType = "tv";
     }
 
-    const listaText = await listaRes.text();
-
-    // Parsear a resposta (pode ser array de IDs ou objeto)
-    let ids: number[] = [];
-    try {
-      const parsed = JSON.parse(listaText);
-      if (Array.isArray(parsed)) {
-        ids = parsed.map((id: string | number) => parseInt(String(id))).filter((id: number) => !isNaN(id));
-      } else if (parsed.ids) {
-        ids = parsed.ids.map((id: string | number) => parseInt(String(id))).filter((id: number) => !isNaN(id));
-      } else if (parsed.data) {
-        ids = parsed.data.map((item: { id?: number; tmdb_id?: number }) => item.id || item.tmdb_id).filter(Boolean);
-      }
-    } catch {
-      // Se não for JSON, tentar parsear como lista separada por linha/vírgula
-      ids = listaText
-        .split(/[\n,]/)
-        .map((s: string) => parseInt(s.trim()))
-        .filter((id: number) => !isNaN(id));
-    }
+    // Buscar IDs da SuperFlixAPI usando o utilitário centralizado
+    const { getAvailableIdsByCategory } = await import("@/lib/superflix");
+    const ids = await getAvailableIdsByCategory(category);
 
     // Limitar quantidade
     const limitedIds = ids.slice(0, limit);
