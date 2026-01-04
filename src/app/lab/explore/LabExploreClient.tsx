@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import PremiumNavbar from "@/components/ui/PremiumNavbar";
 import PremiumTitleRow from "@/components/ui/PremiumTitleRow";
 import BrowseHero from "@/components/ui/BrowseHero";
+import { Sparkles } from "lucide-react";
 import { getLabContinue, getLabMyList, getLabWatchLater } from "../labStorage";
 
 type Category = "movie" | "serie" | "anime" | "dorama";
@@ -30,6 +31,7 @@ interface LabTitle {
   voteAverage: number;
   releaseDate: string | null;
   type: "MOVIE" | "SERIES";
+  isAnime?: boolean;
 }
 
 function labTitleKey(t: LabTitle) {
@@ -185,7 +187,8 @@ export default function LabExploreClient({
       setSearchNextPage(nextStart);
       setSearchHasMore(hasMoreRes);
       setSearchResults((prev) => {
-        const merged = append ? [...prev, ...list] : list;
+        const mappedList = list.map(it => ({ ...it, isAnime: Boolean(it.isAnime) }));
+        const merged = append ? [...prev, ...mappedList] : mappedList;
         return dedupeLabTitles(merged);
       });
     } catch (e) {
@@ -485,6 +488,26 @@ export default function LabExploreClient({
           </div>
 
           <div className="mt-6 min-h-[400px]">
+            {searchMode && (
+              (() => {
+                const filtered = category === "movie" ? searchResults.filter(t => t.type === "MOVIE")
+                  : category === "anime" ? searchResults.filter(t => t.type === "SERIES" && t.isAnime)
+                    : category === "serie" ? searchResults.filter(t => t.type === "SERIES" && !t.isAnime)
+                      : category === "dorama" ? searchResults.filter(t => t.type === "SERIES" && !t.isAnime) // Dorama is series
+                        : searchResults;
+
+                const otherCount = (filtered.length === 0 && searchResults.length > 0) ? searchResults.length : 0;
+
+                return otherCount > 0 ? (
+                  <div className="mb-8 bg-primary/10 border border-primary/20 rounded-xl p-4 flex items-center gap-3">
+                    <Sparkles size={16} className="text-primary animate-pulse" />
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-primary-foreground/80">
+                      Nenhum resultado em "{category === 'movie' ? 'Filmes' : category === 'serie' ? 'Séries' : category === 'anime' ? 'Animes' : 'Doramas'}", mas encontramos {otherCount} itens em outras categorias. Tente mudar a aba!
+                    </p>
+                  </div>
+                ) : null;
+              })()
+            )}
             {loading && !searchMode ? (
               <div className="flex items-center justify-center h-64">
                 <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
@@ -500,16 +523,22 @@ export default function LabExploreClient({
                 <>
                   <PremiumTitleRow
                     title={`🔍 Resultados para "${urlQuery}"`}
-                    titles={searchResults.map((t) => ({
-                      id: String(t.tmdbId || t.id),
-                      name: t.name,
-                      href: t.tmdbId ? `/lab/title/${t.tmdbId}?type=${t.type === "MOVIE" ? "movie" : "tv"}` : "/lab",
-                      posterUrl: t.posterUrl,
-                      backdropUrl: t.backdropUrl,
-                      type: t.type,
-                      voteAverage: t.voteAverage,
-                      releaseDate: t.releaseDate,
-                    }))}
+                    titles={
+                      (category === "movie" ? searchResults.filter(t => t.type === "MOVIE")
+                        : category === "anime" ? searchResults.filter(t => t.type === "SERIES" && t.isAnime)
+                          : category === "serie" ? searchResults.filter(t => t.type === "SERIES" && !t.isAnime)
+                            : category === "dorama" ? searchResults.filter(t => t.type === "SERIES" && !t.isAnime)
+                              : searchResults).map((t) => ({
+                                id: String(t.tmdbId || t.id),
+                                name: t.name,
+                                href: t.tmdbId ? `/lab/title/${t.tmdbId}?type=${t.type === "MOVIE" ? "movie" : "tv"}` : "/lab",
+                                posterUrl: t.posterUrl,
+                                backdropUrl: t.backdropUrl,
+                                type: t.type,
+                                voteAverage: t.voteAverage,
+                                releaseDate: t.releaseDate,
+                              }))
+                    }
                   />
 
                   {searchHasMore && (

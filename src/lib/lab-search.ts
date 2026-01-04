@@ -40,6 +40,7 @@ export interface LabSearchResult {
     releaseDate: string | null;
     type: string;
     popularity?: number;
+    isAnime?: boolean;
     _relevanceScore?: number;
 }
 
@@ -125,6 +126,7 @@ export async function performLabSearch(q: string, options: {
             if (isDoramaTarget) {
                 discoverParams.set("with_original_language", "ko|ja");
                 discoverParams.set("with_genres", "18");
+                discoverParams.set("without_genres", "16"); // Exclude Anime
             }
             searchUrl = `${TMDB_API}/discover/tv?${discoverParams.toString()}`;
         }
@@ -179,6 +181,7 @@ export async function performLabSearch(q: string, options: {
                 popularity: item.popularity,
                 releaseDate: item.release_date || item.first_air_date || null,
                 type: item.media_type === "movie" ? "MOVIE" : "SERIES",
+                isAnime: item.genre_ids?.includes(16),
                 _relevanceScore: score,
             });
             if (results.length >= options.limit) break;

@@ -121,7 +121,7 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
     navLinks.push({ href: '/browse', label: 'Catálogo' });
   }
 
-  navLinks.push({ href: '/solicitacoes', label: 'Solicitações' });
+  // navLinks.push({ href: '/solicitacoes', label: 'Solicitações' });
   navLinks.push({ href: '/profiles', label: 'Perfis' });
 
   if (showLab && settings.streamingProvider !== "LAB") {

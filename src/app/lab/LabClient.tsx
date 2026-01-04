@@ -45,6 +45,7 @@ interface LabTitle {
   voteAverage: number | null;
   releaseDate: string | null;
   type: string;
+  isAnime?: boolean;
 }
 
 interface HeroTitle {
@@ -264,6 +265,7 @@ export default function LabClient({ isLoggedIn, isAdmin }: LabClientProps) {
         voteAverage: typeof it?.voteAverage === "number" ? it.voteAverage : null,
         releaseDate: typeof it?.releaseDate === "string" ? it.releaseDate : null,
         type: typeof it?.type === "string" ? it.type : "MOVIE",
+        isAnime: Boolean(it?.isAnime),
       })).filter((t: LabTitle) => Boolean(t.tmdbId));
       setAiResults(dedupeLabTitles(mapped));
     } catch { setAiError("Erro ao gerar recomendações."); } finally { setAiLoading(false); }
@@ -434,8 +436,15 @@ export default function LabClient({ isLoggedIn, isAdmin }: LabClientProps) {
   const filteredSearchResults = useMemo(() => {
     if (!searchMode) return searchResults;
     if (category === "movie") return searchResults.filter((t) => t.type === "MOVIE");
-    return searchResults.filter((t) => t.type !== "MOVIE");
+    if (category === "anime") return searchResults.filter((t) => t.type === "SERIES" && t.isAnime);
+    if (category === "serie") return searchResults.filter((t) => t.type === "SERIES" && !t.isAnime);
+    return searchResults;
   }, [searchResults, searchMode, category]);
+
+  const otherResultsCount = useMemo(() => {
+    if (!searchMode || filteredSearchResults.length > 0) return 0;
+    return searchResults.length;
+  }, [searchResults, filteredSearchResults, searchMode]);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white selection:bg-primary/30 flex flex-col relative">
@@ -493,6 +502,15 @@ export default function LabClient({ isLoggedIn, isAdmin }: LabClientProps) {
                   ))}
                 </div>
               </div>
+
+              {otherResultsCount > 0 && (
+                <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 flex items-center gap-3">
+                  <Sparkles size={16} className="text-primary animate-pulse" />
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-primary-foreground/80">
+                    Nenhum resultado em "{category === 'movie' ? 'Filmes' : category === 'serie' ? 'Séries' : 'Animes'}", mas encontramos {otherResultsCount} itens em outras categorias. Tente mudar a aba!
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
                 {filteredSearchResults.map((t) => (
                   <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} key={labTitleKey(t)}><TitleCard id={t.id} name={t.name} href={`/lab/title/${t.tmdbId}?type=${t.type === "MOVIE" ? "movie" : "tv"}`} posterUrl={t.posterUrl} type={t.type} voteAverage={t.voteAverage} releaseDate={t.releaseDate} /></motion.div>

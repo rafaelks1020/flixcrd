@@ -37,11 +37,10 @@ export default function Navbar({ isLoggedIn, isAdmin, onSearch: _onSearch }: Nav
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-[100] transition-all duration-300 ${
-        scrolled
+      className={`fixed top-0 left-0 right-0 z-[100] transition-all duration-300 ${scrolled
           ? "bg-zinc-950/95 backdrop-blur-md shadow-lg"
           : "bg-gradient-to-b from-black/80 to-transparent"
-      }`}
+        }`}
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
@@ -71,12 +70,12 @@ export default function Navbar({ isLoggedIn, isAdmin, onSearch: _onSearch }: Nav
                 >
                   Catálogo
                 </Link>
-                <Link
+                {/* <Link
                   href="/solicitacoes"
                   className="text-sm font-medium text-zinc-300 hover:text-white transition-colors"
                 >
                   Solicitações
-                </Link>
+                </Link> */}
                 <Link
                   href="/profiles"
                   className="text-sm font-medium text-zinc-300 hover:text-white transition-colors"
