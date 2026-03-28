@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import { getServerSession } from "next-auth";
 import "./globals.css";
 import Providers from "@/components/Providers";
@@ -7,16 +8,6 @@ import { authOptions } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
 import GhostSpotlight from "@/components/ui/GhostSpotlight";
 import SpotlightSearch from "@/components/ui/SpotlightSearch";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: {
@@ -74,7 +65,7 @@ export default async function RootLayout({
   return (
     <html lang="pt-BR" className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black text-white`}
+        className={`${GeistSans.variable} ${GeistMono.variable} antialiased bg-black text-white`}
       >
         {inMaintenance ? (
           <div className="min-h-screen flex items-center justify-center bg-black text-zinc-100">
