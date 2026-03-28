@@ -6,6 +6,7 @@ import { Readable } from "stream";
 import { prisma } from "@/lib/prisma";
 import { wasabiClient } from "@/lib/wasabi";
 import { authOptions } from "@/lib/auth";
+import { hasActiveSubscription } from "@/lib/subscription";
 
 const bucketName = process.env.WASABI_BUCKET_NAME;
 
@@ -47,6 +48,18 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       { error: "Não autenticado." },
       { status: 401 },
     );
+  }
+
+  // Admin sempre pode acessar; outros precisam de assinatura ativa
+  const user = session.user as { id?: string; role?: string };
+  if (user.role !== "ADMIN") {
+    const userId = user.id;
+    if (!userId || !(await hasActiveSubscription(userId))) {
+      return NextResponse.json(
+        { error: "Assinatura inativa." },
+        { status: 403 },
+      );
+    }
   }
 
   try {
