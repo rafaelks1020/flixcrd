@@ -57,25 +57,23 @@ function extractTxid(item: InterPixCallbackItem): string {
 export async function POST(request: NextRequest) {
   try {
     const expectedToken = process.env.INTER_WEBHOOK_TOKEN || process.env.INTER_PIX_WEBHOOK_TOKEN;
-    const mustValidate = process.env.NODE_ENV === "production" || Boolean(expectedToken);
 
-    if (mustValidate) {
-      if (!expectedToken) {
-        return NextResponse.json(
-          { error: "INTER_WEBHOOK_TOKEN não configurado" },
-          { status: 500 },
-        );
-      }
+    if (!expectedToken) {
+      console.error("[Webhook PIX] INTER_WEBHOOK_TOKEN não configurado");
+      return NextResponse.json(
+        { error: "Webhook não configurado" },
+        { status: 500 },
+      );
+    }
 
-      const receivedToken = getHeader(request, [
-        "x-webhook-token",
-        "x-inter-webhook-token",
-        "inter-webhook-token",
-      ]);
+    const receivedToken = getHeader(request, [
+      "x-webhook-token",
+      "x-inter-webhook-token",
+      "inter-webhook-token",
+    ]);
 
-      if (!receivedToken || receivedToken !== expectedToken) {
-        return NextResponse.json({ error: "Webhook não autorizado" }, { status: 401 });
-      }
+    if (!receivedToken || receivedToken !== expectedToken) {
+      return NextResponse.json({ error: "Webhook não autorizado" }, { status: 401 });
     }
 
     const payload = await request.json();
@@ -291,7 +289,7 @@ Acesse: ${process.env.NEXT_PUBLIC_APP_URL || "https://pflix.com.br"}
   } catch (error: any) {
     console.error("[Webhook Inter Pix] Erro:", error);
     return NextResponse.json(
-      { error: error.message || "Erro no webhook" },
+      { error: "Erro no webhook" },
       { status: 500 },
     );
   }

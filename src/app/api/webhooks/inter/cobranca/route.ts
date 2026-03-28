@@ -97,25 +97,22 @@ export async function POST(request: NextRequest) {
       process.env.INTER_BOLETO_WEBHOOK_TOKEN ||
       process.env.INTER_COBRANCA_WEBHOOK_TOKEN;
 
-    const mustValidate = process.env.NODE_ENV === "production" || Boolean(expectedToken);
+    if (!expectedToken) {
+      console.error("[Webhook Cobrança] INTER_WEBHOOK_TOKEN não configurado");
+      return NextResponse.json(
+        { error: "Webhook não configurado" },
+        { status: 500 },
+      );
+    }
 
-    if (mustValidate) {
-      if (!expectedToken) {
-        return NextResponse.json(
-          { error: "INTER_WEBHOOK_TOKEN não configurado" },
-          { status: 500 },
-        );
-      }
+    const receivedToken = getHeader(request, [
+      "x-webhook-token",
+      "x-inter-webhook-token",
+      "inter-webhook-token",
+    ]);
 
-      const receivedToken = getHeader(request, [
-        "x-webhook-token",
-        "x-inter-webhook-token",
-        "inter-webhook-token",
-      ]);
-
-      if (!receivedToken || receivedToken !== expectedToken) {
-        return NextResponse.json({ error: "Webhook não autorizado" }, { status: 401 });
-      }
+    if (!receivedToken || receivedToken !== expectedToken) {
+      return NextResponse.json({ error: "Webhook não autorizado" }, { status: 401 });
     }
 
     const payload = await request.json();
@@ -282,7 +279,7 @@ Aproveite todo o conteúdo disponível na plataforma!
   } catch (error: any) {
     console.error("[Webhook Inter Cobrança] Erro:", error);
     return NextResponse.json(
-      { error: error.message || "Erro no webhook" },
+      { error: "Erro no webhook" },
       { status: 500 },
     );
   }

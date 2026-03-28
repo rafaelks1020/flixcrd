@@ -39,7 +39,12 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = (session.user as any).id;
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Corpo da requisição inválido' }, { status: 400 });
+    }
     const { 
       billingType = 'PIX', 
       cpfCnpj,
@@ -787,9 +792,9 @@ Acesse o boleto: ${invoiceProxyUrl}
     });
 
   } catch (error: any) {
-    console.error('Erro ao criar assinatura:', error);
+    console.error('[Subscription] Erro ao criar assinatura:', error);
     return NextResponse.json(
-      { error: error.message || 'Erro ao criar assinatura' },
+      { error: 'Erro ao criar assinatura' },
       { status: 500 }
     );
   }
@@ -848,7 +853,7 @@ export async function GET() {
   } catch (error: any) {
     console.error('Erro ao buscar assinatura:', error);
     return NextResponse.json(
-      { error: error.message || 'Erro ao buscar assinatura' },
+      { error: 'Erro ao buscar assinatura' },
       { status: 500 }
     );
   }

@@ -309,7 +309,7 @@ Acesse: ${process.env.NEXT_PUBLIC_APP_URL || 'https://pflix.com.br'}/subscribe
   } catch (error: any) {
     console.error('[Webhook] Erro:', error);
     return NextResponse.json(
-      { error: error.message || 'Erro no webhook' },
+      { error: 'Erro no webhook' },
       { status: 500 }
     );
   }

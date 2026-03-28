@@ -127,7 +127,7 @@ Acesse: ${appUrl}
   } catch (error: any) {
     console.error('Erro ao ativar assinatura:', error);
     return NextResponse.json(
-      { error: error.message || 'Erro ao ativar assinatura' },
+      { error: 'Erro ao ativar assinatura' },
       { status: 500 }
     );
   }
@@ -235,7 +235,7 @@ Acesse: ${appUrl}/subscribe
   } catch (error: any) {
     console.error('Erro ao cancelar assinatura:', error);
     return NextResponse.json(
-      { error: error.message || 'Erro ao cancelar assinatura' },
+      { error: 'Erro ao cancelar assinatura' },
       { status: 500 }
     );
   }

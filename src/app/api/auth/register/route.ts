@@ -193,7 +193,7 @@ Se você não reconhece este cadastro, entre em contato com o suporte.
   } catch (error: any) {
     console.error('[Register] Erro:', error);
     return NextResponse.json(
-      { error: error.message || 'Erro ao criar conta' },
+      { error: 'Erro ao criar conta' },
       { status: 500 }
     );
   }

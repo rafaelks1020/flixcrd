@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error("GET /api/admin/cache error:", error);
     return NextResponse.json(
-      { error: error.message || "Erro ao verificar cache" },
+      { error: "Erro ao verificar cache" },
       { status: 500 }
     );
   }
@@ -228,7 +228,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("POST /api/admin/cache error:", error);
     return NextResponse.json(
-      { error: error.message || "Erro ao gerenciar cache" },
+      { error: "Erro ao gerenciar cache" },
       { status: 500 }
     );
   }
