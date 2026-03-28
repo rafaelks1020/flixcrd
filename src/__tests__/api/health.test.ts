@@ -1,3 +1,6 @@
+/**
+ * @jest-environment node
+ */
 import { createMocks } from 'node-mocks-http'
 import { GET } from '@/app/api/health/route'
 
@@ -26,7 +29,7 @@ describe('/api/health', () => {
 
   it('should handle database connection error', async () => {
     // Mock database error
-    const { prisma } = require('@/lib/prisma')
+    const { prisma } = require('../../lib/prisma')
     prisma.$queryRaw.mockRejectedValueOnce(new Error('Connection failed'))
 
     const response = await GET()
