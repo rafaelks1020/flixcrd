@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calculatePeriodEnd } from "@/lib/asaas";
 import { getInterCobrancaDetalhe } from "@/lib/inter";
-import { sendMail } from "@/lib/mailjet";
+import { sendMail } from "@/lib/email";
 
 function getHeader(request: NextRequest, names: string[]): string | null {
   for (const name of names) {

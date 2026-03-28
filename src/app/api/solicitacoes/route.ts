@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth-mobile";
-import { sendMail } from "@/lib/mailjet";
+import { sendMail } from "@/lib/email";
 
 export async function GET(request: NextRequest) {
   try {

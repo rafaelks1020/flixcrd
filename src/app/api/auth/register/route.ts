@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { getOrCreateCustomer } from '@/lib/asaas';
-import { sendMail } from '@/lib/mailjet';
+import { sendMail } from '@/lib/email';
 import { rateLimit, getClientIP } from '@/lib/rate-limit-store';
 
 const db = prisma as any;

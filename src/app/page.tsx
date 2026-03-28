@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
 import { hasActiveSubscription } from "@/lib/subscription";
-import HomeClientNew2 from "./HomeClientNew2";
+import HomeClient from "./HomeClient";
 import LandingPage from "@/components/LandingPage";
 
 export const dynamic = "force-dynamic";
@@ -92,7 +92,7 @@ export default async function Home() {
   });
 
   return (
-    <HomeClientNew2
+    <HomeClient
       isLoggedIn={isLoggedIn}
       isAdmin={isAdmin}
       topTitles={topTitles}

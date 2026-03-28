@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { calculatePeriodEnd } from '@/lib/asaas';
-import { sendMail } from '@/lib/mailjet';
+import { sendMail } from '@/lib/email';
 
 /**
  * Webhook do Asaas para receber notificações de pagamento
