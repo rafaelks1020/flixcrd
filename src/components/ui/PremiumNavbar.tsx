@@ -19,8 +19,12 @@ function MobileMenuPortal({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
+    const mount = () => setMounted(true);
+    mount();
+    return () => {
+      const unmount = () => setMounted(false);
+      unmount();
+    };
   }, []);
 
   if (!mounted) return null;
@@ -39,7 +43,8 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    const mount = () => setMounted(true);
+    mount();
   }, []);
 
   const { scrollY } = useScroll();
@@ -80,7 +85,8 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
 
   // Close mobile menu on route change
   useEffect(() => {
-    setMobileMenuOpen(false);
+    const closeMenu = () => setMobileMenuOpen(false);
+    closeMenu();
   }, [pathname]);
 
   useMotionValueEvent(scrollY, "change", (latest) => {

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { calculatePeriodEnd } from "@/lib/asaas";
 import { getInterPixCob } from "@/lib/inter";
-import { sendMail } from "@/lib/mailjet";
+import { sendMail } from "@/lib/email";
 
 type InterPixCallbackItem = {
   endToEndId?: string;

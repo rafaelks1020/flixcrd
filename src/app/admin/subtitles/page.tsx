@@ -98,7 +98,7 @@ export default function SubtitlesPage() {
               name: ep.name,
               seasonNumber: season.seasonNumber,
               episodeNumber: ep.episodeNumber,
-              hasSubtitle: Boolean((ep as { hasSubtitle?: boolean }).hasSubtitle), // TODO: verificar se já tem legenda
+              hasSubtitle: Boolean((ep as { hasSubtitle?: boolean }).hasSubtitle),
             });
           }
         }

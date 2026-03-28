@@ -54,6 +54,6 @@ describe('TitleCard Component', () => {
     render(<MockTitleCard title={titleWithoutPoster} />)
     
     const poster = screen.getByTestId('poster')
-    expect(poster).toHaveAttribute('src', 'null')
+    expect(poster).not.toHaveAttribute('src')
   })
 })

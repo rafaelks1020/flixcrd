@@ -12,8 +12,7 @@ export default async function LabFilmesPage() {
 
     const settings = await getSettings();
     const isAdmin = session?.user?.role === "ADMIN";
-    const enabled = isAdmin || settings.labEnabled;
-    // TODO add settings.enableMovies check here as well ?
+    const enabled = isAdmin || (settings.labEnabled && settings.enableMovies);
 
     if (!enabled) redirect("/");
 

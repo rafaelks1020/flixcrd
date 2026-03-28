@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
-import { sendMail } from "@/lib/mailjet";
+import { sendMail } from "@/lib/email";
 
 export async function POST(request: NextRequest) {
   try {

@@ -8,22 +8,37 @@ interface ExtendedToken extends JWT {
   approvalStatus?: string;
 }
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+const ALLOWED_ORIGINS = new Set(
+  (process.env.CORS_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean),
+);
+
+function getCorsHeaders(request: NextRequest) {
+  const origin = request.headers.get("origin") || "";
+  const allowedOrigin =
+    ALLOWED_ORIGINS.has(origin) ? origin : ALLOWED_ORIGINS.values().next().value || "";
+
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  };
+}
 
 // Middleware para CORS em rotas de API
 function corsMiddleware(request: NextRequest) {
+  const headers = getCorsHeaders(request);
+
   // Handle preflight OPTIONS
   if (request.method === "OPTIONS") {
-    return NextResponse.json({}, { headers: corsHeaders });
+    return NextResponse.json({}, { headers });
   }
 
   // Add CORS headers to response
   const response = NextResponse.next();
-  Object.entries(corsHeaders).forEach(([key, value]) => {
+  Object.entries(headers).forEach(([key, value]) => {
     response.headers.set(key, value);
   });
   return response;

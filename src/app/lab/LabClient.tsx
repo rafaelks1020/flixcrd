@@ -89,21 +89,27 @@ function dedupeLabTitles(list: LabTitle[]) {
   return out;
 }
 
+// Pre-compute random values outside of render to satisfy React Compiler purity rules
+const RAIN_COLUMNS = Array.from({ length: 32 }, () => ({
+  duration: Math.random() * 5 + 3,
+  delay: Math.random() * 5,
+}));
+
 function DigitalRain() {
   const symbols = "0101010101010101010101010101010101010101010101010101010101010101";
   return (
     <div className="absolute inset-0 overflow-hidden opacity-[0.07] pointer-events-none">
       <div className="absolute inset-0 flex justify-around">
-        {Array.from({ length: 32 }).map((_, i) => (
+        {RAIN_COLUMNS.map((col, i) => (
           <motion.div
             key={i}
             initial={{ y: -500 }}
             animate={{ y: '100vh' }}
             transition={{
-              duration: Math.random() * 5 + 3,
+              duration: col.duration,
               repeat: Infinity,
               ease: "linear",
-              delay: Math.random() * 5
+              delay: col.delay
             }}
             className="flex flex-col text-[8px] font-mono text-primary leading-none"
           >

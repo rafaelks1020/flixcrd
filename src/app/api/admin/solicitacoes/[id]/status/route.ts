@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sendPushToUsers } from "@/lib/push";
-import { sendMail } from "@/lib/mailjet";
+import { sendMail } from "@/lib/email";
 
 interface RouteContext {
   params: Promise<{

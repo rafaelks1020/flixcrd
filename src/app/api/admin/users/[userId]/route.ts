@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
-import { sendMail } from "@/lib/mailjet";
+import { sendMail } from "@/lib/email";
 
 interface SessionUser {
     id?: string;

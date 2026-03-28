@@ -1,19 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 
-import { authOptions } from "@/lib/auth";
+import { requireAdmin } from "@/lib/require-admin";
 
 export const dynamic = "force-dynamic";
-
-async function requireAdmin() {
-  const session: any = await getServerSession(authOptions as any);
-
-  if (!session || !session.user || (session.user as any).role !== "ADMIN") {
-    return { isAdmin: false };
-  }
-
-  return { isAdmin: true };
-}
 
 function safeJsonParse(input: string): any | null {
   const trimmed = input.trim();
@@ -46,8 +35,8 @@ function safeJsonParse(input: string): any | null {
 
 export async function POST(request: NextRequest) {
   try {
-    const { isAdmin } = await requireAdmin();
-    if (!isAdmin) {
+    const admin = await requireAdmin();
+    if (!admin) {
       return NextResponse.json({ error: "Não autorizado." }, { status: 403 });
     }
 

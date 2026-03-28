@@ -12,7 +12,7 @@ import {
   calculateFinalPrice,
   PLAN_CONFIG,
 } from '@/lib/asaas';
-import { sendMail } from '@/lib/mailjet';
+import { sendMail } from '@/lib/email';
 
 interface CreditCardData {
   holderName: string;
