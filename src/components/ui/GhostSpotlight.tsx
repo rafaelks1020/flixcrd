@@ -14,7 +14,8 @@ export default function GhostSpotlight() {
     const shadowY = useSpring(mouseY, springConfig);
 
     useEffect(() => {
-        setMounted(true);
+        const handleMount = () => setMounted(true);
+        handleMount();
 
         const handleMouseMove = (e: MouseEvent) => {
             mouseX.set(e.clientX);

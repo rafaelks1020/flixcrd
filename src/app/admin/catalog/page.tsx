@@ -942,7 +942,7 @@ export default function AdminCatalogPage() {
                       <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/5 bg-white/5 text-zinc-500 transition-all hover:border-white/20 hover:text-white disabled:opacity-30"><ChevronLeft size={18} /></button>
                       <div className="flex items-center gap-2">
                         {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                          let pageNum = totalPages <= 5 ? i + 1 : (currentPage <= 3 ? i + 1 : (currentPage >= totalPages - 2 ? totalPages - 4 + i : currentPage - 2 + i));
+                          const pageNum = totalPages <= 5 ? i + 1 : (currentPage <= 3 ? i + 1 : (currentPage >= totalPages - 2 ? totalPages - 4 + i : currentPage - 2 + i));
                           return (
                             <button key={pageNum} onClick={() => setCurrentPage(pageNum)} className={cn("flex h-10 w-10 items-center justify-center rounded-xl text-[10px] font-black uppercase transition-all", currentPage === pageNum ? "bg-white text-black shadow-lg" : "border border-white/5 bg-white/5 text-zinc-500 hover:text-white")}>{pageNum}</button>
                           );
