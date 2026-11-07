@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth-mobile";
+import { hasActiveSubscription } from "@/lib/subscription";
+import { isUnsafeObjectKey } from "@/lib/object-key";
 
 const WASABI_CDN_BASE = process.env.WASABI_CDN_URL;
 
@@ -36,19 +38,26 @@ async function streamToString(body: any): Promise<string> {
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
-  if (!WASABI_CDN_BASE) {
-    return NextResponse.json(
-      { error: "WASABI_CDN_URL não configurado." },
-      { status: 500 },
-    );
-  }
-
   const user = await getAuthUser(request);
 
   if (!user) {
     return NextResponse.json(
       { error: "Não autenticado." },
       { status: 401 },
+    );
+  }
+
+  if (user.role !== "ADMIN" && !(await hasActiveSubscription(user.id))) {
+    return NextResponse.json(
+      { error: "Assinatura necessária para assistir." },
+      { status: 403 },
+    );
+  }
+
+  if (!WASABI_CDN_BASE) {
+    return NextResponse.json(
+      { error: "WASABI_CDN_URL não configurado." },
+      { status: 500 },
     );
   }
 
@@ -80,9 +89,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
       "cloudflare"; // Padrão Cloudflare
 
     const variant = request.nextUrl.searchParams.get("variant");
+    const variantName = variant?.trim() || "";
+    if (variantName && isUnsafeObjectKey(variantName)) {
+      return NextResponse.json({ error: "Arquivo inválido." }, { status: 400 });
+    }
 
     // Busca o playlist diretamente via URL pública
-    const playlistPath = variant ? `${prefix}${variant.trim()}` : `${prefix}master.m3u8`;
+    const playlistPath = variantName ? `${prefix}${variantName}` : `${prefix}master.m3u8`;
     const playlistUrl = `${WASABI_CDN_BASE}${playlistPath}`;
 
     const response = await fetch(playlistUrl, {
@@ -128,6 +141,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
         // Segmentos de vídeo (.ts): sempre URL pública via Wasabi CDN
         if (trimmed.toLowerCase().endsWith(".ts")) {
+          if (isUnsafeObjectKey(trimmed)) return line;
           const objectKey = `${prefix}${trimmed}`;
           return `${WASABI_CDN_BASE}${objectKey}`;
         }

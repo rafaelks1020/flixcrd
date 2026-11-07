@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import jwt from 'jsonwebtoken';
 
+import { prisma } from './prisma';
+
 function getJwtSecret(): string {
   const secret = process.env.NEXTAUTH_SECRET;
   if (!secret) {
@@ -38,12 +40,28 @@ export async function verifyMobileToken(request: NextRequest): Promise<AuthResul
 
     try {
       const secret = getJwtSecret();
-      const decoded = jwt.verify(token, secret) as TokenPayload;
-      
+      const decoded = jwt.verify(token, secret) as { id?: string };
+      if (!decoded?.id) {
+        return { success: false, error: 'Token inválido ou expirado' };
+      }
+
+      const dbUser = await prisma.user.findUnique({
+        where: { id: decoded.id },
+        select: { id: true, email: true, name: true, role: true },
+      });
+      if (!dbUser) {
+        return { success: false, error: 'Token inválido ou expirado' };
+      }
+
       return {
         success: true,
-        userId: decoded.id,
-        user: decoded,
+        userId: dbUser.id,
+        user: {
+          id: dbUser.id,
+          email: dbUser.email,
+          name: dbUser.name ?? undefined,
+          role: dbUser.role || 'USER',
+        },
       };
     } catch {
       return { success: false, error: 'Token inválido ou expirado' };

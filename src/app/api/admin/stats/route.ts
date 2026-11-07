@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { adminDenied } from "@/lib/require-admin";
 
 export async function GET(request: Request) {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   try {
     const { searchParams } = new URL(request.url);
     const period = searchParams.get("period") || "7d";

@@ -30,7 +30,7 @@ export default async function LabWatchPage({ searchParams }: PageProps) {
   const hasAccess = await hasLabAccess(userId, userRole);
 
   if (!hasAccess) {
-    redirect("/");
+    redirect("/subscribe");
   }
 
   const params = await searchParams;

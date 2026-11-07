@@ -3,6 +3,7 @@ import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 
 import { prisma } from "@/lib/prisma";
 import { wasabiClient } from "@/lib/wasabi";
+import { adminDenied } from "@/lib/require-admin";
 
 const bucketName = process.env.WASABI_BUCKET_NAME;
 const transcoderBaseUrl = process.env.TRANSCODER_BASE_URL;
@@ -14,6 +15,9 @@ interface RouteContext {
 }
 
 export async function GET(request: NextRequest) {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   const jobId = request.nextUrl.searchParams.get("job_id");
 
   if (!transcoderBaseUrl) {
@@ -51,6 +55,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(_request: NextRequest, context: RouteContext) {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   if (!bucketName) {
     return NextResponse.json(
       { error: "WASABI_BUCKET_NAME não configurado." },

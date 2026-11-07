@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { adminDenied } from "@/lib/require-admin";
 
 export async function GET(request: NextRequest) {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   try {
     const limitParam = request.nextUrl.searchParams.get("limit");
     const limit = Math.min(

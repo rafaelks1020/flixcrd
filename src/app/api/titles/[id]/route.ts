@@ -3,6 +3,7 @@ import { DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 
 import { prisma } from "@/lib/prisma";
 import { wasabiClient } from "@/lib/wasabi";
+import { adminDenied } from "@/lib/require-admin";
 
 const bucketName = process.env.WASABI_BUCKET_NAME;
 
@@ -26,6 +27,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   try {
     const { id } = await context.params;
     const body = await request.json();
@@ -75,6 +79,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   try {
     const { id } = await context.params;
 

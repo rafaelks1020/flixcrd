@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { collectUptimeSnapshot } from "@/lib/uptime-monitor";
 import { prisma } from "@/lib/prisma";
+import { secretsMatch } from "@/lib/safe-equal";
 
 function isAuthorized(request: NextRequest) {
   const secret = process.env.UPTIME_CRON_SECRET;
-  if (!secret) {
-    return true;
-  }
-  const headerSecret =
-    request.headers.get("x-cron-secret") ??
-    request.nextUrl.searchParams.get("secret");
-  return headerSecret === secret;
+  if (!secret) return false;
+  const headerSecret = request.headers.get("x-cron-secret");
+  if (!headerSecret) return false;
+  return secretsMatch(headerSecret, secret);
 }
 
 export async function GET(request: NextRequest) {

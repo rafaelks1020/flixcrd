@@ -11,9 +11,19 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function createAdmin() {
-  const email = "admin@flixcrd.com";
-  const password = "admin123"; // Você pode mudar depois no painel
+  const email = process.env.ADMIN_EMAIL;
+  const password = process.env.ADMIN_PASSWORD;
   const name = "Administrador";
+
+  if (!email || !password) {
+    console.error("❌ Erro: ADMIN_EMAIL e ADMIN_PASSWORD devem estar definidos no ambiente.");
+    process.exit(1);
+  }
+
+  if (password.length < 12) {
+    console.error("❌ Erro: ADMIN_PASSWORD deve ter pelo menos 12 caracteres.");
+    process.exit(1);
+  }
 
   console.log("🔐 Criando usuário administrador...\n");
 
@@ -87,8 +97,7 @@ async function createAdmin() {
 
   console.log("✅ Usuário administrador criado com sucesso!\n");
   console.log("📧 Email:", email);
-  console.log("🔑 Senha:", password);
-  console.log("\n⚠️  IMPORTANTE: Altere a senha após o primeiro login!\n");
+  console.log("\n⚠️  IMPORTANTE: Altere a senha após o primeiro login se necessário!\n");
 }
 
 async function main() {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { calculatePeriodEnd } from '@/lib/asaas';
 import { sendMail } from '@/lib/email';
+import { secretsMatch } from '@/lib/safe-equal';
 
 /**
  * Webhook do Asaas para receber notificações de pagamento
@@ -42,27 +43,26 @@ export async function POST(request: NextRequest) {
       process.env.ASAAS_WEBHOOK_TOKEN || process.env.ASAAS_WEBHOOK_ACCESS_TOKEN;
     const receivedToken = request.headers.get("asaas-access-token");
 
-    const mustValidate = process.env.NODE_ENV === "production" || Boolean(expectedToken);
+    if (!expectedToken) {
+      return NextResponse.json(
+        { error: "ASAAS_WEBHOOK_TOKEN não configurado" },
+        { status: 503 },
+      );
+    }
 
-    if (mustValidate) {
-      if (!expectedToken) {
-        return NextResponse.json(
-          { error: "ASAAS_WEBHOOK_TOKEN não configurado" },
-          { status: 500 },
-        );
-      }
-
-      if (!receivedToken || receivedToken !== expectedToken) {
-        return NextResponse.json(
-          { error: "Webhook não autorizado" },
-          { status: 401 },
-        );
-      }
+    if (!receivedToken || !secretsMatch(receivedToken, expectedToken)) {
+      return NextResponse.json(
+        { error: "Webhook não autorizado" },
+        { status: 401 },
+      );
     }
 
     const payload: AsaasWebhookPayload = await request.json();
-    
-    console.log('[Webhook Asaas]', JSON.stringify(payload, null, 2));
+
+    console.log("[Webhook Asaas]", {
+      event: payload?.event,
+      paymentId: payload?.payment?.id,
+    });
 
     const { event, payment } = payload;
 

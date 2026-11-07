@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { adminDenied } from "@/lib/require-admin";
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
@@ -17,12 +16,10 @@ interface DetectResult {
  * Usa IA (Groq) para detectar temporada e episódio a partir do nome do arquivo
  */
 export async function POST(request: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-    }
+  const denied = await adminDenied();
+  if (denied) return denied;
 
+  try {
     const body = await request.json();
     const { filename } = body;
 

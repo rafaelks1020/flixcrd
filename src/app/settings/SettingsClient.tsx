@@ -290,35 +290,37 @@ export default function SettingsClient({ initialUseCloudflareProxy }: SettingsCl
           </motion.section>
 
           {/* Section: Mobile App */}
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="glass-card bg-zinc-900/40 backdrop-blur-xl border border-white/5 rounded-[32px] p-8 md:p-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-8"
-          >
-            <div className="flex gap-6 items-start">
-              <div className="w-14 h-14 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
-                <Smartphone size={28} />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-black tracking-tight">App Android (APK)</h2>
-                  <span className="px-2 py-0.5 rounded-full bg-blue-500 text-white text-[9px] font-black uppercase tracking-widest">v2.4.0</span>
-                </div>
-                <p className="text-zinc-500 text-sm leading-relaxed max-w-md font-medium">
-                  Leve o cinema no bolso. Instale nativamente para melhor performance e suporte a offline.
-                </p>
-              </div>
-            </div>
-
-            <a
-              href="/paelflix.apk"
-              className="w-full md:w-auto inline-flex items-center justify-center gap-3 bg-white text-black hover:bg-zinc-200 transition-all px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs active:scale-95 shadow-xl shadow-white/5"
+          {process.env.NEXT_PUBLIC_APK_URL && (
+            <motion.section
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="glass-card bg-zinc-900/40 backdrop-blur-xl border border-white/5 rounded-[32px] p-8 md:p-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-8"
             >
-              <Download size={18} />
-              Baixar APK
-            </a>
-          </motion.section>
+              <div className="flex gap-6 items-start">
+                <div className="w-14 h-14 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
+                  <Smartphone size={28} />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-black tracking-tight">App Android (APK)</h2>
+                    <span className="px-2 py-0.5 rounded-full bg-blue-500 text-white text-[9px] font-black uppercase tracking-widest">v2.4.0</span>
+                  </div>
+                  <p className="text-zinc-500 text-sm leading-relaxed max-w-md font-medium">
+                    Leve o cinema no bolso. Instale nativamente para melhor performance e suporte a offline.
+                  </p>
+                </div>
+              </div>
+
+              <a
+                href={process.env.NEXT_PUBLIC_APK_URL}
+                className="w-full md:w-auto inline-flex items-center justify-center gap-3 bg-white text-black hover:bg-zinc-200 transition-all px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs active:scale-95 shadow-xl shadow-white/5"
+              >
+                <Download size={18} />
+                Baixar APK
+              </a>
+            </motion.section>
+          )}
 
           {/* Section: Notifications */}
           <motion.section

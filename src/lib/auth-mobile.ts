@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import jwt from "jsonwebtoken";
 
 import { authOptions } from "./auth";
+import { prisma } from "./prisma";
 
 function getJwtSecret(): string {
   const secret = process.env.NEXTAUTH_SECRET;
@@ -30,8 +31,19 @@ export async function getAuthUser(request?: NextRequest): Promise<AuthUser | nul
       const token = authHeader.substring(7);
       try {
         const secret = getJwtSecret();
-        const decoded = jwt.verify(token, secret) as AuthUser;
-        return decoded;
+        const decoded = jwt.verify(token, secret) as { id?: string };
+        if (!decoded?.id) return null;
+        const dbUser = await prisma.user.findUnique({
+          where: { id: decoded.id },
+          select: { id: true, email: true, name: true, role: true },
+        });
+        if (!dbUser) return null;
+        return {
+          id: dbUser.id,
+          email: dbUser.email,
+          name: dbUser.name,
+          role: dbUser.role || "USER",
+        };
       } catch {
         // Token inválido, continua para tentar session
       }

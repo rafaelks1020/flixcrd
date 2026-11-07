@@ -1,13 +1,25 @@
 import { NextResponse } from "next/server";
 
-const TRANSCODER_URL = process.env.TRANSCODER_BASE_URL || "http://135.148.12.209:8001";
-
 export async function GET() {
+  const transcoderUrl = process.env.TRANSCODER_BASE_URL;
+
+  if (!transcoderUrl) {
+    return NextResponse.json(
+      {
+        success: false,
+        status: "não configurado",
+        error: "não configurado",
+        url: null,
+      },
+      { status: 503 }
+    );
+  }
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const response = await fetch(`${TRANSCODER_URL}/health`, {
+    const response = await fetch(`${transcoderUrl}/health`, {
       signal: controller.signal,
     });
 
@@ -18,14 +30,14 @@ export async function GET() {
       return NextResponse.json({
         success: true,
         status: data.status || "ok",
-        url: TRANSCODER_URL,
+        url: transcoderUrl,
       });
     } else {
       return NextResponse.json(
         {
           success: false,
           error: `HTTP ${response.status}`,
-          url: TRANSCODER_URL,
+          url: transcoderUrl,
         },
         { status: 500 }
       );
@@ -35,7 +47,7 @@ export async function GET() {
       {
         success: false,
         error: error.name === "AbortError" ? "Timeout (5s)" : error.message || "Offline",
-        url: TRANSCODER_URL,
+        url: transcoderUrl,
       },
       { status: 500 }
     );

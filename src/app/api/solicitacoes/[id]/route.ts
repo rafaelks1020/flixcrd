@@ -28,7 +28,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
         AssignedAdmin: {
           select: {
             id: true,
-            email: true,
             name: true,
           },
         },

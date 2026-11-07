@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { withAuth } from "next-auth/middleware";
+import { getToken } from "next-auth/jwt";
 import type { JWT } from "next-auth/jwt";
 
 interface ExtendedToken extends JWT {
@@ -15,33 +16,30 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean),
 );
 
-function getCorsHeaders(request: NextRequest) {
+function getCorsHeaders(request: NextRequest): Record<string, string> {
   const origin = request.headers.get("origin") || "";
-  const allowedOrigin =
-    ALLOWED_ORIGINS.has(origin) ? origin : ALLOWED_ORIGINS.values().next().value || "";
-
-  return {
-    "Access-Control-Allow-Origin": allowedOrigin,
+  const headers: Record<string, string> = {
     "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
-}
 
-// Middleware para CORS em rotas de API
-function corsMiddleware(request: NextRequest) {
-  const headers = getCorsHeaders(request);
-
-  // Handle preflight OPTIONS
-  if (request.method === "OPTIONS") {
-    return NextResponse.json({}, { headers });
+  // Origem fora da lista não recebe Access-Control-Allow-Origin.
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
   }
 
-  // Add CORS headers to response
-  const response = NextResponse.next();
+  return headers;
+}
+
+function applyCors(response: NextResponse, headers: Record<string, string>) {
   Object.entries(headers).forEach(([key, value]) => {
     response.headers.set(key, value);
   });
   return response;
+}
+
+function isCronSecretApi(path: string) {
+  return path === "/api/admin/uptime/record" || path.startsWith("/api/admin/uptime/record/");
 }
 
 // Auth middleware para rotas protegidas
@@ -89,12 +87,39 @@ const authMiddleware = withAuth(
   },
 );
 
-export default function middleware(request: NextRequest) {
+export default async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
-  // CORS para todas as rotas de API
+  // CORS para todas as rotas de API. Admin de API também exige role no JWT.
   if (path.startsWith("/api/")) {
-    return corsMiddleware(request);
+    const corsHeaders = getCorsHeaders(request);
+
+    if (request.method === "OPTIONS") {
+      return applyCors(NextResponse.json({}), corsHeaders);
+    }
+
+    if (path.startsWith("/api/admin/") && !isCronSecretApi(path)) {
+      const token = await getToken({
+        req: request,
+        secret: process.env.NEXTAUTH_SECRET,
+      });
+
+      if (!token) {
+        return applyCors(
+          NextResponse.json({ error: "Não autorizado" }, { status: 401 }),
+          corsHeaders,
+        );
+      }
+
+      if ((token as ExtendedToken).role !== "ADMIN") {
+        return applyCors(
+          NextResponse.json({ error: "Acesso negado" }, { status: 403 }),
+          corsHeaders,
+        );
+      }
+    }
+
+    return applyCors(NextResponse.next(), corsHeaders);
   }
 
   // Auth para rotas protegidas (inclui verificação de aprovação)

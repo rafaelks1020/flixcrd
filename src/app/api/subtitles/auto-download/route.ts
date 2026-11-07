@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import zlib from "zlib";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { wasabiClient } from "@/lib/wasabi";
+import { adminDenied } from "@/lib/require-admin";
 
 const bucketName = process.env.WASABI_BUCKET_NAME;
 const openSubApiKey = process.env.OPENSUBTITLES_API_KEY;
@@ -43,12 +42,10 @@ function srtToVtt(srt: string): string {
  * Baixa legenda do OpenSubtitles, converte pra VTT e salva no Wasabi
  */
 export async function POST(request: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-    }
+  const denied = await adminDenied();
+  if (denied) return denied;
 
+  try {
     if (!bucketName) {
       return NextResponse.json(
         { error: "WASABI_BUCKET_NAME não configurado." },

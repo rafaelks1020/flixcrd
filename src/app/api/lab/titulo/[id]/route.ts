@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthUser } from "@/lib/auth-mobile";
+import { hasLabAccess } from "@/lib/lab-access";
 
 const TMDB_API = "https://api.themoviedb.org/3";
 const TMDB_KEY = process.env.TMDB_API_KEY || "";
@@ -70,6 +71,10 @@ export async function GET(
 
   if (!user?.id) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+  }
+  const labOk = await hasLabAccess(user.id, user.role);
+  if (!labOk) {
+    return NextResponse.json({ error: "Acesso ao LAB negado." }, { status: 403 });
   }
 
   try {

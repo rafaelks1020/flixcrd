@@ -1,156 +1,66 @@
-# FlixCRD Web Platform
+# Pflix
 
-Plataforma de streaming completa com Next.js, TypeScript, e Prisma.
+Plataforma unificada de streaming de vídeo sob demanda (HLS adaptativo) e streaming de música, com gestão de catálogo, perfis de usuário, playlists, cobrança de assinaturas e painel administrativo.
 
-## 🚀 Features
+## Stack Principal
 
-- **Streaming HLS**: Player de vídeo com suporte a múltiplas qualidades
-- **Autenticação**: Sistema completo com NextAuth
-- **Admin Panel**: Gestão de conteúdo e usuários
-- **Transcoder**: Serviço de conversão de vídeo para HLS
-- **Mobile App**: Aplicativo React Native companion
+- **Framework**: Next.js 16 (App Router) + React 19 + TypeScript
+- **Estilização**: Tailwind CSS + Framer Motion + Lucide Icons
+- **Banco de Dados**: PostgreSQL + Prisma 5 ORM
+- **Cache**: Redis (opcional)
+- **Autenticação**: NextAuth v4 (sessão JWT para web e suporte a token Bearer para app mobile)
+- **Armazenamento**: Wasabi S3 (vídeos HLS e faixas/capas de música sob o prefixo `music/` com URLs presignadas)
+- **Integrações**: TMDb e OpenSubtitles (metadados e legendas de vídeo), MusicBrainz e LRCLIB (metadados e letras de música), Asaas e Banco Inter (pagamentos Pix/Boleto), Resend (e-mails) e Web Push (VAPID)
 
-## 📋 Pré-requisitos
+## Como Rodar Localmente
 
-- Node.js 18+
-- PostgreSQL 15+
-- Redis (opcional, para cache)
-- Docker & Docker Compose (recomendado)
-
-## 🛠️ Setup Rápido
-
-### 1. Clone o repositório
-```bash
-git clone <repository-url>
-cd flixcrd-web
-```
-
-### 2. Configure as variáveis de ambiente
-```bash
-cp .env.example .env
-# Edite .env com suas credenciais
-```
-
-### 3. Instale as dependências
+1. Instale as dependências:
 ```bash
 npm install
 ```
 
-### 4. Configure o banco de dados
+2. Configure o ambiente:
 ```bash
-# Gere o Prisma client
+cp .env.example .env
+```
+Preencha no `.env` ao menos `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `ADMIN_EMAIL` e `ADMIN_PASSWORD` (mínimo de 12 caracteres).
+
+3. Gere o cliente Prisma e aplique as migrações:
+```bash
 npm run prisma:generate
-
-# Rode as migrations (se necessário)
 npm run prisma:migrate
-
-# Popule o banco com dados iniciais
-npm run prisma:seed
 ```
 
-### 5. Inicie o desenvolvimento
+4. Crie o usuário administrador inicial:
+```bash
+npx prisma db seed
+```
+
+5. Inicie o servidor de desenvolvimento:
 ```bash
 npm run dev
 ```
 
-Acesse http://localhost:3000
+## Variáveis de Ambiente
 
-## 🐳 Docker Setup
+Todas as variáveis utilizadas pelo sistema estão documentadas e agrupadas no arquivo `.env.example`:
 
-### Development
-```bash
-docker-compose up -d
-```
+- **Banco e Cache**: `DATABASE_URL`, `SHADOW_DATABASE_URL`, `REDIS_URL`, `POSTGRES_PASSWORD`
+- **Autenticação e App**: `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `NEXT_PUBLIC_APP_URL`, `CORS_ALLOWED_ORIGINS`
+- **Admin Inicial**: `ADMIN_EMAIL`, `ADMIN_PASSWORD`
+- **Mobile e Frontend**: `NEXT_PUBLIC_APK_URL` (se omitida, oculta o botão de download do APK), `NEXT_PUBLIC_LAB_ENABLED`
+- **Storage Wasabi (Vídeo e Música)**: `WASABI_ACCESS_KEY_ID`, `WASABI_SECRET_ACCESS_KEY`, `WASABI_BUCKET_NAME`, `WASABI_ENDPOINT`, `WASABI_REGION`, `WASABI_CDN_URL`
+- **Serviços Externos**: `TRANSCODER_BASE_URL`, `TMDB_API_KEY`, `OPENSUBTITLES_API_KEY`, `MUSICBRAINZ_*`, `ASAAS_*`, `INTER_*`, `RESEND_*`, `WEBPUSH_VAPID_*`
 
-### Production
-```bash
-docker-compose -f docker-compose.prod.yml up -d
-```
+## Scripts Disponíveis
 
-## 🧪 Testes
-
-```bash
-# Rodar todos os testes
-npm test
-
-# Rodar com coverage
-npm run test:coverage
-
-# Watch mode
-npm run test:watch
-```
-
-## 📊 Estrutura do Projeto
-
-```
-src/
-├── app/                 # App Router (Next.js 13+)
-│   ├── api/            # API routes
-│   ├── admin/          # Admin panel
-│   └── (auth)/         # Auth pages
-├── components/         # React components
-├── lib/               # Utilities e configs
-├── __tests__/         # Test files
-└── middleware.ts      # Next.js middleware
-```
-
-## 🔧 Variáveis de Ambiente
-
-Veja `.env.example` para todas as variáveis necessárias:
-
-- **Database**: PostgreSQL connection string
-- **Auth**: NextAuth configuration
-- **Storage**: Wasabi S3 credentials
-- **External APIs**: TMDB, OpenSubtitles
-- **Push Notifications**: VAPID keys
-
-## 🚀 Deploy
-
-### Vercel (Recomendado)
-```bash
-# Instale Vercel CLI
-npm i -g vercel
-
-# Deploy
-vercel --prod
-```
-
-### Docker
-```bash
-# Build image
-docker build -t flixcrd-web .
-
-# Run container
-docker run -p 3000:3000 flixcrd-web
-```
-
-## 📈 Monitoramento
-
-- **Health Check**: `/api/health`
-- **Logs**: Estruturados com Winston
-- **Metrics**: Prometheus endpoint (se configurado)
-
-## 🔒 Segurança
-
-- **Helmet**: Headers de segurança
-- **Rate Limiting**: Proteção contra abuse
-- **Input Validation**: Zod schemas
-- **Audit Trail**: Logs de ações sensíveis
-
-## 📚 Documentação
-
-- [API Docs](./docs/api/) - Documentação das APIs
-- [Architecture](./docs/architecture/) - Arquitetura do sistema
-- [Operations](./docs/ops/) - Guias operacionais
-
-## 🤝 Contribuindo
-
-1. Fork o projeto
-2. Crie uma feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit suas mudanças (`git commit -m 'Add amazing feature'`)
-4. Push para a branch (`git push origin feature/amazing-feature`)
-5. Abra um Pull Request
-
-## 📄 Licença
-
-Este projeto está sob licença privada.
+- `npm run dev`: inicia o servidor de desenvolvimento Next.js
+- `npm run build`: gera o Prisma Client e compila a aplicação para produção
+- `npm run start`: inicia o servidor de produção
+- `npm run lint`: executa a verificação do ESLint
+- `npm test`: executa a suíte de testes com Jest
+- `npm run test:watch`: executa o Jest em modo watch
+- `npm run test:coverage`: executa o Jest com relatório de cobertura
+- `npm run prisma:generate`: gera o cliente Prisma
+- `npm run prisma:migrate`: executa migrações de desenvolvimento do Prisma
+- `npx prisma db seed`: cria ou atualiza o usuário admin a partir de `ADMIN_EMAIL` e `ADMIN_PASSWORD`

@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
+import { adminDenied } from "@/lib/require-admin";
 
 export async function GET() {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   try {
     const tasks = await prisma.cronTask.findMany({
       orderBy: { name: "asc" },

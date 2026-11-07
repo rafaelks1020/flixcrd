@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import type { CronTask } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { secretsMatch } from "@/lib/safe-equal";
 
 type CronTaskRecord = {
   name: string;
@@ -24,11 +25,16 @@ const DEFAULT_TASKS: CronTaskRecord[] = [
   },
 ];
 
-function resolveUrl(endpoint: string, baseUrl: string) {
-  if (endpoint.startsWith("http://") || endpoint.startsWith("https://")) {
-    return endpoint;
-  }
-  return new URL(endpoint, baseUrl).toString();
+function safeRelativeApiPath(endpoint: string): string | null {
+  if (typeof endpoint !== "string") return null;
+  const path = endpoint.trim();
+  if (!path.startsWith("/api/")) return null;
+  if (path.startsWith("//") || path.includes("//")) return null;
+  if (path.includes("://") || path.includes("\\") || path.includes("..")) return null;
+  const lower = path.toLowerCase();
+  if (lower.includes("%2f") || lower.includes("%5c")) return null;
+  if (/[\u0000-\u001F\u007F]/.test(path)) return null;
+  return path;
 }
 
 async function ensureDefaultTasks() {
@@ -65,11 +71,36 @@ function shouldRun(task: Pick<CronTask, "enabled" | "lastRunAt" | "intervalMinut
 }
 
 async function runTask(task: CronTask, baseUrl: string) {
-  const url = resolveUrl(task.endpoint, baseUrl);
   const startedAt = Date.now();
   let lastStatus: number | null = null;
   let lastError: string | null = null;
   let ok = false;
+
+  const path = safeRelativeApiPath(task.endpoint);
+  if (!path) {
+    lastError = "Endpoint recusado";
+    const durationMs = Date.now() - startedAt;
+    const now = new Date();
+    await prisma.cronTask.update({
+      where: { id: task.id },
+      data: {
+        lastRunAt: now,
+        lastStatus,
+        lastDurationMs: durationMs,
+        lastError,
+      },
+    });
+    return {
+      name: task.name,
+      endpoint: task.endpoint,
+      ok: false,
+      status: lastStatus,
+      durationMs,
+      error: lastError,
+    };
+  }
+
+  const url = new URL(path, baseUrl).toString();
 
   try {
     const res = await fetch(url, {
@@ -115,11 +146,10 @@ async function runTask(task: CronTask, baseUrl: string) {
 }
 
 function isAuthorized(request: NextRequest) {
-  if (!DISPATCH_SECRET) return true;
-  const headerSecret =
-    request.headers.get("x-cron-secret") ??
-    request.nextUrl.searchParams.get("secret");
-  return headerSecret === DISPATCH_SECRET;
+  if (!DISPATCH_SECRET) return false;
+  const headerSecret = request.headers.get("x-cron-secret");
+  if (!headerSecret) return false;
+  return secretsMatch(headerSecret, DISPATCH_SECRET);
 }
 
 async function handler(request: NextRequest) {

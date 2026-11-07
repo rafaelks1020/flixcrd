@@ -4,34 +4,34 @@ const bcrypt = require("bcryptjs");
 const prisma = new PrismaClient();
 
 async function main() {
-  const passwordHash = await bcrypt.hash("admin123", 10);
-  const userPasswordHash = await bcrypt.hash("user123", 10);
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminEmail || !adminPassword) {
+    console.error("Erro: ADMIN_EMAIL e ADMIN_PASSWORD devem estar definidos no ambiente.");
+    process.exit(1);
+  }
+
+  if (adminPassword.length < 12) {
+    console.error("Erro: ADMIN_PASSWORD deve ter pelo menos 12 caracteres.");
+    process.exit(1);
+  }
+
+  const passwordHash = await bcrypt.hash(adminPassword, 10);
 
   const admin = await prisma.user.upsert({
-    where: { email: "admin@flixcrd.local" },
+    where: { email: adminEmail },
     update: {},
     create: {
-      email: "admin@flixcrd.local",
+      email: adminEmail,
       name: "Admin FlixCRD",
       passwordHash,
       role: "ADMIN",
     },
   });
 
-  const user = await prisma.user.upsert({
-    where: { email: "user@flixcrd.local" },
-    update: {},
-    create: {
-      email: "user@flixcrd.local",
-      name: "Usuário FlixCRD",
-      passwordHash: userPasswordHash,
-      role: "USER",
-    },
-  });
-
   console.log("Seed concluído.");
   console.log("Usuário admin:", admin.email);
-  console.log("Usuário comum:", user.email);
 }
 
 main()

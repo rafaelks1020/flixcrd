@@ -14,9 +14,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!password || typeof password !== "string" || password.length < 6) {
+    if (!password || typeof password !== "string" || password.length < 8) {
       return NextResponse.json(
-        { error: "Senha deve ter pelo menos 6 caracteres" },
+        { error: "Senha deve ter pelo menos 8 caracteres" },
         { status: 400 },
       );
     }

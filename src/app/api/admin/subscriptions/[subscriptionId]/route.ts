@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { adminDenied } from "@/lib/require-admin";
 
 // Atualizar assinatura específica
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ subscriptionId: string }> }
 ) {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   try {
     const { subscriptionId } = await params;
     const body = await request.json();
@@ -40,6 +44,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ subscriptionId: string }> }
 ) {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   try {
     const { subscriptionId } = await params;
 

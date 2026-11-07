@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthUser } from "@/lib/auth-mobile";
+import { hasLabAccess } from "@/lib/lab-access";
 import { getAppSettings } from "@/lib/app-settings";
 import { getAvailableTmdbIds } from "@/lib/superflix";
 
@@ -14,17 +15,18 @@ function clampInt(value: string | null, fallback: number, min: number, max: numb
 }
 
 export async function GET(request: NextRequest) {
-  const url = new URL(request.url);
-  const q = url.searchParams.get("q") || "";
-
-  console.log(`[Lab Search] Incoming request for query: "${q}"`);
-
   const user = await getAuthUser(request);
 
   if (!user?.id) {
-    console.warn("[Lab Search] Unauthorized access attempt (no user id)");
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
+  const labOk = await hasLabAccess(user.id, user.role);
+  if (!labOk) {
+    return NextResponse.json({ error: "Acesso ao LAB negado." }, { status: 403 });
+  }
+
+  const url = new URL(request.url);
+  const q = url.searchParams.get("q") || "";
 
   if (!TMDB_KEY) {
     console.error("[Lab Search] TMDB_API_KEY is missing in environment");

@@ -27,7 +27,6 @@ export async function GET(_req: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "Storage Wasabi online",
-      bucket: bucketName,
       objectCount: response.KeyCount ?? 0,
     });
   } catch (error: any) {

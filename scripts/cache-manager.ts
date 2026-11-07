@@ -14,11 +14,16 @@
 // CONFIGURAÇÕES
 // ========================================
 const CLOUDFLARE_CONFIG = {
-  zoneId: "88bf779fc8e2b0dff34261c302b0b121",
-  apiKey: "6983f515cbe2b2233123d5212159ffaba2ecb",
-  email: "seu-email@exemplo.com", // Atualize com seu email
-  baseUrl: "https://hlspaelflix.top",
+  zoneId: process.env.CLOUDFLARE_ZONE_ID ?? "",
+  apiKey: process.env.CLOUDFLARE_API_KEY ?? "",
+  email: process.env.CLOUDFLARE_EMAIL ?? "",
+  baseUrl: process.env.WASABI_CDN_URL ?? "https://hlspaelflix.top",
 };
+
+if (!CLOUDFLARE_CONFIG.zoneId || !CLOUDFLARE_CONFIG.apiKey) {
+  console.error("Defina CLOUDFLARE_ZONE_ID e CLOUDFLARE_API_KEY no ambiente.");
+  process.exit(1);
+}
 
 // ========================================
 // FUNÇÕES

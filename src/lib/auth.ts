@@ -4,6 +4,10 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 
 import { prisma } from "./prisma";
+import { rateLimit } from "./rate-limit-store";
+
+const ACCESS_REFRESH_MS = 5 * 60 * 1000;
+const loginAttemptLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 });
 
 type ExtendedUser = {
   id: string;
@@ -17,7 +21,7 @@ type ExtendedToken = JWT & {
   id?: string;
   role?: string;
   approvalStatus?: string;
-  approvalStatusCheckedAt?: number;
+  accessCheckedAt?: number;
 };
 
 type SessionWithExtendedUser = Session & {
@@ -54,8 +58,14 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        const rawEmail = credentials.email.trim();
+        const attempt = loginAttemptLimit(`login:${rawEmail.toLowerCase()}`);
+        if (!attempt.success) {
+          return null;
+        }
+
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+          where: { email: rawEmail },
         });
 
         if (!user || !user.passwordHash) {
@@ -92,27 +102,34 @@ export const authOptions: NextAuthOptions = {
         extendedToken.id = typedUser.id;
         extendedToken.role = typedUser.role ?? extendedToken.role ?? "USER";
         extendedToken.approvalStatus = typedUser.approvalStatus ?? "PENDING";
+        extendedToken.accessCheckedAt = Date.now();
       }
 
+      // Relê role e aprovação no banco a cada 5 minutos.
+      // Usuário apagado invalida a sessão (o cookie é limpo no fluxo de sessão).
       if (extendedToken.id) {
-        const currentStatus = extendedToken.approvalStatus ?? "PENDING";
         const lastChecked =
-          typeof extendedToken.approvalStatusCheckedAt === "number"
-            ? extendedToken.approvalStatusCheckedAt
+          typeof extendedToken.accessCheckedAt === "number"
+            ? extendedToken.accessCheckedAt
             : 0;
 
-        if (currentStatus !== "APPROVED" && Date.now() - lastChecked > 15000) {
+        if (Date.now() - lastChecked >= ACCESS_REFRESH_MS) {
           try {
             const dbUser = await prisma.user.findUnique({
               where: { id: extendedToken.id },
-              select: { approvalStatus: true },
+              select: { role: true, approvalStatus: true },
             });
-            if (dbUser?.approvalStatus) {
-              extendedToken.approvalStatus = dbUser.approvalStatus;
+            if (!dbUser) {
+              throw new Error("USER_GONE");
             }
-          } catch {
+            extendedToken.role = dbUser.role ?? "USER";
+            extendedToken.approvalStatus = dbUser.approvalStatus ?? "PENDING";
+            extendedToken.accessCheckedAt = Date.now();
+          } catch (error) {
+            if (error instanceof Error && error.message === "USER_GONE") {
+              throw error;
+            }
           }
-          extendedToken.approvalStatusCheckedAt = Date.now();
         }
       }
 

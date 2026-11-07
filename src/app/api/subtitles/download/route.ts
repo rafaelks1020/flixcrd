@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { adminDenied } from "@/lib/require-admin";
 
 /**
  * Download de legenda do OpenSubtitles
@@ -8,12 +7,10 @@ import { authOptions } from "@/lib/auth";
  * Body: { fileId: number }
  */
 export async function POST(request: NextRequest) {
-  try {
-    const session: any = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-    }
+  const denied = await adminDenied();
+  if (denied) return denied;
 
+  try {
     const body = await request.json();
     const { fileId } = body;
 

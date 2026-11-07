@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { adminDenied } from "@/lib/require-admin";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   try {
     const { userId } = await params;
 

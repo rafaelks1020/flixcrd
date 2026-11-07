@@ -3,13 +3,25 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail, Lock, LogIn, Sparkles, ChevronLeft, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+function safeCallbackUrl(raw: string | null): string {
+  if (!raw) return "/";
+  const value = raw.trim();
+  if (!value.startsWith("/")) return "/";
+  if (value.includes("//") || value.includes("\\") || value.includes("://")) return "/";
+  const lower = value.toLowerCase();
+  if (lower.includes("%2f") || lower.includes("%5c")) return "/";
+  return value;
+}
+
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = safeCallbackUrl(searchParams.get("callbackUrl"));
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,7 +41,7 @@ export default function LoginPage() {
       });
 
       if (result && !result.error) {
-        router.push("/");
+        router.push(callbackUrl);
         router.refresh();
         return;
       }

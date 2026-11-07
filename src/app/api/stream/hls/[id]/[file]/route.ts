@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { wasabiClient } from "@/lib/wasabi";
 import { authOptions } from "@/lib/auth";
 import { hasActiveSubscription } from "@/lib/subscription";
+import { isUnsafeFileName } from "@/lib/object-key";
 
 const bucketName = process.env.WASABI_BUCKET_NAME;
 
@@ -64,6 +65,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
   try {
     const { id, file } = await context.params;
+
+    if (isUnsafeFileName(file)) {
+      return NextResponse.json({ error: "Arquivo inválido." }, { status: 400 });
+    }
 
     const title = await prisma.title.findUnique({ where: { id } });
 

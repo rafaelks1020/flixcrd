@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { sendMail } from "@/lib/email";
+import { getClientIP, rateLimit } from "@/lib/rate-limit-store";
+
+const forgotEmailLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 3 });
+const forgotIpLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 10 });
+
+const FORGOT_MESSAGE = "Se o email existir, você receberá um link de recuperação.";
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,17 +21,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const normalizedEmail = email.toLowerCase().trim();
+    const ip = getClientIP(request);
+    const byEmail = forgotEmailLimit(`forgot-email:${normalizedEmail}`);
+    const byIp = forgotIpLimit(`forgot-ip:${ip}`);
+    if (!byEmail.success || !byIp.success) {
+      return NextResponse.json(
+        { error: "Muitas tentativas. Tente novamente mais tarde." },
+        { status: 429 },
+      );
+    }
+
     // Buscar usuário pelo email
     const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() },
+      where: { email: normalizedEmail },
     });
 
-    // Por segurança, sempre retornamos sucesso mesmo se o email não existir
-    // Isso previne que atacantes descubram quais emails estão cadastrados
+    // A resposta é sempre a mesma, exista o email ou não.
     if (!user) {
       return NextResponse.json({
         success: true,
-        message: "Se o email existir, você receberá um link de recuperação.",
+        message: FORGOT_MESSAGE,
       });
     }
 
@@ -114,7 +130,7 @@ Se você não solicitou esta recuperação, ignore este email.
 
     return NextResponse.json({
       success: true,
-      message: "Se o email existir, você receberá um link de recuperação.",
+      message: FORGOT_MESSAGE,
     });
   } catch (error: any) {
     console.error("[ForgotPassword] Erro:", error);

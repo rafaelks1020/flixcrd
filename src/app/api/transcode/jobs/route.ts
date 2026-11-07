@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adminDenied } from "@/lib/require-admin";
 
 const transcoderBaseUrl = process.env.TRANSCODER_BASE_URL;
 
 export async function GET(_request: NextRequest) {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   if (!transcoderBaseUrl) {
     return NextResponse.json(
       { error: "TRANSCODER_BASE_URL não configurado no .env." },

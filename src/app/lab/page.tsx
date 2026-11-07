@@ -25,7 +25,7 @@ export default async function LabPage() {
   const hasAccess = await hasLabAccess(userId, userRole);
 
   if (!hasAccess) {
-    redirect("/");
+    redirect("/subscribe");
   }
 
   return <LabClient isLoggedIn={true} isAdmin={isAdmin} />;

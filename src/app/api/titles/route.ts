@@ -5,6 +5,7 @@ import { getSettings } from "@/lib/settings";
 import cache from "@/lib/cache";
 
 import { getAppSettings } from "@/lib/app-settings";
+import { adminDenied } from "@/lib/require-admin";
 
 const TMDB_API = "https://api.themoviedb.org/3";
 
@@ -248,6 +249,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   try {
     const body = await request.json();
     const { tmdbId, type } = body ?? {};

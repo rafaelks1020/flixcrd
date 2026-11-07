@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAuthUser } from "@/lib/auth-mobile";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 
@@ -14,6 +15,11 @@ function extractImdbId(input: string) {
 }
 
 export async function GET(request: NextRequest) {
+  const user = await getAuthUser(request);
+  if (!user?.id) {
+    return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+  }
+
   const apiKey = process.env.TMDB_API_KEY;
 
   if (!apiKey) {

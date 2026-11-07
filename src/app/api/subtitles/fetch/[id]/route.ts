@@ -5,6 +5,7 @@ import zlib from "zlib";
 import { prisma } from "@/lib/prisma";
 import { wasabiClient } from "@/lib/wasabi";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { adminDenied } from "@/lib/require-admin";
 
 const bucketName = process.env.WASABI_BUCKET_NAME;
 const openSubApiKey = process.env.OPENSUBTITLES_API_KEY;
@@ -43,6 +44,9 @@ async function srtToVtt(srt: string): Promise<string> {
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   if (!bucketName) {
     return NextResponse.json(
       { error: "WASABI_BUCKET_NAME não configurado." },

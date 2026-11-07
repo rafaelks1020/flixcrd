@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthUser } from "@/lib/auth-mobile";
+import { hasLabAccess } from "@/lib/lab-access";
 import { getSuperflixHost } from "@/lib/app-settings";
 
 // Legacy hosts still allowed for backwards compatibility
@@ -96,6 +97,10 @@ async function handleProxy(
 
   if (!user?.id) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+  }
+  const labOk = await hasLabAccess(user.id, user.role);
+  if (!labOk) {
+    return NextResponse.json({ error: "Acesso ao LAB negado." }, { status: 403 });
   }
 
   const { path } = await params;

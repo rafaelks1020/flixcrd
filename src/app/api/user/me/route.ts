@@ -1,39 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import jwt from "jsonwebtoken";
 
 import { prisma } from "@/lib/prisma";
-
-const JWT_SECRET = process.env.NEXTAUTH_SECRET;
-
-function getUserFromToken(request: NextRequest) {
-  if (!JWT_SECRET) {
-    return null;
-  }
-
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  try {
-    return jwt.verify(token, JWT_SECRET) as { id: string; email: string; name: string; role: string };
-  } catch {
-    return null;
-  }
-}
+import { getAuthUser } from "@/lib/auth-mobile";
 
 export async function GET(request: NextRequest) {
-  if (!JWT_SECRET) {
-    return NextResponse.json(
-      { error: "NEXTAUTH_SECRET não configurado" },
-      { status: 500 },
-    );
-  }
+  const authUser = await getAuthUser(request);
 
-  const tokenUser = getUserFromToken(request);
-
-  if (!tokenUser) {
+  if (!authUser) {
     return NextResponse.json(
       { error: "Não autorizado" },
       { status: 401 }
@@ -41,7 +14,7 @@ export async function GET(request: NextRequest) {
   }
 
   const user = await prisma.user.findUnique({
-    where: { id: tokenUser.id },
+    where: { id: authUser.id },
     select: {
       id: true,
       email: true,
@@ -59,8 +32,8 @@ export async function GET(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json(
-      { error: "Usuário não encontrado" },
-      { status: 404 }
+      { error: "Não autorizado" },
+      { status: 401 }
     );
   }
 
@@ -90,16 +63,20 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  if (!JWT_SECRET) {
+  const authUser = await getAuthUser(request);
+
+  if (!authUser) {
     return NextResponse.json(
-      { error: "NEXTAUTH_SECRET não configurado" },
-      { status: 500 },
+      { error: "Não autorizado" },
+      { status: 401 }
     );
   }
 
-  const tokenUser = getUserFromToken(request);
-
-  if (!tokenUser) {
+  const existing = await prisma.user.findUnique({
+    where: { id: authUser.id },
+    select: { id: true },
+  });
+  if (!existing) {
     return NextResponse.json(
       { error: "Não autorizado" },
       { status: 401 }
@@ -109,7 +86,7 @@ export async function PATCH(request: NextRequest) {
   const data = await request.json();
 
   const user = await prisma.user.update({
-    where: { id: tokenUser.id },
+    where: { id: authUser.id },
     data: {
       name: data.name,
     },

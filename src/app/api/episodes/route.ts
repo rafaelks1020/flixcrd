@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { adminDenied } from "@/lib/require-admin";
 
 /**
  * GET /api/episodes?titleId=xxx&season=1&episode=1
@@ -43,6 +44,9 @@ export async function GET(request: NextRequest) {
  * Criar episódio (e temporada se não existir)
  */
 export async function POST(request: NextRequest) {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   try {
     const body = await request.json();
     const { titleId, seasonNumber, episodeNumber, name } = body;

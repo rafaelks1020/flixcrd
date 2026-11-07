@@ -3,10 +3,15 @@ import { CreateMultipartUploadCommand } from "@aws-sdk/client-s3";
 
 import { prisma } from "@/lib/prisma";
 import { wasabiClient } from "@/lib/wasabi";
+import { adminDenied } from "@/lib/require-admin";
+import { isUnsafeFileName } from "@/lib/object-key";
 
 const bucketName = process.env.WASABI_BUCKET_NAME;
 
 export async function POST(request: NextRequest) {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   if (!bucketName) {
     return NextResponse.json(
       { error: "WASABI_BUCKET_NAME não configurado" },
@@ -23,6 +28,10 @@ export async function POST(request: NextRequest) {
         { error: "Campos obrigatórios: filename e (titleId ou episodeId)" },
         { status: 400 },
       );
+    }
+
+    if (typeof filename !== "string" || isUnsafeFileName(filename)) {
+      return NextResponse.json({ error: "Arquivo inválido." }, { status: 400 });
     }
 
     // Upload multipart para episódio específico

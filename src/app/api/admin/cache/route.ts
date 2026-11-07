@@ -8,12 +8,16 @@ import {
   generateHlsUrls,
 } from "@/lib/cloudflare-cache";
 import { prisma } from "@/lib/prisma";
+import { adminDenied } from "@/lib/require-admin";
 
 /**
  * GET /api/admin/cache
  * Retorna status do cache de um título
  */
 export async function GET(request: NextRequest) {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   const slug = request.nextUrl.searchParams.get("slug");
 
   if (!slug) {
@@ -81,6 +85,9 @@ export async function GET(request: NextRequest) {
  * Gerencia cache: purge, warmup, refresh
  */
 export async function POST(request: NextRequest) {
+  const denied = await adminDenied();
+  if (denied) return denied;
+
   try {
     const body = await request.json();
     const { action, slug, seasonNumber, episodeNumber, segmentCount = 100 } = body;

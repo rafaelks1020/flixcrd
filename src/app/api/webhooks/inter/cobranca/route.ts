@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { calculatePeriodEnd } from "@/lib/asaas";
 import { getInterCobrancaDetalhe } from "@/lib/inter";
 import { sendMail } from "@/lib/email";
+import { secretsMatch } from "@/lib/safe-equal";
 
 function getHeader(request: NextRequest, names: string[]): string | null {
   for (const name of names) {
@@ -97,25 +98,21 @@ export async function POST(request: NextRequest) {
       process.env.INTER_BOLETO_WEBHOOK_TOKEN ||
       process.env.INTER_COBRANCA_WEBHOOK_TOKEN;
 
-    const mustValidate = process.env.NODE_ENV === "production" || Boolean(expectedToken);
+    if (!expectedToken) {
+      return NextResponse.json(
+        { error: "INTER_WEBHOOK_TOKEN não configurado" },
+        { status: 503 },
+      );
+    }
 
-    if (mustValidate) {
-      if (!expectedToken) {
-        return NextResponse.json(
-          { error: "INTER_WEBHOOK_TOKEN não configurado" },
-          { status: 500 },
-        );
-      }
+    const receivedToken = getHeader(request, [
+      "x-webhook-token",
+      "x-inter-webhook-token",
+      "inter-webhook-token",
+    ]);
 
-      const receivedToken = getHeader(request, [
-        "x-webhook-token",
-        "x-inter-webhook-token",
-        "inter-webhook-token",
-      ]);
-
-      if (!receivedToken || receivedToken !== expectedToken) {
-        return NextResponse.json({ error: "Webhook não autorizado" }, { status: 401 });
-      }
+    if (!receivedToken || !secretsMatch(receivedToken, expectedToken)) {
+      return NextResponse.json({ error: "Webhook não autorizado" }, { status: 401 });
     }
 
     const payload = await request.json();
