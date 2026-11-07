@@ -9,6 +9,12 @@ jobs:
   call-vercel:
     runs-on: ubuntu-latest
     steps:
-      - name: Call Vercel rodaCron endpoint with bypass token
+      - name: Chama o rodaCron com o segredo do agendador
+        env:
+          CRON_DISPATCH_SECRET: ${{ secrets.CRON_DISPATCH_SECRET }}
+          VERCEL_BYPASS_TOKEN: ${{ secrets.VERCEL_BYPASS_TOKEN }}
+          CRON_URL: ${{ vars.CRON_URL || 'https://homol.pflix.com.br/api/rodaCron' }}
         run: |
-          curl -fSL "https://homol.pflix.com.br/api/rodaCron?x-vercel-set-bypass-cookie=true&x-vercel-protection-bypass=5e2c1f9c4b9c4d2fb7c3a3f1fdc2e0e1"
+          curl -fSL -X POST "$CRON_URL" \
+            -H "x-cron-secret: $CRON_DISPATCH_SECRET" \
+            -H "x-vercel-protection-bypass: $VERCEL_BYPASS_TOKEN"

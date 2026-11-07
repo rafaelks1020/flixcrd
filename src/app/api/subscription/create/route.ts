@@ -284,7 +284,7 @@ Após o pagamento, sua assinatura será ativada automaticamente em alguns minuto
 
       return NextResponse.json({
         success: true,
-        subscription,
+        subscription: { ...subscription, price: Number(subscription.price) },
         pricing: {
           basePrice: pricing.basePrice,
           fee: pricing.fee,
@@ -446,7 +446,7 @@ Após a confirmação do pagamento (até 3 dias úteis), sua assinatura será at
 
       return NextResponse.json({
         success: true,
-        subscription,
+        subscription: { ...subscription, price: Number(subscription.price) },
         pricing: {
           basePrice: pricing.basePrice,
           fee: pricing.fee,
@@ -763,7 +763,7 @@ Acesse o boleto: ${invoiceProxyUrl}
 
     return NextResponse.json({
       success: true,
-      subscription,
+      subscription: { ...subscription, price: Number(subscription.price) },
       pricing: {
         basePrice: pricing.basePrice,
         fee: pricing.fee,

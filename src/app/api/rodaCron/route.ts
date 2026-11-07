@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import type { CronTask } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { secretsMatch } from "@/lib/safe-equal";
+import { cronRequestAuthorized } from "@/lib/safe-equal";
 
 type CronTaskRecord = {
   name: string;
@@ -146,10 +146,8 @@ async function runTask(task: CronTask, baseUrl: string) {
 }
 
 function isAuthorized(request: NextRequest) {
-  if (!DISPATCH_SECRET) return false;
-  const headerSecret = request.headers.get("x-cron-secret");
-  if (!headerSecret) return false;
-  return secretsMatch(headerSecret, DISPATCH_SECRET);
+  // Aceita x-cron-secret (GitHub Actions) ou Authorization: Bearer (Vercel Cron usa CRON_SECRET)
+  return cronRequestAuthorized(request, [DISPATCH_SECRET, process.env.CRON_SECRET]);
 }
 
 async function handler(request: NextRequest) {

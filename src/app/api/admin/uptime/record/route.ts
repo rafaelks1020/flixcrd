@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { collectUptimeSnapshot } from "@/lib/uptime-monitor";
 import { prisma } from "@/lib/prisma";
-import { secretsMatch } from "@/lib/safe-equal";
+import { cronRequestAuthorized } from "@/lib/safe-equal";
 
 function isAuthorized(request: NextRequest) {
-  const secret = process.env.UPTIME_CRON_SECRET;
-  if (!secret) return false;
-  const headerSecret = request.headers.get("x-cron-secret");
-  if (!headerSecret) return false;
-  return secretsMatch(headerSecret, secret);
+  // Aceita x-cron-secret (agendador próprio) ou Authorization: Bearer (Vercel Cron usa CRON_SECRET)
+  return cronRequestAuthorized(request, [process.env.UPTIME_CRON_SECRET, process.env.CRON_SECRET]);
 }
 
 export async function GET(request: NextRequest) {
