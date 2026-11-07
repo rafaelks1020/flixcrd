@@ -53,6 +53,14 @@ export default function Navbar({ isLoggedIn, isAdmin, onSearch: _onSearch }: Nav
               Pflix
             </span>
           </Link>
+          {isLoggedIn && (
+            <Link
+              href="/music"
+              className="md:hidden text-sm font-medium text-fuchsia-300 hover:text-white transition-colors"
+            >
+              Música
+            </Link>
+          )}
 
           {/* Desktop Menu */}
           <div className="hidden md:flex items-center gap-6">
@@ -69,6 +77,12 @@ export default function Navbar({ isLoggedIn, isAdmin, onSearch: _onSearch }: Nav
                   className="text-sm font-medium text-zinc-300 hover:text-white transition-colors"
                 >
                   Catálogo
+                </Link>
+                <Link
+                  href="/music"
+                  className="text-sm font-medium text-zinc-300 hover:text-white transition-colors"
+                >
+                  Música
                 </Link>
                 {/* <Link
                   href="/solicitacoes"

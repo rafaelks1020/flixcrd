@@ -32,7 +32,8 @@ import {
   Menu,
   X,
   Sparkles,
-  Subtitles
+  Subtitles,
+  Music
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -69,6 +70,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { href: "/admin/upload-v2", label: "Upload Center", icon: UploadCloud, hideIfLab: true },
         { href: "/admin/jobs", label: "HLS Forge", icon: Wrench, hideIfLab: true },
         { href: "/admin/subtitles", label: "Legendas", icon: Subtitles, hideIfLab: true },
+        { href: "/admin/music", label: "Música", icon: Music },
         { href: "/admin/solicitacoes", label: "Requests", icon: MessageSquare },
       ],
     },

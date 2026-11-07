@@ -128,6 +128,7 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
   }
 
   // navLinks.push({ href: '/solicitacoes', label: 'Solicitações' });
+  navLinks.push({ href: '/music', label: 'Música' });
   navLinks.push({ href: '/profiles', label: 'Perfis' });
 
   if (showLab && settings.streamingProvider !== "LAB") {
@@ -171,17 +172,21 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
 
           {isLoggedIn && (
             <div className="hidden md:flex items-center gap-6">
-              {navLinks.map((link) => (
+              {navLinks.map((link) => {
+                const active = link.href === "/music"
+                  ? pathname === "/music" || pathname?.startsWith("/music/")
+                  : pathname === link.href;
+                return (
                 <Link
                   key={link.href}
                   href={link.href}
                   className={cn(
                     "text-sm font-medium transition-all duration-300 hover:text-white relative group py-2",
-                    pathname === link.href ? "text-white" : "text-white/60"
+                    active ? "text-white" : "text-white/60"
                   )}
                 >
                   {link.label}
-                  {pathname === link.href && (
+                  {active && (
                     <motion.div
                       layoutId="navbar-indicator"
                       className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary shadow-[0_0_10px_var(--primary)]"
@@ -189,7 +194,8 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
                     />
                   )}
                 </Link>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -396,7 +402,9 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
                 <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     {navLinks.map((link) => {
-                      const isActive = pathname === link.href;
+                      const isActive = link.href === "/music"
+                        ? pathname === "/music" || pathname?.startsWith("/music/")
+                        : pathname === link.href;
                       return (
                         <Link
                           key={link.href}

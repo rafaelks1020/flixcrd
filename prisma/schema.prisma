@@ -454,6 +454,11 @@ model User {
   PixPayment             PixPayment[]
   PresenceSessions       UserPresenceSession[]
   AiLabRecommendations    AiLabRecommendation[]
+  musicPlaylists         Playlist[]
+  musicFavorites         MusicFavorite[]
+  musicPlayHistory       MusicPlayHistory[]
+  playlistCollaborations PlaylistCollaborator[]
+  playlistTracksAdded    PlaylistTrack[]
 }
 
 model AiLabRecommendation {
@@ -584,4 +589,184 @@ enum UserRole {
 enum EmailStatus {
   SUCCESS
   ERROR
+}
+
+
+enum TrackFormat {
+  mp3
+  flac
+  wav
+  aac
+  ogg
+}
+
+enum TrackStatus {
+  READY
+  PENDING_METADATA
+  ERROR
+}
+
+model Artist {
+  id         String   @id @default(cuid())
+  name       String
+  pictureUrl String
+  bannerUrl  String?
+  genres     String[]
+  bio        String?
+  mbid       String?
+  ratingScore Float?
+  ratingVotes Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  albums Album[]
+  tracks Track[]
+
+  @@index([name])
+}
+
+model Album {
+  id          String   @id @default(cuid())
+  title       String
+  year        Int
+  coverUrl    String
+  backdropUrl String?
+  tags        String[]
+  genres      String[]
+  label       String?
+  description String?
+  mbid        String?
+  ratingScore Float?
+  ratingVotes Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  artistId String
+  artist   Artist @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  tracks Track[]
+
+  @@index([artistId])
+  @@index([title])
+}
+
+model Track {
+  id          String      @id @default(cuid())
+  title       String
+  durationSec Int
+  audioUrl    String
+  format      TrackFormat
+  genres      String[]
+  description String?
+  mbid        String?
+  ratingScore Float?
+  ratingVotes Int?
+  trackNumber Int?
+  discNumber  Int?
+  bitrate     Int?
+  sampleRate  Int?
+  status      TrackStatus @default(READY)
+  statusNote  String?
+  lyricsLrc   String?     @db.Text
+  lyricsPlain String?     @db.Text
+  hasLyrics   Boolean     @default(false)
+  playCount   Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  artistId String
+  artist   Artist @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  albumId String
+  album   Album @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  playlists   PlaylistTrack[]
+  favorites   MusicFavorite[]
+  playHistory MusicPlayHistory[]
+
+  @@index([albumId])
+  @@index([artistId])
+  @@index([title])
+  @@index([status])
+  @@index([playCount])
+}
+
+model Playlist {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  userId         String
+  isPublic       Boolean  @default(false)
+  isCollaborative Boolean @default(false)
+  coverUrl       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  owner         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tracks        PlaylistTrack[]
+  collaborators PlaylistCollaborator[]
+
+  @@index([userId])
+  @@index([isPublic])
+}
+
+model PlaylistTrack {
+  id         String   @id @default(cuid())
+  playlistId String
+  trackId    String
+  position   Float    // Float para facilitar reordenação
+  addedBy    String
+  addedAt    DateTime @default(now())
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  track    Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  adder    User     @relation(fields: [addedBy], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, trackId])
+  @@index([playlistId, position])
+}
+
+model PlaylistCollaborator {
+  id         String   @id @default(cuid())
+  playlistId String
+  userId     String
+  role       String   @default("viewer") // owner, editor, viewer
+  addedAt    DateTime @default(now())
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, userId])
+  @@index([playlistId])
+  @@index([userId])
+}
+
+model MusicFavorite {
+  id        String   @id @default(cuid())
+  userId    String
+  trackId   String
+  addedAt   DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, trackId])
+  @@index([userId, addedAt(sort: Desc)])
+  @@index([trackId])
+}
+
+model MusicPlayHistory {
+  id          String   @id @default(cuid())
+  userId      String
+  trackId     String
+  playedAt    DateTime @default(now())
+  durationSec Int      @default(0)  // Quanto tempo ouviu
+  completed   Boolean  @default(false) // Se ouviu >80%
+  source      String?  // "queue", "radio", "search", "playlist"
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@index([userId, playedAt(sort: Desc)])
+  @@index([trackId])
 }

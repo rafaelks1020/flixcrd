@@ -8,6 +8,8 @@ import Toast from './ui/Toast';
 import PresenceHeartbeat from './PresenceHeartbeat';
 
 import { SettingsProvider } from "@/context/SettingsContext";
+import { MusicPlayerProvider } from "@/components/music/PlayerContext";
+import { MusicChrome } from "@/components/music/MusicChrome";
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -25,7 +27,9 @@ export default function Providers({ children, settings }: ProvidersProps) {
         <PresenceHeartbeat />
         <ServiceWorkerRegister />
         <TVNavigation />
-        {children}
+        <MusicPlayerProvider>
+          <MusicChrome>{children}</MusicChrome>
+        </MusicPlayerProvider>
       </SettingsProvider>
     </SessionProvider>
   );
