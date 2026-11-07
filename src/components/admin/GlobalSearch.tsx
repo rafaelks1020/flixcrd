@@ -32,6 +32,7 @@ export default function GlobalSearch() {
   const results = [
     { type: "page", name: "Dashboard", path: "/admin" },
     { type: "page", name: "Catálogo", path: "/admin/catalog" },
+    { type: "page", name: "Upload Inteligente", path: "/admin/upload-smart" },
     { type: "page", name: "Upload", path: "/admin/upload-v2" },
     { type: "page", name: "Jobs HLS", path: "/admin/jobs" },
     { type: "page", name: "Usuários", path: "/admin/users" },

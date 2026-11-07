@@ -63,6 +63,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       icon: Film,
       items: [
         { href: "/admin/catalog", label: "Catálogo", icon: Film },
+        { href: "/admin/upload-smart", label: "Upload Inteligente", icon: Sparkles },
         { href: "/admin/upload-v2", label: "Upload Center", icon: UploadCloud },
         { href: "/admin/jobs", label: "HLS Forge", icon: Wrench },
         { href: "/admin/subtitles", label: "Legendas", icon: Subtitles },

@@ -1,125 +1,58 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+
 import { adminDenied } from "@/lib/require-admin";
+import { claudeConfigured, claudeJson } from "@/lib/ai/claude";
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const DetectSchema = z.object({
+  season: z.number().int().nullable(),
+  episode: z.number().int().nullable(),
+});
 
-interface DetectResult {
-  season: number | null;
-  episode: number | null;
-  confidence: number;
-}
+const SYSTEM = `Você analisa nomes de arquivos de vídeo de séries e anime e extrai temporada e episódio.
+Regras:
+- Se não houver temporada explícita, use 1.
+- Numeração absoluta de anime ("Naruto - 142") vira season 1, episode 142.
+- Algarismo romano no nome da série indica a temporada ("Overlord II - 08" = S2E08).
+- Ano (1999, 2023) e resolução (720p, 1080p, x264) NÃO são episódio.
+- Se não der para identificar o episódio, devolva season e episode nulos.
+Exemplos: "Breaking Bad S01E05.mkv" = 1/5; "Game of Thrones 3x09.mp4" = 3/9; "random_video.mp4" = null/null.`;
 
 /**
  * POST /api/admin/detect-episode
  * Body: { filename: string }
- * 
- * Usa IA (Groq) para detectar temporada e episódio a partir do nome do arquivo
+ * Usa o Claude para detectar temporada e episódio a partir do nome do arquivo.
  */
 export async function POST(request: NextRequest) {
   const denied = await adminDenied();
   if (denied) return denied;
 
   try {
-    const body = await request.json();
-    const { filename } = body;
+    const body = await request.json().catch(() => null);
+    const filename = body?.filename;
 
-    if (!filename || typeof filename !== "string") {
-      return NextResponse.json(
-        { error: "filename é obrigatório" },
-        { status: 400 }
-      );
+    if (!filename || typeof filename !== "string" || filename.length > 500) {
+      return NextResponse.json({ error: "filename é obrigatório" }, { status: 400 });
     }
 
-    if (!GROQ_API_KEY) {
-      return NextResponse.json(
-        { error: "GROQ_API_KEY não configurada no servidor" },
-        { status: 500 }
-      );
+    if (!claudeConfigured()) {
+      return NextResponse.json({ error: "ANTHROPIC_API_KEY não configurada no servidor" }, { status: 503 });
     }
 
-    const prompt = `Analise o nome deste arquivo de vídeo e extraia o número da temporada e do episódio.
-
-Nome do arquivo: "${filename}"
-
-Responda APENAS com um JSON no formato:
-{"season": <número>, "episode": <número>}
-
-Se não conseguir identificar a temporada, use 1.
-Se não conseguir identificar o episódio, retorne {"season": null, "episode": null}
-
-Exemplos:
-- "Breaking Bad S01E05.mkv" → {"season": 1, "episode": 5}
-- "Naruto - 142.mkv" → {"season": 1, "episode": 142}
-- "Game of Thrones 3x09.mp4" → {"season": 3, "episode": 9}
-- "Overlord II - 08.mkv" → {"season": 2, "episode": 8}
-- "random_video.mp4" → {"season": null, "episode": null}`;
-
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "llama-3.1-8b-instant",
-        messages: [
-          {
-            role: "system",
-            content: "Você é um assistente que analisa nomes de arquivos de vídeo e extrai informações de temporada e episódio. Responda APENAS com JSON válido, sem explicações.",
-          },
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-        temperature: 0.1,
-        max_tokens: 100,
-      }),
+    const parsed = await claudeJson({
+      schema: DetectSchema,
+      system: SYSTEM,
+      user: `Nome do arquivo: ${JSON.stringify(filename)}`,
+      maxTokens: 1000,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Groq API error:", errorText);
-      return NextResponse.json(
-        { error: "Erro ao chamar API de IA" },
-        { status: 500 }
-      );
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content?.trim();
-
-    if (!content) {
-      return NextResponse.json(
-        { error: "IA não retornou resposta" },
-        { status: 500 }
-      );
-    }
-
-    // Tentar extrair JSON da resposta
-    let result: DetectResult = { season: null, episode: null, confidence: 0 };
-
-    try {
-      // Procurar por JSON na resposta
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        result = {
-          season: typeof parsed.season === "number" ? parsed.season : null,
-          episode: typeof parsed.episode === "number" ? parsed.episode : null,
-          confidence: parsed.episode !== null ? 85 : 0,
-        };
-      }
-    } catch {
-      console.error("Erro ao parsear resposta da IA:", content);
-    }
-
-    return NextResponse.json(result);
+    return NextResponse.json({
+      season: parsed.episode !== null ? (parsed.season ?? 1) : null,
+      episode: parsed.episode,
+      confidence: parsed.episode !== null ? 85 : 0,
+    });
   } catch (error) {
     console.error("POST /api/admin/detect-episode error:", error);
-    return NextResponse.json(
-      { error: "Erro ao detectar episódio" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Erro ao detectar episódio" }, { status: 500 });
   }
 }

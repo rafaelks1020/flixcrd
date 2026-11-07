@@ -3,6 +3,11 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import {
+  MULTIPART_MAX_RETRIES,
+  uploadMultipartFile as uploadMultipartFileClient,
+} from "@/lib/upload/multipart-client";
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -54,14 +59,6 @@ interface EpisodeSummaryForUpload {
 
 // Usar multipart para qualquer tamanho de arquivo. Mantido como constante para facilitar ajuste futuro.
 const MULTIPART_THRESHOLD_BYTES = 0;
-const MULTIPART_PART_SIZE_BYTES = 64 * 1024 * 1024;
-const MULTIPART_CONCURRENCY = 6;
-const MULTIPART_MAX_RETRIES = 3;
-
-interface UploadedPartInfo {
-  partNumber: number;
-  eTag: string;
-}
 
 // ============================================================================
 // HELPERS
@@ -265,7 +262,7 @@ function detectEpisodeMeticulous(filename: string): ParseResult {
 }
 
 // Fallback com IA para casos impossíveis
-// Chama rota server-side que usa GROQ_API_KEY
+// Chama rota server-side que usa o Claude (ANTHROPIC_API_KEY)
 async function detectEpisodeWithAI(filename: string): Promise<ParseResult | null> {
   try {
     const res = await fetch("/api/admin/detect-episode", {
@@ -285,7 +282,7 @@ async function detectEpisodeWithAI(filename: string): Promise<ParseResult | null
       return {
         season: data.season ?? 1,
         episode: data.episode,
-        type: "IA (Groq)",
+        type: "IA (Claude)",
         absolute: false,
         confidence: data.confidence ?? 85,
       };
@@ -1210,155 +1207,45 @@ export default function UploadV2Page() {
     const controller = new AbortController();
     uploadAbortControllers.current[uploadFile.id] = controller;
 
-    const startRes = await fetch("/api/wasabi/multipart/start", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        titleId,
-        episodeId,
-        filename: uploadFile.file.name,
-        contentType: uploadFile.file.type,
-      }),
-      signal: controller.signal,
+    const result = await uploadMultipartFileClient({
+      file: uploadFile.file,
+      titleId,
+      episodeId,
+      controller,
+      startTime,
+      onRetry: (attempt) => {
+        setUploadFiles((prev) =>
+          prev.map((f) =>
+            f.id === uploadFile.id
+              ? {
+                  ...f,
+                  retryCount:
+                    typeof f.retryCount === "number"
+                      ? Math.max(f.retryCount, attempt)
+                      : attempt,
+                }
+              : f,
+          ),
+        );
+      },
+      onProgress: (info) => {
+        setUploadFiles((prev) =>
+          prev.map((f) =>
+            f.id === uploadFile.id
+              ? {
+                  ...f,
+                  progress: info.progress,
+                  uploadSpeed: info.uploadSpeed,
+                  uploadedBytes: info.uploadedBytes,
+                  estimatedTimeLeft: info.estimatedTimeLeft,
+                }
+              : f,
+          ),
+        );
+      },
     });
 
-    const startJson = await startRes.json();
-    if (!startRes.ok) {
-      throw new Error(startJson?.error ?? "Erro ao iniciar upload multipart");
-    }
-
-    const { uploadId, key } = startJson as { uploadId: string; key: string };
-
-    const file = uploadFile.file;
-    const totalSize = file.size;
-    const partCount = Math.ceil(totalSize / MULTIPART_PART_SIZE_BYTES);
-
-    const parts = Array.from({ length: partCount }, (_, index) => {
-      const partNumber = index + 1;
-      const start = index * MULTIPART_PART_SIZE_BYTES;
-      const end = Math.min(totalSize, start + MULTIPART_PART_SIZE_BYTES);
-      return { partNumber, start, end };
-    });
-
-    let uploadedBytes = 0;
-    const completedParts: UploadedPartInfo[] = [];
-    let currentIndex = 0;
-    let caughtError: Error | null = null;
-
-    const worker = async () => {
-      while (true) {
-        const index = currentIndex;
-        if (index >= parts.length || caughtError) {
-          break;
-        }
-        currentIndex += 1;
-        const part = parts[index];
-
-        try {
-          const blob = file.slice(part.start, part.end);
-
-          let attempt = 0;
-          let success = false;
-          let eTag = "";
-
-          while (attempt < MULTIPART_MAX_RETRIES && !success) {
-            attempt += 1;
-
-            if (attempt > 1) {
-              setUploadFiles((prev) =>
-                prev.map((f) =>
-                  f.id === uploadFile.id
-                    ? {
-                        ...f,
-                        retryCount:
-                          typeof f.retryCount === "number"
-                            ? Math.max(f.retryCount, attempt)
-                            : attempt,
-                      }
-                    : f,
-                ),
-              );
-            }
-
-            const partRes = await fetch("/api/wasabi/multipart/part-url", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ key, uploadId, partNumber: part.partNumber }),
-              signal: controller.signal,
-            });
-
-            const partJson = await partRes.json();
-            if (!partRes.ok) {
-              if (attempt >= MULTIPART_MAX_RETRIES) {
-                throw new Error(
-                  partJson?.error ?? `Erro ao gerar URL da parte ${part.partNumber}`,
-                );
-              }
-              continue;
-            }
-
-            const { uploadUrl } = partJson as { uploadUrl: string };
-
-            const putRes = await fetch(uploadUrl, {
-              method: "PUT",
-              body: blob,
-              signal: controller.signal,
-            });
-
-            if (!putRes.ok) {
-              if (attempt >= MULTIPART_MAX_RETRIES) {
-                throw new Error(
-                  `Erro ao enviar parte ${part.partNumber}: ${putRes.status}`,
-                );
-              }
-              continue;
-            }
-
-            eTag = putRes.headers.get("ETag") || putRes.headers.get("etag") || "";
-            success = true;
-          }
-
-          completedParts.push({ partNumber: part.partNumber, eTag });
-
-          uploadedBytes += blob.size;
-          const elapsed = (Date.now() - startTime) / 1000;
-          const speed = elapsed > 0 ? uploadedBytes / elapsed : 0;
-          const remaining = totalSize - uploadedBytes;
-          const estimatedTimeLeft = speed > 0 ? remaining / speed : 0;
-          const percent = Math.round((uploadedBytes / totalSize) * 100);
-
-          setUploadFiles((prev) =>
-            prev.map((f) =>
-              f.id === uploadFile.id
-                ? {
-                    ...f,
-                    progress: percent,
-                    uploadSpeed: speed,
-                    uploadedBytes,
-                    estimatedTimeLeft,
-                  }
-                : f,
-            ),
-          );
-        } catch (error) {
-          if (controller.signal.aborted) {
-            return;
-          }
-          caughtError = error as Error;
-          return;
-        }
-      }
-    };
-
-    const workerCount = Math.min(MULTIPART_CONCURRENCY, parts.length);
-    const workers: Promise<void>[] = [];
-    for (let i = 0; i < workerCount; i += 1) {
-      workers.push(worker());
-    }
-
-    await Promise.all(workers);
-
-    if (controller.signal.aborted) {
+    if (result === "cancelled") {
       setUploadFiles((prev) =>
         prev.map((f) =>
           f.id === uploadFile.id
@@ -1374,26 +1261,6 @@ export default function UploadV2Page() {
         status: "cancelled",
       });
       return "cancelled" as const;
-    }
-
-    if (caughtError) {
-      throw caughtError;
-    }
-
-    const completeRes = await fetch("/api/wasabi/multipart/complete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        key,
-        uploadId,
-        parts: completedParts.sort((a, b) => a.partNumber - b.partNumber),
-      }),
-      signal: controller.signal,
-    });
-
-    const completeJson = await completeRes.json();
-    if (!completeRes.ok) {
-      throw new Error(completeJson?.error ?? "Erro ao finalizar upload multipart");
     }
 
     return "success" as const;

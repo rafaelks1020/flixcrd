@@ -12,6 +12,8 @@ const customJestConfig = {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   testEnvironment: 'jest-environment-jsdom',
+  // services/* têm runner próprio (node --test).
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/services/'],
   collectCoverageFrom: [
     'src/**/*.{js,jsx,ts,tsx}',
     '!src/**/*.d.ts',
