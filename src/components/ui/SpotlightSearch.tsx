@@ -160,7 +160,7 @@ export default function SpotlightSearch() {
                                                 <p className="text-lg font-black tracking-tight group-hover:text-primary transition-colors line-clamp-1">{item.name}</p>
                                                 <div className="flex items-center gap-3 text-xs font-bold text-zinc-500 uppercase tracking-widest">
                                                     <span className="text-primary/80">{item.type}</span>
-                                                    {item.releaseDate && <span>{new Date(item.releaseDate).getFullYear()}</span>}
+                                                    {item.releaseDate && <span>{new Date(item.releaseDate).getUTCFullYear()}</span>}
                                                 </div>
                                             </div>
                                         </button>

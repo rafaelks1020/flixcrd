@@ -102,7 +102,7 @@ export default function PremiumTitleRow({ title, titles, showNewBadge, onDelete 
               posterUrl={item.posterUrl}
               backdropUrl={item.backdropUrl}
               type={item.type}
-              year={item.releaseDate ? new Date(item.releaseDate).getFullYear() : undefined}
+              year={item.releaseDate ? new Date(item.releaseDate).getUTCFullYear() : undefined}
               rating={item.voteAverage || undefined}
               progress={item.progress}
               genres={item.genres?.map(g => g.name)}

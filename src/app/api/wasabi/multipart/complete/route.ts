@@ -1,3 +1,4 @@
+import { storageEnv } from "@/lib/storage-config";
 import { NextRequest, NextResponse } from "next/server";
 import { CompleteMultipartUploadCommand } from "@aws-sdk/client-s3";
 
@@ -5,7 +6,7 @@ import { wasabiClient } from "@/lib/wasabi";
 import { adminDenied } from "@/lib/require-admin";
 import { isUnsafeObjectKey } from "@/lib/object-key";
 
-const bucketName = process.env.WASABI_BUCKET_NAME;
+const bucketName = storageEnv.bucket;
 
 interface CompletePartInput {
   partNumber: number;

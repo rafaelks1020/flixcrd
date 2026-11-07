@@ -265,7 +265,7 @@ export default function LabTitleClient({
     );
   }
 
-  const year = title.releaseDate ? new Date(title.releaseDate).getFullYear() : null;
+  const year = title.releaseDate ? new Date(title.releaseDate).getUTCFullYear() : null;
 
   return (
     <div className="min-h-screen bg-black">

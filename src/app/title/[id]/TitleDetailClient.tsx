@@ -116,7 +116,7 @@ export default function TitleDetailClient({
     container.scrollBy({ left: delta, behavior: "smooth" });
   };
 
-  const year = title.releaseDate ? new Date(title.releaseDate).getFullYear() : null;
+  const year = title.releaseDate ? new Date(title.releaseDate).getUTCFullYear() : null;
   const rating = title.voteAverage?.toFixed(1);
   const isSeries = title.type === 'SERIES' || title.type === 'ANIME';
 
@@ -346,7 +346,7 @@ export default function TitleDetailClient({
                     posterUrl={item.posterUrl || null}
                     type={item.type || 'MOVIE'}
                     rating={item.voteAverage || undefined}
-                    year={item.releaseDate ? new Date(item.releaseDate).getFullYear() : undefined}
+                    year={item.releaseDate ? new Date(item.releaseDate).getUTCFullYear() : undefined}
                   />
                 </div>
               ))}

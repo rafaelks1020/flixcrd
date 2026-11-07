@@ -39,7 +39,7 @@ export default function TitleCard({
   const [isHovered, setIsHovered] = useState(false);
   const [imageError, setImageError] = useState(false);
 
-  const year = releaseDate ? new Date(releaseDate).getFullYear() : null;
+  const year = releaseDate ? new Date(releaseDate).getUTCFullYear() : null;
 
   return (
     <Link href={href ?? `/title/${id}`}>

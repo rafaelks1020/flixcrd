@@ -1,4 +1,5 @@
 #!/usr/bin/env npx ts-node
+import { storageEnv } from "../src/lib/storage-config";
 /**
  * Cache Manager CLI
  * Gerencia cache do Cloudflare via linha de comando
@@ -17,7 +18,7 @@ const CLOUDFLARE_CONFIG = {
   zoneId: process.env.CLOUDFLARE_ZONE_ID ?? "",
   apiKey: process.env.CLOUDFLARE_API_KEY ?? "",
   email: process.env.CLOUDFLARE_EMAIL ?? "",
-  baseUrl: process.env.WASABI_CDN_URL ?? "https://hlspaelflix.top",
+  baseUrl: storageEnv.cdnUrl ?? "https://hlspaelflix.top",
 };
 
 if (!CLOUDFLARE_CONFIG.zoneId || !CLOUDFLARE_CONFIG.apiKey) {

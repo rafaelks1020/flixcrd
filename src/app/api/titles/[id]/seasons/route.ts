@@ -1,3 +1,4 @@
+import { storageEnv } from "@/lib/storage-config";
 import { NextRequest, NextResponse } from "next/server";
 import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 
@@ -8,7 +9,7 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-const WASABI_BUCKET = process.env.WASABI_BUCKET_NAME;
+const WASABI_BUCKET = storageEnv.bucket;
 
 /**
  * GET /api/titles/[id]/seasons

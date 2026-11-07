@@ -199,7 +199,7 @@ export default function BrowseClient({
                     posterUrl={title.posterUrl}
                     type={title.type}
                     rating={title.voteAverage || undefined}
-                    year={title.releaseDate ? new Date(title.releaseDate).getFullYear() : undefined}
+                    year={title.releaseDate ? new Date(title.releaseDate).getUTCFullYear() : undefined}
                     genres={title.genres?.map(g => g.genre.name)}
                   />
                 </motion.div>

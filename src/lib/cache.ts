@@ -1,43 +1,59 @@
 import { createClient, RedisClientType } from 'redis'
 
-// Redis client singleton
+// Redis client singleton.
+// O Redis é OPCIONAL: sem REDIS_URL o cache fica desligado e cada chamada
+// cai direto no banco. Se a conexão falhar, o cache é ignorado por 60 s,
+// para nenhuma requisição ficar presa esperando o Redis.
 let redisClient: RedisClientType | null = null
+let indisponivelAte = 0
 
 export async function getRedisClient(): Promise<RedisClientType> {
+  const redisUrl = process.env.REDIS_URL
+  if (!redisUrl) {
+    throw new Error('Cache desligado: REDIS_URL não configurada')
+  }
+  if (Date.now() < indisponivelAte) {
+    throw new Error('Cache temporariamente indisponível')
+  }
+
   if (!redisClient) {
-    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379'
-    
     redisClient = createClient({
       url: redisUrl,
       socket: {
-        connectTimeout: 5000,
+        connectTimeout: 3000,
+        // Sem reconexão automática: falha rápido e tenta de novo depois do intervalo
+        reconnectStrategy: false,
       },
     })
 
     redisClient.on('error', (err) => {
-      console.error('Redis Client Error:', err)
-    })
-
-    redisClient.on('connect', () => {
-      console.log('Redis Client Connected')
-    })
-
-    redisClient.on('ready', () => {
-      console.log('Redis Client Ready')
+      console.error('Redis Client Error:', err?.message ?? err)
     })
   }
 
   if (!redisClient.isOpen) {
-    await redisClient.connect()
+    try {
+      await redisClient.connect()
+    } catch (error) {
+      redisClient = null
+      indisponivelAte = Date.now() + 60_000
+      throw error
+    }
   }
 
   return redisClient
 }
 
+// Cache desligado de propósito não é erro: não polui o log
+function logCacheError(op: string, error: unknown) {
+  const msg = error instanceof Error ? error.message : String(error)
+  if (msg.startsWith('Cache desligado') || msg.startsWith('Cache temporariamente')) return
+  console.error(`Cache ${op} error:`, msg)
+}
+
 // Cache helper functions
 export class CacheService {
   private static instance: CacheService
-  private client: RedisClientType | null = null
 
   static getInstance(): CacheService {
     if (!CacheService.instance) {
@@ -47,10 +63,8 @@ export class CacheService {
   }
 
   async getClient(): Promise<RedisClientType> {
-    if (!this.client) {
-      this.client = await getRedisClient()
-    }
-    return this.client
+    // Sempre passa pelo getRedisClient, que respeita o desligamento e a pausa após falha
+    return getRedisClient()
   }
 
   // Get value from cache
@@ -59,7 +73,7 @@ export class CacheService {
       const client = await this.getClient()
       return await client.get(key)
     } catch (error) {
-      console.error('Cache get error:', error)
+      logCacheError('get', error)
       return null
     }
   }
@@ -71,7 +85,7 @@ export class CacheService {
       await client.setEx(key, ttl, value)
       return true
     } catch (error) {
-      console.error('Cache set error:', error)
+      logCacheError('set', error)
       return false
     }
   }
@@ -83,7 +97,7 @@ export class CacheService {
       await client.del(key)
       return true
     } catch (error) {
-      console.error('Cache del error:', error)
+      logCacheError('del', error)
       return false
     }
   }
@@ -95,7 +109,7 @@ export class CacheService {
       const result = await client.exists(key)
       return result === 1
     } catch (error) {
-      console.error('Cache exists error:', error)
+      logCacheError('exists', error)
       return false
     }
   }
@@ -107,7 +121,7 @@ export class CacheService {
       await client.flushDb()
       return true
     } catch (error) {
-      console.error('Cache clear error:', error)
+      logCacheError('clear', error)
       return false
     }
   }
@@ -133,7 +147,7 @@ export class CacheService {
       
       return data
     } catch (error) {
-      console.error('Cache getOrSet error:', error)
+      logCacheError('getOrSet', error)
       // Fallback to direct fetch
       return fetchFn()
     }

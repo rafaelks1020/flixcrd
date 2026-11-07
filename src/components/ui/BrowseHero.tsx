@@ -48,14 +48,16 @@ export default function BrowseHero({ title }: BrowseHeroProps) {
                         <span className="px-2 py-1 bg-red-600 text-[10px] font-black uppercase tracking-widest rounded-sm text-white shadow-lg">
                             Em Destaque
                         </span>
-                        <div className="flex items-center gap-1.5 px-2 py-1 bg-white/10 backdrop-blur-md rounded-md border border-white/10">
-                            <Star size={12} className="text-yellow-400 fill-yellow-400" />
-                            <span className="text-[10px] font-black text-white">
-                                {title.voteAverage ? (title.voteAverage * 10).toFixed(0) : "N/A"}% match
-                            </span>
-                        </div>
+                        {title.voteAverage ? (
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-white/10 backdrop-blur-md rounded-md border border-white/10">
+                                <Star size={12} className="text-yellow-400 fill-yellow-400" />
+                                <span className="text-[10px] font-black text-white">
+                                    {(title.voteAverage * 10).toFixed(0)}% match
+                                </span>
+                            </div>
+                        ) : null}
                         <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                            {title.type === "MOVIE" ? "Filme" : "Série"} • {title.releaseDate ? new Date(title.releaseDate).getFullYear() : "N/A"}
+                            {title.type === "MOVIE" ? "Filme" : "Série"} • {title.releaseDate ? new Date(title.releaseDate).getUTCFullYear() : "N/A"}
                         </span>
                     </div>
 

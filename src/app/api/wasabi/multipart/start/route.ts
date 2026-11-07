@@ -1,3 +1,4 @@
+import { storageEnv } from "@/lib/storage-config";
 import { NextRequest, NextResponse } from "next/server";
 import { CreateMultipartUploadCommand } from "@aws-sdk/client-s3";
 
@@ -6,7 +7,7 @@ import { wasabiClient } from "@/lib/wasabi";
 import { adminDenied } from "@/lib/require-admin";
 import { isUnsafeFileName } from "@/lib/object-key";
 
-const bucketName = process.env.WASABI_BUCKET_NAME;
+const bucketName = storageEnv.bucket;
 
 export async function POST(request: NextRequest) {
   const denied = await adminDenied();

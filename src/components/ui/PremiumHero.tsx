@@ -36,7 +36,7 @@ export default function PremiumHero({ title, isLoggedIn, playHref, infoHref }: P
 
   if (!title) return null;
 
-  const year = title.releaseDate ? new Date(title.releaseDate).getFullYear() : null;
+  const year = title.releaseDate ? new Date(title.releaseDate).getUTCFullYear() : null;
   const rating = title.voteAverage ? title.voteAverage.toFixed(1) : null;
   const playLink = playHref ?? `/title/${title.id}`;
   const infoLink = infoHref ?? `/title/${title.id}`;

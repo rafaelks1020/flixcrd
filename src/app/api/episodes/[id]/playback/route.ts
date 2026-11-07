@@ -1,3 +1,4 @@
+import { storageEnv } from "@/lib/storage-config";
 import { NextRequest, NextResponse } from "next/server";
 import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 
@@ -5,9 +6,9 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth-mobile";
 import { generateStreamToken, isProtectedStreamingEnabled } from "@/lib/stream-token";
 import { wasabiClient } from "@/lib/wasabi";
+import { publicOrSignedUrl } from "@/lib/media-url";
 
-const WASABI_CDN_BASE = process.env.WASABI_CDN_URL;
-const WASABI_BUCKET = process.env.WASABI_BUCKET_NAME;
+const WASABI_BUCKET = storageEnv.bucket;
 
 interface RouteContext {
   params: Promise<{
@@ -73,13 +74,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
           { status: 403 },
         );
       }
-    }
-
-    if (!WASABI_CDN_BASE) {
-      return NextResponse.json(
-        { error: "WASABI_CDN_URL não configurado." },
-        { status: 500 },
-      );
     }
 
     const { id } = await context.params;
@@ -154,15 +148,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
           (obj.Key as string).toLowerCase().endsWith(".vtt"),
         );
 
-        subtitles = subtitleObjects.map((obj) => {
-          const key = obj.Key as string;
-          const { label, language } = inferSubtitleInfoFromKey(key);
-          return {
-            label,
-            language,
-            url: `${WASABI_CDN_BASE}${key}`,
-          };
-        });
+        subtitles = await Promise.all(
+          subtitleObjects.map(async (obj) => {
+            const key = obj.Key as string;
+            const { label, language } = inferSubtitleInfoFromKey(key);
+            return {
+              label,
+              language,
+              url: await publicOrSignedUrl(key),
+            };
+          }),
+        );
       } catch (subErr) {
         console.error("Erro ao listar legendas para episódio", episode.id, subErr);
       }

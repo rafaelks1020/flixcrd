@@ -1,9 +1,10 @@
+import { storageEnv } from "@/lib/storage-config";
 import { NextRequest, NextResponse } from "next/server";
 import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 
 import { wasabiClient } from "@/lib/wasabi";
 
-const bucketName = process.env.WASABI_BUCKET_NAME;
+const bucketName = storageEnv.bucket;
 
 export async function GET(_req: NextRequest) {
   try {

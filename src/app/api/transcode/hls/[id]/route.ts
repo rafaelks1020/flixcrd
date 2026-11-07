@@ -1,3 +1,4 @@
+import { storageEnv } from "@/lib/storage-config";
 import { NextRequest, NextResponse } from "next/server";
 import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 
@@ -5,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { wasabiClient } from "@/lib/wasabi";
 import { adminDenied } from "@/lib/require-admin";
 
-const bucketName = process.env.WASABI_BUCKET_NAME;
+const bucketName = storageEnv.bucket;
 const transcoderBaseUrl = process.env.TRANSCODER_BASE_URL;
 
 interface RouteContext {

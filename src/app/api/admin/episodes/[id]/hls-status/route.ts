@@ -1,3 +1,4 @@
+import { storageEnv } from "@/lib/storage-config";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { ListObjectsV2Command } from "@aws-sdk/client-s3";
@@ -6,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import { wasabiClient } from "@/lib/wasabi";
 
-const bucketName = process.env.WASABI_BUCKET_NAME;
+const bucketName = storageEnv.bucket;
 
 interface RouteContext {
   params: Promise<{

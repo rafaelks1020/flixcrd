@@ -1,3 +1,4 @@
+import { storageEnv } from "@/lib/storage-config";
 import { NextRequest, NextResponse } from "next/server";
 
 import zlib from "zlib";
@@ -7,7 +8,7 @@ import { wasabiClient } from "@/lib/wasabi";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { adminDenied } from "@/lib/require-admin";
 
-const bucketName = process.env.WASABI_BUCKET_NAME;
+const bucketName = storageEnv.bucket;
 const openSubApiKey = process.env.OPENSUBTITLES_API_KEY;
 
 interface RouteContext {

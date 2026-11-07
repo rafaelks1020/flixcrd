@@ -1,6 +1,7 @@
+import { storageEnv } from "@/lib/storage-config";
 import { NextResponse } from "next/server";
 
-const CLOUDFLARE_URL = process.env.WASABI_CDN_URL || "https://hlspaelflix.top/";
+const CLOUDFLARE_URL = storageEnv.cdnUrl || "https://hlspaelflix.top/";
 
 export async function GET() {
   try {

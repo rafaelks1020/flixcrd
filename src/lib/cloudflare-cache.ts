@@ -1,3 +1,4 @@
+import { storageEnv } from "@/lib/storage-config";
 /**
  * Cloudflare Cache Manager
  * Gerencia cache de arquivos HLS no Cloudflare CDN
@@ -10,7 +11,7 @@ const CLOUDFLARE_CONFIG = {
   zoneId: process.env.CLOUDFLARE_ZONE_ID,
   apiKey: process.env.CLOUDFLARE_API_KEY,
   email: process.env.CLOUDFLARE_EMAIL || "",
-  baseUrl: process.env.WASABI_CDN_URL || process.env.HLS_BASE_URL || "https://hlspaelflix.top",
+  baseUrl: storageEnv.cdnUrl || process.env.HLS_BASE_URL || "https://hlspaelflix.top",
 };
 
 function ensureCloudflareCredentials() {

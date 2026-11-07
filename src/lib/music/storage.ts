@@ -1,3 +1,4 @@
+import { storageEnv } from "@/lib/storage-config";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { wasabiClient } from "@/lib/wasabi";
@@ -17,7 +18,7 @@ export function musicKey(...parts: string[]): string {
 }
 
 export function musicBucket(): string {
-  const bucket = process.env.WASABI_BUCKET_NAME;
+  const bucket = storageEnv.bucket;
   if (!bucket) throw new MusicError(503, "Storage não configurado");
   return bucket;
 }

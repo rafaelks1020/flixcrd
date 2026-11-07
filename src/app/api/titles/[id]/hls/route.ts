@@ -1,40 +1,16 @@
+import { storageEnv } from "@/lib/storage-config";
 import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth-mobile";
 import { hasActiveSubscription } from "@/lib/subscription";
 import { isUnsafeObjectKey } from "@/lib/object-key";
-
-const WASABI_CDN_BASE = process.env.WASABI_CDN_URL;
+import { isHlsSegmentReference, playlistCacheControl, publicOrSignedUrl, readObjectText } from "@/lib/media-url";
 
 interface RouteContext {
   params: Promise<{
     id: string;
   }>;
-}
-
-async function streamToString(body: any): Promise<string> {
-  if (!body) return "";
-
-  if (typeof body === "string") return body;
-
-  if (body instanceof Uint8Array) {
-    return new TextDecoder().decode(body);
-  }
-
-  return new Promise<string>((resolve, reject) => {
-    const chunks: Uint8Array[] = [];
-    body.on("data", (chunk: Buffer | Uint8Array) => {
-      chunks.push(chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk));
-    });
-    body.on("end", () => {
-      const merged = Buffer.concat(chunks as any);
-      resolve(merged.toString("utf-8"));
-    });
-    body.on("error", (err: unknown) => {
-      reject(err);
-    });
-  });
 }
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -51,13 +27,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
     return NextResponse.json(
       { error: "Assinatura necessária para assistir." },
       { status: 403 },
-    );
-  }
-
-  if (!WASABI_CDN_BASE) {
-    return NextResponse.json(
-      { error: "WASABI_CDN_URL não configurado." },
-      { status: 500 },
     );
   }
 
@@ -94,36 +63,28 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Arquivo inválido." }, { status: 400 });
     }
 
-    // Busca o playlist diretamente via URL pública
     const playlistPath = variantName ? `${prefix}${variantName}` : `${prefix}master.m3u8`;
-    const playlistUrl = `${WASABI_CDN_BASE}${playlistPath}`;
+    const cdnBase = storageEnv.cdnUrl;
+    const playlistUrl = cdnBase ? `${cdnBase}${playlistPath}` : playlistPath;
 
     console.log(`[HLS] Buscando playlist: ${playlistUrl}`);
-    
-    const response = await fetch(playlistUrl, {
-      // Permite que o Cloudflare cache o playlist
-      cache: 'default',
-      headers: {
-        'Accept': 'application/vnd.apple.mpegurl, */*',
-      },
-    });
-    
-    if (!response.ok) {
-      console.error(`[HLS] Playlist não encontrado: ${playlistUrl} - Status: ${response.status}`);
+
+    const original = await readObjectText(playlistPath);
+
+    if (original == null) {
+      console.error(`[HLS] Playlist não encontrado: ${playlistUrl} - Status: 404`);
       return NextResponse.json(
-        { 
+        {
           error: "Playlist HLS não encontrado.",
           debug: {
             playlistUrl,
             hlsPath: title.hlsPath,
-            status: response.status,
-          }
+            status: 404,
+          },
         },
         { status: 404 },
       );
     }
-
-    const original = await response.text();
 
     const lines = original.split(/\r?\n/);
 
@@ -150,11 +111,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
           return `${url.pathname}?${url.searchParams.toString()}`;
         }
 
-        // Segmentos de vídeo (.ts): sempre URL pública via Wasabi CDN
-        if (trimmed.toLowerCase().endsWith(".ts")) {
+        // Segmento (.ts, .m4s, .aac, .vtt, .key): CDN pública ou URL assinada.
+        if (isHlsSegmentReference(trimmed)) {
           if (isUnsafeObjectKey(trimmed)) return line;
           const objectKey = `${prefix}${trimmed}`;
-          return `${WASABI_CDN_BASE}${objectKey}`;
+          return publicOrSignedUrl(objectKey);
         }
 
         return line;
@@ -167,8 +128,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       status: 200,
       headers: {
         "Content-Type": "application/vnd.apple.mpegurl",
-        // Cache por 5 minutos no browser, revalidar depois
-        "Cache-Control": "public, max-age=300, stale-while-revalidate=60",
+        "Cache-Control": playlistCacheControl(),
       },
     });
   } catch (error) {

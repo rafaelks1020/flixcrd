@@ -1,3 +1,4 @@
+import { storageEnv } from "../src/lib/storage-config";
 /**
  * Script de recuperação: Escaneia o bucket Wasabi e recria títulos no banco
  * baseado nos arquivos de vídeo encontrados.
@@ -11,15 +12,15 @@ import { S3Client, ListObjectsV2Command } from "@aws-sdk/client-s3";
 const prisma = new PrismaClient();
 
 const wasabiClient = new S3Client({
-  endpoint: process.env.WASABI_ENDPOINT || "https://s3.us-east-1.wasabisys.com",
-  region: process.env.WASABI_REGION || "us-east-1",
+  endpoint: storageEnv.endpoint || "https://s3.us-east-1.wasabisys.com",
+  region: storageEnv.region || "us-east-1",
   credentials: {
-    accessKeyId: process.env.WASABI_ACCESS_KEY_ID || "",
-    secretAccessKey: process.env.WASABI_SECRET_ACCESS_KEY || "",
+    accessKeyId: storageEnv.accessKeyId || "",
+    secretAccessKey: storageEnv.secretAccessKey || "",
   },
 });
 
-const bucketName = process.env.WASABI_BUCKET_NAME || "";
+const bucketName = storageEnv.bucket || "";
 
 interface TitleInfo {
   path: string;

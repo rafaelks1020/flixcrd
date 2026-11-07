@@ -35,7 +35,7 @@ export default function HeroSection({ title, isLoggedIn }: HeroSectionProps) {
   if (!title) return null;
 
   const year = title.releaseDate
-    ? new Date(title.releaseDate).getFullYear()
+    ? new Date(title.releaseDate).getUTCFullYear()
     : null;
 
   return (
