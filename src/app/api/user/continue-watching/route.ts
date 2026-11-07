@@ -53,6 +53,7 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: { updatedAt: "desc" },
+      distinct: ["titleId"],
       take: 12,
     });
 

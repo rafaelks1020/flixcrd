@@ -1,3 +1,4 @@
+import { toMoney } from "@/lib/money";
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -164,7 +165,7 @@ export async function POST(request: NextRequest) {
       const subscriptionData = {
         status: 'PENDING',
         plan: planKey,
-        price: pricing.totalPrice,
+        price: toMoney(pricing.totalPrice),
         asaasCustomerId: null,
         asaasPaymentId: null,
         currentPeriodStart: now,
@@ -191,7 +192,7 @@ export async function POST(request: NextRequest) {
           userId: user.id,
           subscriptionId: subscription.id,
           txid,
-          valor: pricing.totalPrice,
+          valor: toMoney(pricing.totalPrice),
           status: 'PENDING',
         },
       });
@@ -201,7 +202,7 @@ export async function POST(request: NextRequest) {
           subscriptionId: subscription.id,
           asaasPaymentId: txid,
           status: 'PENDING',
-          value: pricing.totalPrice,
+          value: toMoney(pricing.totalPrice),
           billingType,
           dueDate: expiresAt,
           paymentDate: null,
@@ -338,7 +339,7 @@ Após o pagamento, sua assinatura será ativada automaticamente em alguns minuto
       const subscriptionData = {
         status: 'PENDING',
         plan: planKey,
-        price: pricing.totalPrice,
+        price: toMoney(pricing.totalPrice),
         asaasCustomerId: null,
         asaasPaymentId: null,
         currentPeriodStart: now,
@@ -365,7 +366,7 @@ Após o pagamento, sua assinatura será ativada automaticamente em alguns minuto
           subscriptionId: subscription.id,
           asaasPaymentId: codigoSolicitacao,
           status: 'PENDING',
-          value: pricing.totalPrice,
+          value: toMoney(pricing.totalPrice),
           billingType,
           dueDate: new Date(dueDate),
           paymentDate: null,
@@ -509,7 +510,7 @@ Após a confirmação do pagamento (até 3 dias úteis), sua assinatura será at
     const subscriptionData = {
       status: isCardApproved ? 'ACTIVE' : 'PENDING',
       plan: planKey,
-      price: pricing.totalPrice,
+      price: toMoney(pricing.totalPrice),
       asaasCustomerId: customer.id,
       asaasPaymentId: payment.id,
       currentPeriodStart: now,
@@ -557,7 +558,7 @@ Após a confirmação do pagamento (até 3 dias úteis), sua assinatura será at
         subscriptionId: subscription.id,
         asaasPaymentId: payment.id,
         status: payment.status,
-        value: pricing.totalPrice,
+        value: toMoney(pricing.totalPrice),
         billingType,
         dueDate: new Date(dueDate),
         paymentDate: isCardApproved ? now : null,
@@ -828,8 +829,9 @@ export async function GET() {
       subscription.currentPeriodEnd && 
       subscription.currentPeriodEnd > now;
 
-    const payments = ((subscription as any).Payment ?? []).map((p: any) => ({
+    const payments = subscription.Payment.map((p) => ({
       ...p,
+      value: Number(p.value),
       invoiceUrl: p.invoiceUrl ? `/api/payments/${p.id}/invoice` : null,
     }));
 
@@ -838,6 +840,8 @@ export async function GET() {
       isActive,
       subscription: {
         ...subscription,
+        price: Number(subscription.price),
+        Payment: subscription.Payment.map((payment) => ({ ...payment, value: Number(payment.value) })),
         payments,
         daysRemaining: isActive && subscription.currentPeriodEnd
           ? Math.ceil((subscription.currentPeriodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))

@@ -1,3 +1,4 @@
+import { toMoney } from "@/lib/money";
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
         userId,
         status: 'ACTIVE',
         plan: 'BASIC',
-        price: 10.0,
+        price: toMoney(10.0),
         currentPeriodStart: now,
         currentPeriodEnd: endDate,
       },
@@ -120,7 +121,7 @@ Acesse: ${appUrl}
 
     return NextResponse.json({
       success: true,
-      subscription,
+      subscription: { ...subscription, price: Number(subscription.price) },
       message: `Assinatura ativada por ${days} dias`,
     });
 

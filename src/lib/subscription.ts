@@ -1,3 +1,4 @@
+import { toMoney } from "@/lib/money";
 import { prisma } from "./prisma";
 import { getServerSession } from "next-auth";
 import type { Session } from "next-auth";
@@ -52,6 +53,7 @@ export async function getSubscriptionDetails(userId: string) {
 
   return {
     ...subscription,
+    price: Number(subscription.price),
     isActive,
     daysRemaining,
   };
@@ -101,7 +103,7 @@ export async function activateSubscription(
       userId,
       status: 'ACTIVE',
       plan: 'BASIC',
-      price: 10.0,
+      price: toMoney(10.0),
       currentPeriodStart: now,
       currentPeriodEnd: endDate,
     },

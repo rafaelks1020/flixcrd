@@ -20,6 +20,7 @@ interface SettingsState {
   // Content
   hideAdultContent: boolean;
   adultContentPin: string;
+  hasAdultContentPin: boolean;
 
   // Categories
   enableMovies: boolean;
@@ -52,12 +53,14 @@ export default function SettingsPage() {
     superflixApiUrl: "https://superflixapi.run",
     hideAdultContent: false,
     adultContentPin: "",
+    hasAdultContentPin: false,
     enableMovies: true,
     enableSeries: true,
     enableAnimes: true,
     enableDoramas: true,
   });
 
+  const [removePin, setRemovePin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
 
@@ -87,7 +90,8 @@ export default function SettingsPage() {
           superflixApiUrl: data.superflixApiUrl || "https://superflixapi.run",
 
           hideAdultContent: Boolean(data.hideAdultContent),
-          adultContentPin: data.adultContentPin || "",
+          adultContentPin: "",
+          hasAdultContentPin: Boolean(data.hasAdultContentPin),
 
           enableMovies: data.enableMovies !== false,
           enableSeries: data.enableSeries !== false,
@@ -124,10 +128,14 @@ export default function SettingsPage() {
   async function handleSave() {
     try {
       setLoading(true);
+      const { adultContentPin, hasAdultContentPin, ...dataToSave } = settings;
       const res = await fetch("/api/admin/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
+        body: JSON.stringify({
+          ...dataToSave,
+          ...(removePin ? { adultContentPin: null } : adultContentPin ? { adultContentPin } : {}),
+        }),
       });
 
       const data = await res.json();
@@ -136,7 +144,8 @@ export default function SettingsPage() {
         throw new Error(data?.error || "Erro ao salvar configurações");
       }
 
-      setSettings(prev => ({ ...prev, ...data }));
+      setSettings(prev => ({ ...prev, ...data, adultContentPin: "" }));
+      setRemovePin(false);
       toast.success("✅ Configurações salvas!");
     } catch (error: any) {
       console.error("Erro ao salvar configurações", error);
@@ -384,15 +393,24 @@ export default function SettingsPage() {
 
             {settings.hideAdultContent && (
               <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
-                <label className="block text-xs text-red-300">PIN de Controle Parental (Opcional)</label>
+                <label htmlFor="adult-content-pin" className="block text-xs text-red-300">PIN de Controle Parental (Opcional)</label>
                 <input
-                  type="text"
+                  id="adult-content-pin"
+                  type="password"
+                  autoComplete="new-password"
+                  disabled={removePin}
                   value={settings.adultContentPin || ""}
                   onChange={(e) => setSettings({ ...settings, adultContentPin: e.target.value })}
-                  placeholder="Ex: 1234"
+                  placeholder={settings.hasAdultContentPin && !removePin ? "PIN definido" : "Ex: 1234"}
                   maxLength={4}
                   className="w-32 rounded-md border border-red-500/30 bg-red-950/30 px-3 py-2 text-sm text-red-100 placeholder:text-red-500/40 focus:border-red-500 focus:outline-none"
                 />
+                {settings.hasAdultContentPin && (
+                  <label className="flex items-center gap-2 text-xs text-red-300">
+                    <input type="checkbox" checked={removePin} onChange={(e) => setRemovePin(e.target.checked)} />
+                    Remover PIN
+                  </label>
+                )}
               </div>
             )}
           </div>

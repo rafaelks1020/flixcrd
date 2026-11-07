@@ -130,7 +130,7 @@ export async function GET(request: NextRequest) {
       id: p.id,
       asaasPaymentId: p.asaasPaymentId,
       status: p.status,
-      value: p.value,
+      value: Number(p.value),
       billingType: p.billingType,
       dueDate: p.dueDate.toISOString(),
       paymentDate: p.paymentDate ? p.paymentDate.toISOString() : null,
@@ -150,7 +150,7 @@ export async function GET(request: NextRequest) {
         currentPeriodEnd: p.Subscription.currentPeriodEnd
           ? p.Subscription.currentPeriodEnd.toISOString()
           : null,
-        price: p.Subscription.price,
+        price: Number(p.Subscription.price),
         user: {
           id: p.Subscription.User.id,
           email: p.Subscription.User.email,

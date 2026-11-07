@@ -1,3 +1,4 @@
+import { toMoney } from "@/lib/money";
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { calculatePeriodEnd } from '@/lib/asaas';
@@ -96,7 +97,7 @@ export async function POST(request: NextRequest) {
             subscriptionId: subscription.id,
             asaasPaymentId: payment.id,
             status: payment.status,
-            value: payment.value,
+            value: toMoney(payment.value),
             billingType: payment.billingType,
             dueDate: new Date(payment.dueDate),
             paymentDate: payment.paymentDate ? new Date(payment.paymentDate) : null,

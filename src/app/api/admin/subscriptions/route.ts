@@ -1,3 +1,4 @@
+import { toMoney } from "@/lib/money";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { adminDenied } from "@/lib/require-admin";
@@ -23,7 +24,7 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json({ subscriptions });
+    return NextResponse.json({ subscriptions: subscriptions.map((subscription) => ({ ...subscription, price: Number(subscription.price) })) });
   } catch (error) {
     console.error("Erro ao buscar assinaturas:", error);
     return NextResponse.json(
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
         data: {
           status,
           plan: plan || existing.plan,
-          price: price || existing.price,
+          price: price ? toMoney(price) : existing.price,
           currentPeriodStart: currentPeriodStart
             ? new Date(currentPeriodStart)
             : undefined,
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
           userId,
           status,
           plan: plan || "BASIC",
-          price: price || 10.00,
+          price: toMoney(price || 10.00),
           currentPeriodStart: currentPeriodStart
             ? new Date(currentPeriodStart)
             : undefined,
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ subscription });
+    return NextResponse.json({ subscription: { ...subscription, price: Number(subscription.price) } });
   } catch (error) {
     console.error("Erro ao criar/atualizar assinatura:", error);
     return NextResponse.json(

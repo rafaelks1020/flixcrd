@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
       const cobValor = parseMoney(cob?.valor?.original);
       const callbackValor = parseMoney(item?.valor);
 
-      const expectedValor = dbPixPayment.valor;
+      const expectedValor = Number(dbPixPayment.valor);
       const receivedValor = cobValor ?? callbackValor;
 
       if (receivedValor == null || !almostEqualMoney(receivedValor, expectedValor)) {
@@ -215,7 +215,7 @@ export async function POST(request: NextRequest) {
                 event: "INTER_PIX_PAID",
               },
               context: {
-                value: dbPixPayment.valor,
+                value: Number(dbPixPayment.valor),
                 status: "RECEIVED",
               },
               html: `

@@ -64,6 +64,7 @@ export default async function PaymentsPage() {
 
     payments = raw.map((p) => ({
       ...p,
+      value: Number(p.value),
       dueDate: p.dueDate.toISOString(),
       paymentDate: p.paymentDate ? p.paymentDate.toISOString() : null,
       invoiceUrl: p.invoiceUrl ? `/api/payments/${p.id}/invoice` : null,
@@ -79,6 +80,7 @@ export default async function PaymentsPage() {
         subscription
           ? {
               ...subscription,
+              price: Number(subscription.price),
               currentPeriodStart: subscription.currentPeriodStart
                 ? subscription.currentPeriodStart.toISOString()
                 : null,

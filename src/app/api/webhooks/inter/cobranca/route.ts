@@ -229,7 +229,7 @@ export async function POST(request: NextRequest) {
               event: "INTER_COBRANCA_PAID",
             },
             context: {
-              value: dbPayment.value,
+              value: Number(dbPayment.value),
               status: "RECEIVED",
             },
             html: `

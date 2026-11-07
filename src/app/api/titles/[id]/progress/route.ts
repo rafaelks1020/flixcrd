@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { saveMovieProgress } from "@/lib/playback-progress";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth-mobile";
 
@@ -70,13 +71,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
       });
     } else {
       // Progresso por título (filmes)
-      progress = await prisma.playbackProgress.findUnique({
-        where: {
-          profileId_titleId: {
-            profileId,
-            titleId: id,
-          },
-        },
+      progress = await prisma.playbackProgress.findFirst({
+        where: { profileId, titleId: id, episodeId: null },
         select: {
           positionSeconds: true,
           durationSeconds: true,
@@ -160,25 +156,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         },
       });
     } else {
-      // Filme (ou fallback): chave única por (profileId, titleId)
-      await prisma.playbackProgress.upsert({
-        where: {
-          profileId_titleId: {
-            profileId,
-            titleId: id,
-          },
-        },
-        update: {
-          positionSeconds,
-          durationSeconds,
-        },
-        create: {
-          profileId,
-          titleId: id,
-          positionSeconds,
-          durationSeconds,
-        },
-      });
+      await saveMovieProgress({ profileId, titleId: id, positionSeconds, durationSeconds });
     }
 
     return NextResponse.json({ ok: true });

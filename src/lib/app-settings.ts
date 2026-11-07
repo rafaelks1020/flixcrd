@@ -8,6 +8,7 @@
  * - Category toggles
  */
 
+import { compare, hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
 export interface AppSettingsData {
@@ -27,7 +28,7 @@ export interface AppSettingsData {
 
     // Content Filtering
     hideAdultContent: boolean;
-    adultContentPin: string | null;
+    hasAdultContentPin: boolean;
 
     // Categories
     enableMovies: boolean;
@@ -46,7 +47,7 @@ const DEFAULT_SETTINGS: AppSettingsData = {
     superflixApiUrl: "https://superflixapi.buzz",
     superflixApiHost: "superflixapi.buzz",
     hideAdultContent: true,
-    adultContentPin: null,
+    hasAdultContentPin: false,
     enableMovies: true,
     enableSeries: true,
     enableAnimes: true,
@@ -89,7 +90,7 @@ export async function getAppSettings(): Promise<AppSettingsData> {
                 superflixApiUrl: created.superflixApiUrl,
                 superflixApiHost: created.superflixApiHost,
                 hideAdultContent: created.hideAdultContent,
-                adultContentPin: created.adultContentPin,
+                hasAdultContentPin: Boolean(created.adultContentPin),
                 enableMovies: created.enableMovies,
                 enableSeries: created.enableSeries,
                 enableAnimes: created.enableAnimes,
@@ -106,7 +107,7 @@ export async function getAppSettings(): Promise<AppSettingsData> {
                 superflixApiUrl: settings.superflixApiUrl,
                 superflixApiHost: settings.superflixApiHost,
                 hideAdultContent: settings.hideAdultContent,
-                adultContentPin: settings.adultContentPin,
+                hasAdultContentPin: Boolean(settings.adultContentPin),
                 enableMovies: settings.enableMovies,
                 enableSeries: settings.enableSeries,
                 enableAnimes: settings.enableAnimes,
@@ -126,13 +127,16 @@ export async function getAppSettings(): Promise<AppSettingsData> {
  * Update app settings
  */
 export async function updateAppSettings(
-    data: Partial<AppSettingsData>
+    data: Partial<Omit<AppSettingsData, "hasAdultContentPin">> & { adultContentPin?: string | null }
 ): Promise<AppSettingsData> {
     // Find existing settings
     const existing = await prisma.settings.findFirst();
 
     // Validate and extract host from URL if provided
     const updateData: Record<string, unknown> = { ...data };
+    if (data.adultContentPin !== undefined) {
+        updateData.adultContentPin = data.adultContentPin ? await hash(data.adultContentPin, 12) : null;
+    }
     if (data.superflixApiUrl) {
         try {
             const url = new URL(data.superflixApiUrl);
@@ -168,7 +172,7 @@ export async function updateAppSettings(
         superflixApiUrl: updated.superflixApiUrl,
         superflixApiHost: updated.superflixApiHost,
         hideAdultContent: updated.hideAdultContent,
-        adultContentPin: updated.adultContentPin,
+        hasAdultContentPin: Boolean(updated.adultContentPin),
         enableMovies: updated.enableMovies,
         enableSeries: updated.enableSeries,
         enableAnimes: updated.enableAnimes,
@@ -226,9 +230,20 @@ export async function shouldHideAdultContent(): Promise<boolean> {
  * Verify adult content PIN
  */
 export async function verifyAdultPin(pin: string): Promise<boolean> {
-    const settings = await getAppSettings();
-    if (!settings.adultContentPin) return true; // No PIN set
-    return settings.adultContentPin === pin;
+    const settings = await prisma.settings.findFirst({ select: { id: true, adultContentPin: true } });
+    const savedPin = settings?.adultContentPin;
+    if (!savedPin) return true;
+    if (savedPin.startsWith("$2")) return compare(pin, savedPin);
+    if (savedPin !== pin) return false;
+
+    // Só migra o PIN legado se ele não foi alterado por outro administrador.
+    const result = await prisma.settings.updateMany({
+        where: { id: settings.id, adultContentPin: savedPin },
+        data: { adultContentPin: await hash(pin, 12) },
+    });
+    invalidateSettingsCache();
+    if (result.count === 0) return verifyAdultPin(pin);
+    return true;
 }
 
 /**

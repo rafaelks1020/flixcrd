@@ -58,12 +58,13 @@ export async function GET(request: NextRequest) {
     const origin = request.nextUrl.origin;
     const items = payments.map((p) => ({
       ...p,
+      value: Number(p.value),
       invoiceUrl: p.invoiceUrl ? `${origin}/api/payments/${p.id}/invoice` : null,
     }));
 
     return NextResponse.json({
       hasSubscription: true,
-      subscription,
+      subscription: { ...subscription, price: Number(subscription.price) },
       payments: items,
     });
   } catch (error) {

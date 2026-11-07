@@ -29,7 +29,7 @@ export async function PATCH(
       },
     });
 
-    return NextResponse.json({ subscription });
+    return NextResponse.json({ subscription: { ...subscription, price: Number(subscription.price) } });
   } catch (error) {
     console.error("Erro ao atualizar assinatura:", error);
     return NextResponse.json(

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { getSettings } from "@/lib/settings";
+import { hash } from "bcryptjs";
+import { getSettings, settingsWithoutPin } from "@/lib/settings";
 import { invalidateSettingsCache } from "@/lib/app-settings";
 import { requireAdmin } from "@/lib/require-admin";
 
@@ -106,7 +107,10 @@ export async function PUT(request: NextRequest) {
     // Content Filtering
     if (typeof hideAdultContent === "boolean") data.hideAdultContent = hideAdultContent;
     if (adultContentPin !== undefined) {
-      data.adultContentPin = adultContentPin || null;
+      if (adultContentPin !== null && typeof adultContentPin !== "string") {
+        return NextResponse.json({ error: "PIN inválido." }, { status: 400 });
+      }
+      data.adultContentPin = adultContentPin ? await hash(adultContentPin, 12) : null;
     }
 
     // Categories
@@ -123,7 +127,7 @@ export async function PUT(request: NextRequest) {
     // Invalidate cache so changes take effect immediately
     invalidateSettingsCache();
 
-    return NextResponse.json(updated);
+    return NextResponse.json(settingsWithoutPin(updated));
   } catch (error) {
     console.error("PUT /api/admin/settings error", error);
     return NextResponse.json(

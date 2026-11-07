@@ -115,7 +115,7 @@ model Payment {
   subscriptionId String
   asaasPaymentId String       @unique
   status         String
-  value          Float
+  value          Decimal      @db.Decimal(10, 2)
   billingType    String
   dueDate        DateTime
   paymentDate    DateTime?
@@ -134,7 +134,7 @@ model PixPayment {
   userId            String        @map("user_id")
   subscriptionId    String?       @map("subscription_id")
   txid              String        @unique
-  valor             Float
+  valor             Decimal       @db.Decimal(10, 2)
   status            PixPaymentStatus
   createdAt         DateTime      @default(now()) @map("created_at")
   paidAt            DateTime?     @map("paid_at")
@@ -163,7 +163,7 @@ model PlaybackProgress {
   Title           Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
 
   @@unique([profileId, episodeId])
-  @@unique([profileId, titleId])
+  @@index([profileId, titleId])
   @@index([episodeId])
   @@index([profileId])
   @@index([titleId])
@@ -375,7 +375,7 @@ model Subscription {
   asaasCustomerId     String?
   asaasPaymentId      String?
   asaasSubscriptionId String?
-  price               Float     @default(10.00)
+  price               Decimal   @default(10.00) @db.Decimal(10, 2)
   Payment             Payment[]
   PixPayment          PixPayment[]
   User                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
