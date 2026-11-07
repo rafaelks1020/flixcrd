@@ -1,0 +1,18 @@
+{
+  "name": "pflix-transcoder",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Servico local de conversao HLS VOD para o PFlix",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/e2e.test.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.940.0",
+    "@aws-sdk/lib-storage": "^3.940.0"
+  }
+}

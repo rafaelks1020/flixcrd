@@ -1,0 +1,20 @@
+[Unit]
+Description=PFlix HLS Transcoder Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rafael
+WorkingDirectory=/home/rafael/Jobs/Pessoais/Flix/pflix/services/transcoder
+EnvironmentFile=/home/rafael/Jobs/Pessoais/Flix/pflix/services/transcoder/.env
+ExecStart=/usr/bin/node /home/rafael/Jobs/Pessoais/Flix/pflix/services/transcoder/src/index.js
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

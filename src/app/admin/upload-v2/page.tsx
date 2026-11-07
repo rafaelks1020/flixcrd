@@ -1419,7 +1419,7 @@ export default function UploadV2Page() {
           throw new Error(data?.error ?? "Erro ao iniciar transcodificação");
         }
 
-        const jobCount = data.jobs?.length || 0;
+        const jobCount = (data.queued ?? data.jobs)?.length || 0;
         setInfo(`✅ Transcodificação iniciada para ${jobCount} episódio(s)!`);
         if (notifyOnComplete) {
           showNotification("Transcodificação iniciada", {

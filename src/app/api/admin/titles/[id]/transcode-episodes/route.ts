@@ -10,6 +10,11 @@ import { wasabiClient } from "@/lib/wasabi";
 const bucketName = storageEnv.bucket;
 const transcoderBaseUrl = process.env.TRANSCODER_BASE_URL;
 
+function getTranscoderAuthHeaders(): Record<string, string> {
+  const token = process.env.TRANSCODER_TOKEN;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 interface RouteContext {
   params: Promise<{
     id: string;
@@ -144,7 +149,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
         const transRes = await fetch(`${baseUrl}/jobs/hls`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...getTranscoderAuthHeaders(),
+          },
           body: JSON.stringify({
             bucket: bucketName,
             source_key: sourceKey,

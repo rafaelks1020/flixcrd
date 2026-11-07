@@ -3,6 +3,11 @@ import { adminDenied } from "@/lib/require-admin";
 
 const transcoderBaseUrl = process.env.TRANSCODER_BASE_URL;
 
+function getTranscoderAuthHeaders(): Record<string, string> {
+  const token = process.env.TRANSCODER_TOKEN;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export async function GET(_request: NextRequest) {
   const denied = await adminDenied();
   if (denied) return denied;
@@ -16,7 +21,9 @@ export async function GET(_request: NextRequest) {
 
   try {
     const url = `${transcoderBaseUrl.replace(/\/+$/, "")}/jobs`;
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: getTranscoderAuthHeaders(),
+    });
     const data = await res.json().catch(() => null);
 
     if (!res.ok) {

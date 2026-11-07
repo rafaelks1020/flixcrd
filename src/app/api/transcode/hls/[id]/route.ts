@@ -9,6 +9,11 @@ import { adminDenied } from "@/lib/require-admin";
 const bucketName = storageEnv.bucket;
 const transcoderBaseUrl = process.env.TRANSCODER_BASE_URL;
 
+function getTranscoderAuthHeaders(): Record<string, string> {
+  const token = process.env.TRANSCODER_TOKEN;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 interface RouteContext {
   params: Promise<{
     id: string;
@@ -36,8 +41,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const url = `${transcoderBaseUrl.replace(/\/+$/, "")}/jobs/${jobId}`;
-    const res = await fetch(url);
+    const url = `${transcoderBaseUrl.replace(/\/+$/, "")}/jobs/${encodeURIComponent(jobId)}`;
+    const res = await fetch(url, {
+      headers: getTranscoderAuthHeaders(),
+    });
     const data = await res.json().catch(() => null);
 
     if (!res.ok) {
@@ -149,7 +156,10 @@ export async function POST(_request: NextRequest, context: RouteContext) {
 
     const transRes = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...getTranscoderAuthHeaders(),
+      },
       body: JSON.stringify({
         bucket: bucketName,
         source_key: sourceKey,
