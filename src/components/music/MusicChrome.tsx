@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { PlayerBar } from "./PlayerBar";
 import { usePlayer } from "./PlayerContext";
 
-const HIDDEN_PREFIXES = ["/watch", "/admin", "/lab/watch", "/login"];
+const HIDDEN_PREFIXES = ["/watch", "/admin", "/login"];
 
 export function MusicChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "";

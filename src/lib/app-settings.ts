@@ -1,11 +1,6 @@
 /**
- * App Settings Helper
- * 
- * Provides cached access to app-wide settings including:
- * - Streaming provider (LAB vs WASABI)
- * - SuperFlixAPI URL configuration
- * - Content filtering (+18)
- * - Category toggles
+ * Acesso com cache às configurações globais:
+ * filtro de conteúdo adulto e categorias ativas.
  */
 
 import { compare, hash } from "bcryptjs";
@@ -17,14 +12,6 @@ export interface AppSettingsData {
     siteDescription: string;
     maintenanceMode: boolean;
     allowRegistration: boolean;
-    labEnabled: boolean;
-
-    // Streaming Provider
-    streamingProvider: "LAB" | "WASABI";
-
-    // SuperFlixAPI
-    superflixApiUrl: string;
-    superflixApiHost: string;
 
     // Content Filtering
     hideAdultContent: boolean;
@@ -42,10 +29,6 @@ const DEFAULT_SETTINGS: AppSettingsData = {
     siteDescription: "Sua plataforma de streaming",
     maintenanceMode: false,
     allowRegistration: true,
-    labEnabled: true,
-    streamingProvider: "LAB",
-    superflixApiUrl: "https://superflixapi.buzz",
-    superflixApiHost: "superflixapi.buzz",
     hideAdultContent: true,
     hasAdultContentPin: false,
     enableMovies: true,
@@ -85,10 +68,6 @@ export async function getAppSettings(): Promise<AppSettingsData> {
                 siteDescription: created.siteDescription,
                 maintenanceMode: created.maintenanceMode,
                 allowRegistration: created.allowRegistration,
-                labEnabled: created.labEnabled,
-                streamingProvider: created.streamingProvider as "LAB" | "WASABI",
-                superflixApiUrl: created.superflixApiUrl,
-                superflixApiHost: created.superflixApiHost,
                 hideAdultContent: created.hideAdultContent,
                 hasAdultContentPin: Boolean(created.adultContentPin),
                 enableMovies: created.enableMovies,
@@ -102,10 +81,6 @@ export async function getAppSettings(): Promise<AppSettingsData> {
                 siteDescription: settings.siteDescription,
                 maintenanceMode: settings.maintenanceMode,
                 allowRegistration: settings.allowRegistration,
-                labEnabled: settings.labEnabled,
-                streamingProvider: settings.streamingProvider as "LAB" | "WASABI",
-                superflixApiUrl: settings.superflixApiUrl,
-                superflixApiHost: settings.superflixApiHost,
                 hideAdultContent: settings.hideAdultContent,
                 hasAdultContentPin: Boolean(settings.adultContentPin),
                 enableMovies: settings.enableMovies,
@@ -132,18 +107,9 @@ export async function updateAppSettings(
     // Find existing settings
     const existing = await prisma.settings.findFirst();
 
-    // Validate and extract host from URL if provided
     const updateData: Record<string, unknown> = { ...data };
     if (data.adultContentPin !== undefined) {
         updateData.adultContentPin = data.adultContentPin ? await hash(data.adultContentPin, 12) : null;
-    }
-    if (data.superflixApiUrl) {
-        try {
-            const url = new URL(data.superflixApiUrl);
-            updateData.superflixApiHost = url.host;
-        } catch {
-            // Invalid URL, keep as-is
-        }
     }
 
     let updated;
@@ -167,10 +133,6 @@ export async function updateAppSettings(
         siteDescription: updated.siteDescription,
         maintenanceMode: updated.maintenanceMode,
         allowRegistration: updated.allowRegistration,
-        labEnabled: updated.labEnabled,
-        streamingProvider: updated.streamingProvider as "LAB" | "WASABI",
-        superflixApiUrl: updated.superflixApiUrl,
-        superflixApiHost: updated.superflixApiHost,
         hideAdultContent: updated.hideAdultContent,
         hasAdultContentPin: Boolean(updated.adultContentPin),
         enableMovies: updated.enableMovies,
@@ -191,32 +153,6 @@ export function invalidateSettingsCache(): void {
 // ============================================================================
 // Convenience helpers for APIs
 // ============================================================================
-
-/**
- * Get SuperFlixAPI base URL
- * @example "https://superflixapi.buzz"
- */
-export async function getSuperflixUrl(): Promise<string> {
-    const settings = await getAppSettings();
-    return settings.superflixApiUrl;
-}
-
-/**
- * Get SuperFlixAPI host (for proxy)
- * @example "superflixapi.buzz"
- */
-export async function getSuperflixHost(): Promise<string> {
-    const settings = await getAppSettings();
-    return settings.superflixApiHost;
-}
-
-/**
- * Check if streaming provider is LAB
- */
-export async function isLabProvider(): Promise<boolean> {
-    const settings = await getAppSettings();
-    return settings.streamingProvider === "LAB";
-}
 
 /**
  * Check if adult content should be hidden

@@ -44,10 +44,6 @@ export async function PUT(request: NextRequest) {
       maxUploadSize,
       transcoderCrf,
       deleteSourceAfterTranscode,
-      labEnabled,
-      // New fields
-      streamingProvider,
-      superflixApiUrl,
       hideAdultContent,
       adultContentPin,
       enableMovies,
@@ -62,10 +58,6 @@ export async function PUT(request: NextRequest) {
       maxUploadSize?: number;
       transcoderCrf?: number;
       deleteSourceAfterTranscode?: boolean;
-      labEnabled?: boolean;
-      // New fields
-      streamingProvider?: string;
-      superflixApiUrl?: string;
       hideAdultContent?: boolean;
       adultContentPin?: string | null;
       enableMovies?: boolean;
@@ -86,23 +78,6 @@ export async function PUT(request: NextRequest) {
     if (typeof maxUploadSize === "number" && !Number.isNaN(maxUploadSize)) data.maxUploadSize = maxUploadSize;
     if (typeof transcoderCrf === "number" && !Number.isNaN(transcoderCrf)) data.transcoderCrf = transcoderCrf;
     if (typeof deleteSourceAfterTranscode === "boolean") data.deleteSourceAfterTranscode = deleteSourceAfterTranscode;
-    if (typeof labEnabled === "boolean") data.labEnabled = labEnabled;
-
-    // Streaming Provider
-    if (typeof streamingProvider === "string" && ["LAB", "WASABI"].includes(streamingProvider)) {
-      data.streamingProvider = streamingProvider;
-    }
-
-    // SuperFlixAPI URL (also extract host)
-    if (typeof superflixApiUrl === "string" && superflixApiUrl.trim()) {
-      try {
-        const url = new URL(superflixApiUrl.trim());
-        data.superflixApiUrl = url.origin; // https://superflixapi.buzz
-        data.superflixApiHost = url.host;   // superflixapi.buzz
-      } catch {
-        // Invalid URL, ignore
-      }
-    }
 
     // Content Filtering
     if (typeof hideAdultContent === "boolean") data.hideAdultContent = hideAdultContent;

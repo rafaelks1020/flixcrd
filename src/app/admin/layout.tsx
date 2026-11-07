@@ -37,22 +37,18 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { useSettings } from "@/context/SettingsContext";
 
 interface NavSection {
   title: string;
   icon: any;
-  items: { href: string; label: string; icon: any; hideIfLab?: boolean }[];
+  items: { href: string; label: string; icon: any }[];
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const settings = useSettings();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  const isLab = settings.streamingProvider === "LAB";
-
-  const rawNavSections: NavSection[] = [
+  const navSections: NavSection[] = [
     {
       title: "Visão Geral",
       icon: LayoutDashboard,
@@ -66,10 +62,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       title: "Intelligence",
       icon: Film,
       items: [
-        { href: "/admin/catalog", label: "Catálogo", icon: Film, hideIfLab: true },
-        { href: "/admin/upload-v2", label: "Upload Center", icon: UploadCloud, hideIfLab: true },
-        { href: "/admin/jobs", label: "HLS Forge", icon: Wrench, hideIfLab: true },
-        { href: "/admin/subtitles", label: "Legendas", icon: Subtitles, hideIfLab: true },
+        { href: "/admin/catalog", label: "Catálogo", icon: Film },
+        { href: "/admin/upload-v2", label: "Upload Center", icon: UploadCloud },
+        { href: "/admin/jobs", label: "HLS Forge", icon: Wrench },
+        { href: "/admin/subtitles", label: "Legendas", icon: Subtitles },
         { href: "/admin/music", label: "Música", icon: Music },
         { href: "/admin/solicitacoes", label: "Requests", icon: MessageSquare },
       ],
@@ -96,11 +92,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       ],
     },
   ];
-
-  const navSections = rawNavSections.map(section => ({
-    ...section,
-    items: section.items.filter(item => !isLab || !item.hideIfLab)
-  })).filter(section => section.items.length > 0);
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};

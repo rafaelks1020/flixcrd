@@ -11,11 +11,6 @@ interface SettingsState {
   maxUploadSize: number;
   transcoderCrf: number;
   deleteSourceAfterTranscode: boolean;
-  labEnabled: boolean;
-
-  // Streaming
-  streamingProvider: "LAB" | "WASABI";
-  superflixApiUrl: string;
 
   // Content
   hideAdultContent: boolean;
@@ -48,9 +43,6 @@ export default function SettingsPage() {
     maxUploadSize: 10,
     transcoderCrf: 20,
     deleteSourceAfterTranscode: true,
-    labEnabled: false,
-    streamingProvider: "LAB",
-    superflixApiUrl: "https://superflixapi.run",
     hideAdultContent: false,
     adultContentPin: "",
     hasAdultContentPin: false,
@@ -84,10 +76,6 @@ export default function SettingsPage() {
           maxUploadSize: Number.isFinite(data.maxUploadSize) ? data.maxUploadSize : 10,
           transcoderCrf: Number.isFinite(data.transcoderCrf) ? data.transcoderCrf : 20,
           deleteSourceAfterTranscode: Boolean(data.deleteSourceAfterTranscode ?? true),
-          labEnabled: Boolean(data.labEnabled),
-
-          streamingProvider: data.streamingProvider || "LAB",
-          superflixApiUrl: data.superflixApiUrl || "https://superflixapi.run",
 
           hideAdultContent: Boolean(data.hideAdultContent),
           adultContentPin: "",
@@ -225,9 +213,8 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Upload & Transcoding */}
-          {settings.streamingProvider !== "LAB" && (
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-5 space-y-4">
+          {/* Upload e transcodificação do catálogo próprio */}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-5 space-y-4">
               <h3 className="text-sm font-semibold">🎬 Upload & Mídia</h3>
 
               <div className="space-y-2">
@@ -271,85 +258,10 @@ export default function SettingsPage() {
                 </label>
               </div>
             </div>
-          )}
         </div>
 
-        {/* Coluna 2: Streaming e Integrações */}
+        {/* Coluna 2: categorias e filtro de conteúdo */}
         <div className="space-y-6">
-
-          {/* Streaming Provider */}
-          <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/10 p-5 space-y-5">
-            <h3 className="text-sm font-semibold flex items-center gap-2 text-emerald-400">
-              ⚡ Streaming Provider
-            </h3>
-
-            <div className="grid grid-cols-2 gap-3">
-              <label className={`
-                cursor-pointer rounded-lg border p-4 flex flex-col items-center gap-2 transition-all
-                ${settings.streamingProvider === "LAB"
-                  ? "border-emerald-500 bg-emerald-500/10 text-emerald-100"
-                  : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700"}
-              `}>
-                <input
-                  type="radio"
-                  name="provider"
-                  value="LAB"
-                  checked={settings.streamingProvider === "LAB"}
-                  onChange={() => setSettings({ ...settings, streamingProvider: "LAB" })}
-                  className="hidden"
-                />
-                <span className="font-bold">LAB (SuperFlix)</span>
-                <span className="text-[10px] opacity-70">Automático • API Externa</span>
-              </label>
-
-              <label className={`
-                cursor-pointer rounded-lg border p-4 flex flex-col items-center gap-2 transition-all
-                ${settings.streamingProvider === "WASABI"
-                  ? "border-emerald-500 bg-emerald-500/10 text-emerald-100"
-                  : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700"}
-              `}>
-                <input
-                  type="radio"
-                  name="provider"
-                  value="WASABI"
-                  checked={settings.streamingProvider === "WASABI"}
-                  onChange={() => setSettings({ ...settings, streamingProvider: "WASABI" })}
-                  className="hidden"
-                />
-                <span className="font-bold">WASABI (Self-Host)</span>
-                <span className="text-[10px] opacity-70">Manual • Armazenamento Próprio</span>
-              </label>
-            </div>
-
-            {settings.streamingProvider === "LAB" && (
-              <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                <label className="block text-xs text-emerald-300">URL da API SuperFlix</label>
-                <input
-                  type="text"
-                  value={settings.superflixApiUrl}
-                  onChange={(e) => setSettings({ ...settings, superflixApiUrl: e.target.value })}
-                  placeholder="https://superflixapi.run"
-                  className="w-full rounded-md border border-emerald-500/30 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-100 placeholder:text-emerald-500/40 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                />
-                <p className="text-[10px] text-emerald-500/60">
-                  Atualize aqui se o domínio da API mudar (ex: .run para .buzz).
-                </p>
-              </div>
-            )}
-
-            <label className="flex items-center gap-3 p-2 rounded-md hover:bg-zinc-900/50 cursor-pointer transition-colors border border-transparent hover:border-zinc-800">
-              <input
-                type="checkbox"
-                checked={settings.labEnabled}
-                onChange={(e) => setSettings({ ...settings, labEnabled: e.target.checked })}
-                className="h-4 w-4 accent-purple-500"
-              />
-              <div className="flex flex-col">
-                <span className="text-sm text-zinc-300">Feature Flag: LAB Enabled</span>
-                <span className="text-xs text-zinc-500">Habilita rotas e funcionalidades experimentais do LAB.</span>
-              </div>
-            </label>
-          </div>
 
           {/* Categorias */}
           <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-5 space-y-4">

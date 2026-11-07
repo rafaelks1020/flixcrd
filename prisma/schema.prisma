@@ -340,15 +340,7 @@ model Settings {
   maxUploadSize              Int      @default(10)
   transcoderCrf              Int      @default(20)
   deleteSourceAfterTranscode Boolean  @default(true)
-  labEnabled                 Boolean  @default(false)
-  
-  // Streaming Provider Toggle
-  streamingProvider          String   @default("LAB") // "LAB" | "WASABI"
-  
-  // SuperFlixAPI Configuration
-  superflixApiUrl            String   @default("https://superflixapi.buzz")
-  superflixApiHost           String   @default("superflixapi.buzz")
-  
+
   // Content Filtering
   hideAdultContent           Boolean  @default(true)
   adultContentPin            String?
@@ -453,27 +445,11 @@ model User {
   Subscription           Subscription?
   PixPayment             PixPayment[]
   PresenceSessions       UserPresenceSession[]
-  AiLabRecommendations    AiLabRecommendation[]
   musicPlaylists         Playlist[]
   musicFavorites         MusicFavorite[]
   musicPlayHistory       MusicPlayHistory[]
   playlistCollaborations PlaylistCollaborator[]
   playlistTracksAdded    PlaylistTrack[]
-}
-
-model AiLabRecommendation {
-  id           String   @id @default(cuid())
-  userId       String
-  queryText    String
-  model        String
-  parsed       Json?
-  seedsResolved Json?
-  results      Json
-  createdAt    DateTime @default(now())
-
-  User User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
 }
 
 model UserFavorite {

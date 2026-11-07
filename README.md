@@ -48,7 +48,7 @@ Todas as variáveis utilizadas pelo sistema estão documentadas e agrupadas no a
 - **Banco e Cache**: `DATABASE_URL`, `SHADOW_DATABASE_URL`, `REDIS_URL`, `POSTGRES_PASSWORD`
 - **Autenticação e App**: `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `NEXT_PUBLIC_APP_URL`, `CORS_ALLOWED_ORIGINS`
 - **Admin Inicial**: `ADMIN_EMAIL`, `ADMIN_PASSWORD`
-- **Mobile e Frontend**: `NEXT_PUBLIC_APK_URL` (se omitida, oculta o botão de download do APK), `NEXT_PUBLIC_LAB_ENABLED`
+- **Mobile e Frontend**: `NEXT_PUBLIC_APK_URL` (se omitida, oculta o botão de download do APK)
 - **Storage Wasabi (Vídeo e Música)**: `WASABI_ACCESS_KEY_ID`, `WASABI_SECRET_ACCESS_KEY`, `WASABI_BUCKET_NAME`, `WASABI_ENDPOINT`, `WASABI_REGION`, `WASABI_CDN_URL`
 - **Serviços Externos**: `TRANSCODER_BASE_URL`, `TMDB_API_KEY`, `OPENSUBTITLES_API_KEY`, `MUSICBRAINZ_*`, `ASAAS_*`, `INTER_*`, `RESEND_*`, `WEBPUSH_VAPID_*`
 

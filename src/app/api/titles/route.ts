@@ -1,109 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { getSettings } from "@/lib/settings";
 import cache from "@/lib/cache";
 
-import { getAppSettings } from "@/lib/app-settings";
 import { adminDenied } from "@/lib/require-admin";
-
-const TMDB_API = "https://api.themoviedb.org/3";
-
-function parseIds(rawText: string): number[] {
-  try {
-    const parsed = JSON.parse(rawText);
-    if (Array.isArray(parsed)) {
-      return parsed.map((id: any) => parseInt(String(id), 10)).filter((n: number) => !Number.isNaN(n));
-    }
-    if (parsed && typeof parsed === "object") {
-      if (Array.isArray(parsed.ids)) {
-        return parsed.ids.map((id: any) => parseInt(String(id), 10)).filter((n: number) => !Number.isNaN(n));
-      }
-      if (Array.isArray(parsed.data)) {
-        return parsed.data.map((item: any) => parseInt(String(item?.id ?? item?.tmdb_id ?? ""), 10)).filter((n: number) => !Number.isNaN(n));
-      }
-    }
-  } catch { /* ignore */ }
-  return rawText.split(/[\n,]/).map((s) => parseInt(s.trim(), 10)).filter((n: number) => !Number.isNaN(n));
-}
-
-async function fetchFromLab(type: string | null, page: number, pageSize: number): Promise<{ data: any[]; total: number; totalPages: number }> {
-  const TMDB_KEY = process.env.TMDB_API_KEY || "";
-  if (!TMDB_KEY) throw new Error("TMDB_API_KEY não configurada.");
-
-  const mediaType = type === "SERIES" ? "tv" : "movie";
-  const superflixCategory = type === "SERIES" ? "serie" : "movie";
-
-  const settings = await getAppSettings();
-  const SUPERFLIX_API = settings.superflixApiUrl;
-
-  const listaRes = await fetch(`${SUPERFLIX_API}/lista?category=${superflixCategory}&type=tmdb&format=json&order=desc`, {
-    headers: { "User-Agent": "FlixCRD-Lab/1.0" },
-    next: { revalidate: 300 },
-  });
-
-  if (!listaRes.ok) throw new Error("Falha ao consultar /lista.");
-
-  const listaText = await listaRes.text();
-  const ids = parseIds(listaText);
-  const idsSet = new Set(ids);
-
-  const results: any[] = [];
-  const seenTmdbIds = new Set<number>();
-  let tmdbPage = page;
-  let scannedPages = 0;
-  let totalPages = 0;
-
-  while (results.length < pageSize && scannedPages < 6) {
-    const params = new URLSearchParams({
-      api_key: TMDB_KEY,
-      language: "pt-BR",
-      sort_by: "popularity.desc",
-      page: String(tmdbPage),
-      include_adult: "false",
-      vote_count_gte: "20",
-    });
-
-    const tmdbUrl = `${TMDB_API}/discover/${mediaType}?${params.toString()}`;
-    const tmdbRes = await fetch(tmdbUrl, { next: { revalidate: 300 } });
-    if (!tmdbRes.ok) break;
-    const tmdbJson = await tmdbRes.json();
-    const pageResults: any[] = tmdbJson?.results ?? [];
-    if (!totalPages) totalPages = tmdbJson?.total_pages || 0;
-
-    for (const item of pageResults) {
-      const tmdbId = item?.id;
-      if (typeof tmdbId !== "number") continue;
-      if (!idsSet.has(tmdbId)) continue;
-      if (seenTmdbIds.has(tmdbId)) continue;
-      seenTmdbIds.add(tmdbId);
-
-      results.push({
-        id: `lab-${mediaType}-${tmdbId}`,
-        tmdbId,
-        name: item?.title || item?.name || "Sem título",
-        slug: `lab-${tmdbId}`,
-        posterUrl: item?.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
-        backdropUrl: item?.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : null,
-        overview: item?.overview || "",
-        voteAverage: typeof item?.vote_average === "number" ? item.vote_average : 0,
-        releaseDate: item?.release_date || item?.first_air_date || null,
-        type: mediaType === "movie" ? "MOVIE" : "SERIES",
-        TitleGenre: [],
-        genres: [],
-      });
-
-      if (results.length >= pageSize) break;
-    }
-
-    scannedPages += 1;
-    tmdbPage += 1;
-    if (tmdbPage > (totalPages || 500)) break;
-    if (pageResults.length === 0) break;
-  }
-
-  return { data: results, total: ids.length, totalPages: Math.ceil(ids.length / pageSize) };
-}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -124,55 +24,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(JSON.parse(cached));
   }
 
-  // Check Lab Mode
-  const settings = await getSettings();
-  const labEnabled = (settings as any).streamingProvider === "LAB";
-
-  if (labEnabled || q) {
-    try {
-      if (q) {
-        console.log(`[Titles API] Direct LAB Search for "${q}"`);
-        const settings = await getAppSettings();
-        const { performLabSearch } = await import("@/lib/lab-search");
-        const { getAvailableTmdbIds } = await import("@/lib/superflix");
-
-        // Use o utilitário centralizado que busca todas as categorias (filmes, séries, animes, doramas)
-        const availableIds = await getAvailableTmdbIds();
-
-        const labData = await performLabSearch(q, {
-          page: 1,
-          limit: pageSize,
-          includeAdult: !settings.hideAdultContent,
-          availableIds
-        });
-
-        return NextResponse.json({
-          data: labData.results || [],
-          page: 1,
-          limit: pageSize,
-          total: labData.results?.length || 0,
-          totalPages: 1,
-          source: "lab",
-        });
-      }
-
-      if (!q && !genre) {
-        const labResult = await fetchFromLab(type ?? null, page, pageSize);
-        return NextResponse.json({
-          data: labResult.data,
-          page,
-          limit: pageSize,
-          total: labResult.total,
-          totalPages: labResult.totalPages,
-          source: "lab",
-        });
-      }
-    } catch (err) {
-      console.error("Lab fetch error, falling back to DB:", err);
-    }
-  }
-
-  // Standard DB fetch
+  // Catálogo próprio (títulos do banco, HLS no bucket).
   const where: any = {};
 
   if (q) {

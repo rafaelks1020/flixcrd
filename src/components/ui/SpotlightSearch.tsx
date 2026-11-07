@@ -138,14 +138,8 @@ export default function SpotlightSearch() {
                                         <button
                                             key={item.id}
                                             onClick={() => {
-                                                setIsOpen(false); // Close search when clicking
-                                                if (item.id.startsWith("lab-")) {
-                                                    const tmdbId = item.id.split("-").pop();
-                                                    const type = item.type === "MOVIE" ? "movie" : "tv";
-                                                    router.push(`/lab/title/${tmdbId}?type=${type}`);
-                                                } else {
-                                                    router.push(`/title/${item.id}`);
-                                                }
+                                                setIsOpen(false);
+                                                router.push(`/title/${item.id}`);
                                             }}
                                             className="group flex items-center gap-4 w-full p-3 rounded-xl hover:bg-white/5 transition-all text-left border border-transparent hover:border-white/5"
                                         >

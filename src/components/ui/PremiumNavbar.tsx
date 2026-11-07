@@ -7,7 +7,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion";
 import { Search, Bell, Menu, X, ChevronDown, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useSettings } from "@/context/SettingsContext";
 
 interface PremiumNavbarProps {
   isLoggedIn: boolean;
@@ -50,10 +49,6 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
   const { scrollY } = useScroll();
   const pathname = usePathname();
   const router = useRouter();
-  const settings = useSettings();
-
-  const showLab = isAdmin || settings.labEnabled;
-  const isLabRoute = pathname?.startsWith("/lab");
 
   // Lock body scroll when mobile menu is open
   useEffect(() => {
@@ -105,8 +100,7 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      // Always push to the unified search page that supports both providers
-      router.push(`/lab/explore?q=${encodeURIComponent(searchQuery)}`);
+      router.push(`/browse?q=${encodeURIComponent(searchQuery)}`);
       setSearchOpen(false);
       setSearchQuery("");
       setMobileMenuOpen(false);
@@ -115,25 +109,10 @@ export default function PremiumNavbar({ isLoggedIn, isAdmin }: PremiumNavbarProp
 
   const navLinks = [
     { href: '/', label: 'Início' },
+    { href: '/browse', label: 'Catálogo' },
+    { href: '/music', label: 'Música' },
+    { href: '/profiles', label: 'Perfis' },
   ];
-
-  if (settings.streamingProvider === "LAB") {
-    navLinks.push({ href: '/lab', label: 'Explorar' });
-    if (settings.enableMovies) navLinks.push({ href: '/lab/filmes', label: 'Filmes' });
-    if (settings.enableSeries) navLinks.push({ href: '/lab/series', label: 'Séries' });
-    if (settings.enableAnimes) navLinks.push({ href: '/lab/animes', label: 'Animes' });
-    if (settings.enableDoramas) navLinks.push({ href: '/lab/doramas', label: 'Doramas' });
-  } else {
-    navLinks.push({ href: '/browse', label: 'Catálogo' });
-  }
-
-  // navLinks.push({ href: '/solicitacoes', label: 'Solicitações' });
-  navLinks.push({ href: '/music', label: 'Música' });
-  navLinks.push({ href: '/profiles', label: 'Perfis' });
-
-  if (showLab && settings.streamingProvider !== "LAB") {
-    navLinks.push({ href: '/lab', label: 'Lab (Beta)' });
-  }
 
   return (
     <>

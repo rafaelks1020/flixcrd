@@ -6,11 +6,6 @@ export interface PublicSettings {
     siteName: string;
     maintenanceMode: boolean;
     allowRegistration: boolean;
-    labEnabled: boolean;
-
-    // Streaming & Categories
-    streamingProvider: string; // "LAB" | "WASABI"
-    superflixApiUrl?: string; // Should we expose this? Maybe just the host if needed, or keeping it hidden is safer.
 
     enableMovies: boolean;
     enableSeries: boolean;
@@ -44,8 +39,6 @@ export function useSettings() {
             siteName: "Pflix",
             maintenanceMode: false,
             allowRegistration: true,
-            labEnabled: true,
-            streamingProvider: "LAB",
             enableMovies: true,
             enableSeries: true,
             enableAnimes: true,

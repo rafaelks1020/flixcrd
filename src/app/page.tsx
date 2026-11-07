@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
-import { getSettings } from "@/lib/settings";
 import { hasActiveSubscription } from "@/lib/subscription";
 import HomeClient from "./HomeClient";
 import LandingPage from "@/components/LandingPage";
@@ -36,18 +35,6 @@ export default async function Home() {
       if (!hasAccess) {
         redirect("/subscribe");
       }
-    }
-  }
-
-  // Verificar Provider Global
-  const settings = await getSettings();
-  if ((settings as any).streamingProvider === "LAB") {
-    // Import helper inline since it's a server component
-    const { hasLabAccess } = await import("@/lib/lab-access");
-    const hasAccess = await hasLabAccess(session.user.id, session.user.role);
-
-    if (hasAccess) {
-      redirect("/lab");
     }
   }
 
