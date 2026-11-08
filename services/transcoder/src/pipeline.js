@@ -269,23 +269,27 @@ export async function runTranscodePipeline({
       bytes_total: bytesTotal,
       files_total: uploadOrder.length,
     };
-    let bytesBefore = 0;
+    let bytesFinished = 0;
+    let filesFinished = 0;
+    const inFlight = new Map(); // arquivo -> bytes ja enviados
     let lastUploadEmit = 0;
 
-    const emitUpload = (idx, currentLoaded, force) => {
+    const emitUpload = (force) => {
       const now = Date.now();
       if (!force && now - lastUploadEmit < 250) return;
       lastUploadEmit = now;
-      const bytesDone = Math.min(bytesTotal, bytesBefore + currentLoaded);
+      let partial = 0;
+      for (const v of inFlight.values()) partial += v;
+      const bytesDone = Math.min(bytesTotal, bytesFinished + partial);
       const mbps = uploadMeter(bytesDone);
       emit(
-        90 + (bytesTotal > 0 ? bytesDone / bytesTotal : (idx + 1) / uploadOrder.length) * 9,
-        `Enviando arquivos HLS (${idx + 1}/${uploadOrder.length})`,
+        90 + (bytesTotal > 0 ? bytesDone / bytesTotal : filesFinished / uploadOrder.length) * 9,
+        `Enviando arquivos HLS (${filesFinished}/${uploadOrder.length})`,
         {
           ...uploadBase,
-          phase_label: `Enviando arquivos (${idx + 1} de ${uploadOrder.length})`,
+          phase_label: `Enviando arquivos (${filesFinished} de ${uploadOrder.length})`,
           bytes_done: bytesDone,
-          files_done: idx,
+          files_done: filesFinished,
           mbps,
           eta_sec: bytesEta(bytesDone, bytesTotal, mbps),
         },
@@ -293,22 +297,44 @@ export async function runTranscodePipeline({
     };
 
     const uploadedKeys = new Set();
-    for (let idx = 0; idx < uploadOrder.length; idx += 1) {
-      const fileName = uploadOrder[idx];
+    const uploadOne = async (fileName) => {
       const destKey = `${job.dest_prefix}${fileName}`;
       const fileSize = sizes.get(fileName) ?? 0;
-
-      emitUpload(idx, 0, true);
+      inFlight.set(fileName, 0);
       await uploadFileToS3({
         s3: s3Client,
         bucket: job.bucket,
         key: destKey,
         filePath: path.join(outputDir, fileName),
         signal,
-        onBytes: (loaded) => emitUpload(idx, Math.min(fileSize, loaded), false),
+        onBytes: (loaded) => {
+          inFlight.set(fileName, Math.min(fileSize, loaded));
+          emitUpload(false);
+        },
       });
-      bytesBefore += fileSize;
+      inFlight.delete(fileName);
+      bytesFinished += fileSize;
+      filesFinished += 1;
       uploadedKeys.add(destKey);
+      emitUpload(false);
+    };
+
+    // Segmentos e legendas em paralelo (cada envio espera a ida e volta ate o storage: um por vez
+    // deixava o link parado). Playlists depois, em ordem, e o master por ultimo.
+    const concurrency = Math.max(1, Number(process.env.TRANSCODER_UPLOAD_CONCURRENCY) || 16);
+    emitUpload(true);
+    let next = 0;
+    const runners = Array.from({ length: Math.min(concurrency, segmentsAndSubs.length) }, async () => {
+      while (next < segmentsAndSubs.length) {
+        if (signal?.aborted) throw new Error("Upload abortado.");
+        const fileName = segmentsAndSubs[next];
+        next += 1;
+        await uploadOne(fileName);
+      }
+    });
+    await Promise.all(runners);
+    for (const fileName of uploadOrder.slice(segmentsAndSubs.length)) {
+      await uploadOne(fileName);
     }
     emit(99, "Envio concluído", {
       ...uploadBase,
