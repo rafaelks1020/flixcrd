@@ -76,6 +76,8 @@ interface FileState {
   status: FileStatus;
   progress: number;
   error?: string;
+  speed?: number;
+  eta?: number;
 }
 
 type GroupRunStatus = "pending" | "running" | "done" | "error";
@@ -648,7 +650,8 @@ export default function UploadSmartPage() {
             episodeId,
             controller,
             startTime: Date.now(),
-            onProgress: (info) => setFile(f.id, { progress: info.progress }),
+            onProgress: (info) =>
+              setFile(f.id, { progress: info.progress, speed: info.uploadSpeed, eta: info.estimatedTimeLeft }),
           });
 
           if (result === "cancelled") {
@@ -1032,7 +1035,13 @@ export default function UploadSmartPage() {
                             {f.confidence}%
                           </span>
                           {st?.status === "completed" && <span className="text-emerald-300">Enviado</span>}
-                          {st?.status === "uploading" && <span className="text-sky-300">{st.progress}%</span>}
+                          {st?.status === "uploading" && (
+                            <span className="text-sky-300">
+                              {st.progress}%
+                              {st.speed ? ` · ${(st.speed / 1048576).toFixed(1)} MB/s` : ""}
+                              {st.eta && st.eta > 0 ? ` · faltam ${formatEta(st.eta)}` : ""}
+                            </span>
+                          )}
                           {st?.status === "error" && <span className="text-red-300">Erro</span>}
                           {st?.status === "skipped" && <span className="text-zinc-400">Ignorado</span>}
                         </div>
@@ -1173,4 +1182,12 @@ export default function UploadSmartPage() {
       )}
     </div>
   );
+}
+
+function formatEta(seconds: number): string {
+  const s = Math.round(seconds);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}min`;
+  return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
 }

@@ -70,6 +70,26 @@ export async function uploadMultipartFile(
   });
 
   let uploadedBytes = 0;
+  /** Bytes já enviados de cada parte em andamento (progresso contínuo, não só ao fim da parte). */
+  const inFlight = new Map<number, number>();
+  let lastReport = 0;
+  const report = (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastReport < 250) return;
+    lastReport = now;
+    let sent = uploadedBytes;
+    for (const v of inFlight.values()) sent += v;
+    sent = Math.min(sent, totalSize);
+    const elapsed = (now - startTime) / 1000;
+    const speed = elapsed > 0 ? sent / elapsed : 0;
+    const remaining = totalSize - sent;
+    onProgress?.({
+      progress: totalSize > 0 ? Math.min(100, Math.floor((sent / totalSize) * 100)) : 100,
+      uploadSpeed: speed,
+      uploadedBytes: sent,
+      estimatedTimeLeft: speed > 0 ? remaining / speed : 0,
+    });
+  };
   const completedParts: UploadedPartInfo[] = [];
   let currentIndex = 0;
   let caughtError: Error | null = null;
@@ -116,38 +136,35 @@ export async function uploadMultipartFile(
 
           const { uploadUrl } = partJson as { uploadUrl: string };
 
-          const putRes = await fetch(uploadUrl, {
-            method: "PUT",
-            body: blob,
-            signal: controller.signal,
-          });
+          let putResult: { status: number; eTag: string };
+          try {
+            putResult = await putWithProgress(uploadUrl, blob, controller.signal, (loaded) => {
+              inFlight.set(part.partNumber, loaded);
+              report();
+            });
+          } catch (err) {
+            inFlight.delete(part.partNumber);
+            if (controller.signal.aborted) throw err;
+            if (attempt >= MULTIPART_MAX_RETRIES) throw err;
+            continue;
+          }
+          inFlight.delete(part.partNumber);
 
-          if (!putRes.ok) {
+          if (putResult.status < 200 || putResult.status >= 300) {
             if (attempt >= MULTIPART_MAX_RETRIES) {
-              throw new Error(`Erro ao enviar parte ${part.partNumber}: ${putRes.status}`);
+              throw new Error(`Erro ao enviar parte ${part.partNumber}: ${putResult.status}`);
             }
             continue;
           }
 
-          eTag = putRes.headers.get("ETag") || putRes.headers.get("etag") || "";
+          eTag = putResult.eTag;
           success = true;
         }
 
         completedParts.push({ partNumber: part.partNumber, eTag });
 
         uploadedBytes += blob.size;
-        const elapsed = (Date.now() - startTime) / 1000;
-        const speed = elapsed > 0 ? uploadedBytes / elapsed : 0;
-        const remaining = totalSize - uploadedBytes;
-        const estimatedTimeLeft = speed > 0 ? remaining / speed : 0;
-        const percent = Math.round((uploadedBytes / totalSize) * 100);
-
-        onProgress?.({
-          progress: percent,
-          uploadSpeed: speed,
-          uploadedBytes,
-          estimatedTimeLeft,
-        });
+        report(true);
       } catch (error) {
         if (controller.signal.aborted) {
           return;
@@ -191,4 +208,37 @@ export async function uploadMultipartFile(
   }
 
   return "success";
+}
+
+/** PUT via XHR para ter progresso por byte (fetch não expõe progresso de envio). */
+function putWithProgress(
+  url: string,
+  body: Blob,
+  signal: AbortSignal,
+  onLoaded: (loaded: number) => void,
+): Promise<{ status: number; eTag: string }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const onAbort = () => xhr.abort();
+    if (signal.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+    xhr.open("PUT", url);
+    xhr.upload.onprogress = (e) => onLoaded(e.loaded);
+    xhr.onload = () => {
+      signal.removeEventListener("abort", onAbort);
+      resolve({ status: xhr.status, eTag: xhr.getResponseHeader("ETag") || "" });
+    };
+    xhr.onerror = () => {
+      signal.removeEventListener("abort", onAbort);
+      reject(new Error("Falha de rede ao enviar parte"));
+    };
+    xhr.onabort = () => {
+      signal.removeEventListener("abort", onAbort);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    xhr.send(body);
+  });
 }
