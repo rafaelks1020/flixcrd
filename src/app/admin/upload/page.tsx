@@ -180,7 +180,7 @@ export default function AdminUploadPage() {
               const responseText = xhr.responseText || xhr.statusText || "Erro desconhecido";
               reject(
                 new Error(
-                  `Falha ao enviar arquivo para o Wasabi (status ${xhr.status}): ${responseText}`,
+                  `Falha ao enviar arquivo para o storage (status ${xhr.status}): ${responseText}`,
                 ),
               );
             }
@@ -190,7 +190,7 @@ export default function AdminUploadPage() {
             const responseText = xhr.responseText || xhr.statusText || "Erro de rede";
             reject(
               new Error(
-                `Erro de rede ao enviar arquivo para o Wasabi: ${responseText}`,
+                `Erro de rede ao enviar arquivo para o storage: ${responseText}`,
               ),
             );
           };
@@ -294,7 +294,7 @@ export default function AdminUploadPage() {
                 const responseText = xhr.responseText || xhr.statusText || "Erro desconhecido";
                 reject(
                   new Error(
-                    `Falha ao enviar parte ${part.partNumber} para o Wasabi (status ${xhr.status}): ${responseText}`,
+                    `Falha ao enviar parte ${part.partNumber} para o storage (status ${xhr.status}): ${responseText}`,
                   ),
                 );
               }
@@ -304,7 +304,7 @@ export default function AdminUploadPage() {
               const responseText = xhr.responseText || xhr.statusText || "Erro de rede";
               reject(
                 new Error(
-                  `Erro de rede ao enviar parte ${part.partNumber} para o Wasabi: ${responseText}`,
+                  `Erro de rede ao enviar parte ${part.partNumber} para o storage: ${responseText}`,
                 ),
               );
             };
@@ -352,7 +352,7 @@ export default function AdminUploadPage() {
           return Math.min(Math.max(base, 2), 16);
         };
 
-        const CONCURRENCY = estimateConcurrency();
+        const CONCURRENCY = Math.min(3, estimateConcurrency());
 
         const worker = async () => {
           while (true) {
@@ -386,7 +386,7 @@ export default function AdminUploadPage() {
         const completeData = await completeRes.json();
         if (!completeRes.ok) {
           throw new Error(
-            completeData?.error ?? "Erro ao finalizar upload multipart no Wasabi",
+            completeData?.error ?? "Erro ao finalizar upload multipart no storage",
           );
         }
 
@@ -410,7 +410,7 @@ export default function AdminUploadPage() {
       );
       setFile(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro no upload para o Wasabi");
+      setError(err instanceof Error ? err.message : "Erro no upload para o storage");
     } finally {
       setUploading(false);
       setUploadProgress(null);
@@ -422,7 +422,7 @@ export default function AdminUploadPage() {
       <div>
         <h2 className="text-2xl font-semibold">Upload / HLS</h2>
         <p className="text-sm text-zinc-400">
-          Envie arquivos de vídeo (ou pastas compactadas com HLS) para o Wasabi e vincule-os a um
+          Envie arquivos de vídeo (ou pastas compactadas com HLS) para o storage e vincule-os a um
           título do catálogo. O caminho HLS fica salvo no próprio título.
         </p>
       </div>
@@ -531,7 +531,7 @@ export default function AdminUploadPage() {
           />
           <p className="text-xs text-zinc-500">
             Você pode enviar um MP4 original ou um pacote HLS (por exemplo, arquivo .zip com
-            segments e manifests). Para filmes, o prefixo no Wasabi é baseado no slug do título;
+            segments e manifests). Para filmes, o prefixo no storage é baseado no slug do título;
             para séries/animes, é baseado no episódio selecionado (temporada/episódio).
           </p>
         </div>
@@ -564,7 +564,7 @@ export default function AdminUploadPage() {
         <p className="font-semibold text-zinc-200">Como isso se integra ao CRUD:</p>
         <ul className="mt-2 list-disc space-y-1 pl-4">
           <li>
-            Cada upload gera um caminho no Wasabi do tipo <code>titles/&lt;slug-do-titulo&gt;/</code> e
+            Cada upload gera um caminho no storage do tipo <code>titles/&lt;slug-do-titulo&gt;/</code> e
             atualiza o campo <code>hlsPath</code> do título.
           </li>
           <li>

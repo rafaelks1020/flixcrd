@@ -6,7 +6,7 @@ const SERVICES_CONFIG = [
   },
   {
     id: "storage",
-    name: "Storage (Wasabi)",
+    name: "Storage",
     path: "/api/status/storage",
   },
   {

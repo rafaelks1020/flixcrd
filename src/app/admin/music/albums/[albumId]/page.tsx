@@ -151,7 +151,7 @@ export default function AdminMusicAlbumEditPage({
 
       setCoverUrl(presignData.key);
       setCoverPreview(URL.createObjectURL(file));
-      setInfoMsg("Capa enviada ao Wasabi. Clique em Salvar para gravar no álbum.");
+      setInfoMsg("Capa enviada ao storage. Clique em Salvar para gravar no álbum.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao enviar capa");
     } finally {

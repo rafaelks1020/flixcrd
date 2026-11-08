@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("POST /api/wasabi/multipart/complete error", error);
     return NextResponse.json(
-      { error: "Erro ao finalizar upload multipart no Wasabi" },
+      { error: "Erro ao finalizar upload multipart no storage" },
       { status: 500 },
     );
   }

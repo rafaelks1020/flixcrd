@@ -210,7 +210,7 @@ export default function AdminMusicTrackEditPage({
       );
 
       setAudioUrl(presignData.key);
-      setInfoMsg("Novo áudio enviado ao Wasabi. Clique em Salvar para confirmar.");
+      setInfoMsg("Novo áudio enviado ao storage. Clique em Salvar para confirmar.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao enviar áudio");
     } finally {
@@ -399,7 +399,7 @@ export default function AdminMusicTrackEditPage({
 
           <div className="md:col-span-2">
             <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">
-              Substituir Áudio no Wasabi (opcional, deixe em branco para manter o atual)
+              Substituir Áudio no storage (opcional, deixe em branco para manter o atual)
             </label>
             <div className="mt-2 flex flex-col sm:flex-row gap-2">
               <input

@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
 
       if (!response.UploadId) {
         return NextResponse.json(
-          { error: "Não foi possível iniciar upload multipart no Wasabi" },
+          { error: "Não foi possível iniciar upload multipart no storage" },
           { status: 500 },
         );
       }
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
 
     if (!response.UploadId) {
       return NextResponse.json(
-        { error: "Não foi possível iniciar upload multipart no Wasabi" },
+        { error: "Não foi possível iniciar upload multipart no storage" },
         { status: 500 },
       );
     }
@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("POST /api/wasabi/multipart/start error", error);
     return NextResponse.json(
-      { error: "Erro ao iniciar upload multipart no Wasabi" },
+      { error: "Erro ao iniciar upload multipart no storage" },
       { status: 500 },
     );
   }

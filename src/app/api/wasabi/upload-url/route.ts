@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("POST /api/wasabi/upload-url error", error);
     return NextResponse.json(
-      { error: "Erro ao gerar URL de upload para Wasabi" },
+      { error: "Erro ao gerar URL de upload no storage" },
       { status: 500 },
     );
   }

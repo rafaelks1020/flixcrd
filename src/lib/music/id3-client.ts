@@ -248,12 +248,12 @@ export function uploadWithProgress(
         onProgress?.(100, body.size, body.size);
         resolve();
       } else {
-        reject(new Error(`Falha no envio ao Wasabi (HTTP ${xhr.status})`));
+        reject(new Error(`Falha no envio ao storage (HTTP ${xhr.status})`));
       }
     };
 
     xhr.onerror = () => {
-      reject(new Error("Erro de rede durante o upload para o Wasabi"));
+      reject(new Error("Erro de rede durante o upload para o storage"));
     };
 
     xhr.send(body);

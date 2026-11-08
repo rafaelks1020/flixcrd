@@ -123,7 +123,7 @@ export default async function AdminMusicPage() {
                 Painel de Música
               </h1>
               <p className="text-zinc-400 text-xs sm:text-sm">
-                Controle do catálogo musical, upload direto ao Wasabi e enriquecimento MusicBrainz
+                Controle do catálogo musical, upload direto ao storage e enriquecimento MusicBrainz
               </p>
             </div>
           </div>
@@ -206,7 +206,7 @@ export default async function AdminMusicPage() {
           </h3>
           <div className="space-y-3 text-sm">
             <div className="flex items-center justify-between py-2 border-b border-white/5">
-              <span className="text-zinc-400">Storage Wasabi</span>
+              <span className="text-zinc-400">Storage</span>
               <span className="text-white font-mono text-xs bg-white/5 px-2.5 py-1 rounded-lg">
                 prefixo music/
               </span>

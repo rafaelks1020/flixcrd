@@ -125,7 +125,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
 
     if (!listed.Contents || listed.Contents.length === 0) {
       return NextResponse.json(
-        { error: "Nenhum arquivo encontrado nesse prefixo no Wasabi." },
+        { error: "Nenhum arquivo encontrado nesse prefixo no storage." },
         { status: 404 },
       );
     }

@@ -76,7 +76,7 @@ export default function AdminHomePage() {
 
   const quickActions = [
     { href: "/admin/catalog", label: "Catálogo", desc: "Manage metadata & TMDB sync", icon: Film, color: "from-primary/20" },
-    { href: "/admin/upload-v2", label: "Upload Center", desc: "Wasabi & S3 storage sync", icon: CloudUpload, color: "from-blue-500/20" },
+    { href: "/admin/upload-v2", label: "Upload Center", desc: "Envio para o storage S3", icon: CloudUpload, color: "from-blue-500/20" },
     { href: "/admin/jobs", label: "HLS Forge", icon: Cpu, desc: "Transcoding queue status", color: "from-orange-500/20" },
     { href: "/admin/users", label: "Users", icon: UserPlus, desc: "Access & permission control", color: "from-emerald-500/20" },
   ];

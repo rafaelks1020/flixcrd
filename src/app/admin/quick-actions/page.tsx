@@ -39,7 +39,7 @@ export default function QuickActionsPage() {
       const data = await res.json();
       
       if (res.ok && data.success) {
-        toast.success("✅ Storage Wasabi online!");
+        toast.success("✅ Storage online!");
       } else {
         toast.error(`❌ Erro: ${data.error || "Falha na conexão com storage"}`);
       }
@@ -213,7 +213,7 @@ export default function QuickActionsPage() {
             </div>
             <div className="flex items-center justify-between">
               <span>Storage:</span>
-              <span className="font-mono text-zinc-300">Wasabi (S3 + Cloudflare)</span>
+              <span className="font-mono text-zinc-300">Storage Box (S3, sem CDN)</span>
             </div>
             <div className="flex items-center justify-between">
               <span>CDN:</span>

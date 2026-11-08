@@ -102,7 +102,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
     if (!result.Body) {
       return NextResponse.json(
-        { error: "Objeto não encontrado no Wasabi." },
+        { error: "Objeto não encontrado no storage." },
         { status: 404 },
       );
     }

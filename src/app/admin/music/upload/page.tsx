@@ -503,7 +503,7 @@ export default function AdminMusicUploadPage() {
           }
         }
 
-        // Garantir artista, album e capa no Wasabi
+        // Garantir artista, album e capa no storage
         const { artistId, albumId, coverKey } = await ensureAlbumContext(
           artistName,
           albumName,
@@ -533,10 +533,10 @@ export default function AdminMusicUploadPage() {
 
         const presign = await presignResp.json().catch(() => null);
         if (!presignResp.ok || !presign?.url || !presign?.key) {
-          throw new Error(presign?.error || "Falha ao obter URL presignada do Wasabi");
+          throw new Error(presign?.error || "Falha ao obter URL presignada do storage");
         }
 
-        // Enviar arquivo direto ao Wasabi com barra de progresso real
+        // Enviar arquivo direto ao storage com barra de progresso real
         await uploadWithProgress(
           presign.url,
           item.file,
@@ -676,7 +676,7 @@ export default function AdminMusicUploadPage() {
                 Upload de Músicas (ID3 + LRC)
               </h1>
               <p className="text-xs text-zinc-400">
-                Leitura de tags ID3 no navegador, pareamento de arquivos .lrc e envio direto ao Wasabi
+                Leitura de tags ID3 no navegador, pareamento de arquivos .lrc e envio direto ao storage
               </p>
             </div>
           </div>
@@ -847,7 +847,7 @@ export default function AdminMusicUploadPage() {
               <div>
                 <div className="font-bold text-white text-sm sm:text-base">
                   {isProcessing
-                    ? "Enviando lote para o Wasabi..."
+                    ? "Enviando lote para o storage..."
                     : "Processamento do lote concluído"}
                 </div>
                 <div className="text-xs text-zinc-400">

@@ -157,7 +157,7 @@ export default function SubtitlesPage() {
     }
   }
 
-  // Baixar legenda automaticamente e salvar no Wasabi
+  // Baixar legenda automaticamente e salvar no storage
   async function downloadSubtitle(subtitle: Subtitle) {
     if (!selectedEpisode) {
       toast.error("Nenhum episódio selecionado");
@@ -175,7 +175,7 @@ export default function SubtitlesPage() {
         return;
       }
 
-      // OpenSubtitles - baixar automaticamente e salvar no Wasabi
+      // OpenSubtitles - baixar automaticamente e salvar no storage
       if (subtitle.source === "OpenSubtitles" && typeof subtitle.fileId === "number") {
         const res = await fetch("/api/subtitles/auto-download", {
           method: "POST",

@@ -33,7 +33,7 @@ export default function SystemStatusPage() {
       icon: "🗄️",
     },
     {
-      name: "Storage (Wasabi)",
+      name: "Storage",
       status: "checking",
       message: "Verificando conexão...",
       icon: "☁️",

@@ -97,7 +97,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const hlsPath = title.hlsPath?.endsWith("/") ? title.hlsPath : `${title.hlsPath}/`;
     const sourceParam = request.nextUrl.searchParams.get("source");
 
-    // Tenta verificar se existe HLS no Wasabi
+    // Tenta verificar se existe HLS no storage
     try {
       const listCmd = new ListObjectsV2Command({
         Bucket: WASABI_BUCKET,
@@ -209,7 +209,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         );
       }
     } catch (listError) {
-      console.error("Erro ao listar arquivos no Wasabi:", listError);
+      console.error("Erro ao listar arquivos no storage:", listError);
       // Se der erro ao listar, tenta usar HLS mesmo assim
       const base = `/api/titles/${title.id}/hls`;
       const playbackUrl = sourceParam ? `${base}?source=${sourceParam}` : base;

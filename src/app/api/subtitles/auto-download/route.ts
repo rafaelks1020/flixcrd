@@ -40,7 +40,7 @@ function srtToVtt(srt: string): string {
  * POST /api/subtitles/auto-download
  * Body: { episodeId: string, fileId: number, language?: string }
  * 
- * Baixa legenda do OpenSubtitles, converte pra VTT e salva no Wasabi
+ * Baixa legenda do OpenSubtitles, converte pra VTT e salva no storage
  */
 export async function POST(request: NextRequest) {
   const denied = await adminDenied();
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
     // Converter SRT para VTT
     const vtt = srtToVtt(text);
 
-    // Montar o path no Wasabi
+    // Montar o path no storage
     const prefix = episode.hlsPath.endsWith("/") ? episode.hlsPath : `${episode.hlsPath}/`;
     const langSuffix = language.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     const key = `${prefix}subtitle-${langSuffix || "sub"}.vtt`;

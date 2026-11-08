@@ -55,13 +55,13 @@ export async function POST(request: NextRequest) {
       expiresIn: 60 * 30,
     });
 
-    console.log(`[Wasabi Upload Part] Generated URL for part ${partNum} of ${key}`);
+    console.log(`[Storage Upload Part] Generated URL for part ${partNum} of ${key}`);
 
     return NextResponse.json({ uploadUrl });
   } catch (error) {
     console.error("POST /api/wasabi/multipart/part-url error", error);
     return NextResponse.json(
-      { error: "Erro ao gerar URL de parte para Wasabi" },
+      { error: "Erro ao gerar URL de parte no storage" },
       { status: 500 },
     );
   }

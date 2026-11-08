@@ -255,7 +255,7 @@ export default function AdminCatalogPage() {
         throw new Error(data?.error ?? "Erro ao baixar legenda automática");
       }
 
-      setInfo("Legenda baixada e salva no Wasabi com sucesso.");
+      setInfo("Legenda baixada e salva no storage com sucesso.");
       await loadTitles();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao baixar legenda automática");

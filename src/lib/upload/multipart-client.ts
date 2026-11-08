@@ -4,8 +4,27 @@
  */
 
 export const MULTIPART_PART_SIZE_BYTES = 64 * 1024 * 1024;
-export const MULTIPART_CONCURRENCY = 6;
-export const MULTIPART_MAX_RETRIES = 3;
+// O storage (rclone serve s3) grava as partes em ordem e segura as que chegam
+// adiantadas; com muita parte simultânea ele responde 503 SlowDown. 3 por vez
+// mantém a banda cheia sem estourar o limite, e o SlowDown é repetido com espera.
+export const MULTIPART_CONCURRENCY = 3;
+export const MULTIPART_MAX_RETRIES = 8;
+
+function waitBeforeRetry(attempt: number, signal: AbortSignal): Promise<void> {
+  const ms = Math.min(15000, 1500 * 2 ** (attempt - 2));
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(new DOMException("Aborted", "AbortError"));
+    const t = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(t);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 export interface UploadedPartInfo {
   partNumber: number;
@@ -115,6 +134,7 @@ export async function uploadMultipartFile(
 
           if (attempt > 1) {
             onRetry?.(attempt);
+            await waitBeforeRetry(attempt, controller.signal);
           }
 
           const partRes = await fetch("/api/wasabi/multipart/part-url", {

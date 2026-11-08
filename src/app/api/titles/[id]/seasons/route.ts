@@ -68,7 +68,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   return key.toLowerCase().endsWith(".vtt");
                 });
               } catch (err) {
-                // Se der erro ao checar no Wasabi, apenas loga e segue sem marcar legenda
+                // Se der erro ao checar no storage, apenas loga e segue sem marcar legenda
                 console.error("Erro ao verificar legendas para episódio", ep.id, err);
               }
             }

@@ -134,7 +134,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
           }
         } catch (err) {
           console.error(
-            "Erro ao excluir objetos do Wasabi para prefixo do título",
+            "Erro ao excluir objetos do storage para prefixo do título",
             prefix,
             id,
             err,
