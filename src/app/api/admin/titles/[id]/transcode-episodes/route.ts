@@ -1,5 +1,5 @@
 import { storageEnv } from "@/lib/storage-config";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { getServerSession } from "next-auth";
 
@@ -108,6 +108,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const baseUrl = transcoderBaseUrl.replace(/\/+$/, "");
 
+    // Fontes que já estão na fila ou convertendo: clicar de novo não duplica.
+    const busySources = new Set<string>();
+    try {
+      const jobsRes = await fetch(`${baseUrl}/jobs`, { headers: getTranscoderAuthHeaders() });
+      if (jobsRes.ok) {
+        const jobs = (await jobsRes.json()) as Array<{ source_key?: string; status?: string }>;
+        for (const j of jobs) {
+          if (j.source_key && (j.status === "queued" || j.status === "running")) {
+            busySources.add(j.source_key);
+          }
+        }
+      }
+    } catch {
+      // sem a lista, segue sem deduplicar
+    }
+
     // Em paralelo (8 por vez): série com centenas de episódios estourava o tempo da função.
     const processEpisode = async (ep: (typeof episodesWithPrefix)[number]) => {
       const prefix = ep.hlsPath!.endsWith("/") ? ep.hlsPath! : `${ep.hlsPath}/`;
@@ -119,7 +135,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
         });
 
         const listed = await wasabiClient.send(listCmd);
-        const objects = (listed.Contents ?? []).filter((obj) => obj.Key);
+        const objects = (listed.Contents ?? []).filter(
+          // Sobras de upload que não terminou (.rclone_temp_multipart_*, *.partial) não são vídeo.
+          (obj) => obj.Key && !/(^|\/)\.rclone_temp|\.partial$/i.test(obj.Key),
+        );
 
         if (objects.some((obj) => /(^|\/)master\.m3u8$/i.test(obj.Key as string))) {
           skipped.push({ episodeId: ep.id, reason: "Já convertido (master.m3u8 existe)." });
@@ -129,7 +148,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         if (objects.length === 0) {
           skipped.push({
             episodeId: ep.id,
-            reason: "Nenhum arquivo encontrado no prefixo do episódio.",
+            reason: "Upload do episódio não terminou (sem arquivo de vídeo).",
           });
           return;
         }
@@ -154,6 +173,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }
 
         const sourceKey = sourceObj.Key as string;
+
+        if (busySources.has(sourceKey)) {
+          skipped.push({ episodeId: ep.id, reason: "Já está na fila." });
+          return;
+        }
 
         const transRes = await fetch(`${baseUrl}/jobs/hls`, {
           method: "POST",
@@ -201,23 +225,32 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
         };
 
-    let cursor = 0;
-    await Promise.all(
-      Array.from({ length: Math.min(8, episodesWithPrefix.length) }, async () => {
-        while (cursor < episodesWithPrefix.length) {
-          const ep = episodesWithPrefix[cursor++];
-          await processEpisode(ep);
-        }
-      }),
-    );
+    // Responde na hora; o enfileiramento segue em segundo plano e cada episódio
+    // aparece no HLS Forge assim que entra na fila.
+    after(async () => {
+      let cursor = 0;
+      await Promise.all(
+        Array.from({ length: Math.min(8, episodesWithPrefix.length) }, async () => {
+          while (cursor < episodesWithPrefix.length) {
+            const ep = episodesWithPrefix[cursor++];
+            await processEpisode(ep);
+          }
+        }),
+      );
+      console.log(
+        `[transcode-episodes] ${id}: ${queued.length} na fila, ${skipped.length} ignorados, ${errors.length} erros`,
+        errors.slice(0, 3),
+      );
+    });
 
     return NextResponse.json({
       ok: true,
+      background: true,
       totalEpisodes: title.Episode?.length ?? 0,
       episodesWithPrefix: episodesWithPrefix.length,
-      queued,
-      skipped,
-      errors,
+      queued: [],
+      skipped: [],
+      errors: [],
     });
   } catch (error) {
     console.error("POST /api/admin/titles/[id]/transcode-episodes error", error);

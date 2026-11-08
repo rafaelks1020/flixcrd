@@ -8,6 +8,7 @@ interface BulkActionsProps {
   onClearSelection: () => void;
   onRefresh: () => void;
   transcodeOptions?: { crf?: number; deleteSource?: boolean };
+  titleTypes?: Record<string, string>;
 }
 
 export default function BulkActions({
@@ -15,6 +16,7 @@ export default function BulkActions({
   onClearSelection,
   onRefresh,
   transcodeOptions,
+  titleTypes,
 }: BulkActionsProps) {
   const [loading, setLoading] = useState(false);
 
@@ -56,36 +58,44 @@ export default function BulkActions({
     let skipped = 0;
     const failures: string[] = [];
 
-    // Um título por vez: série chama a rota de episódios; filme cai na rota de título.
-    for (const id of selectedIds) {
-      try {
-        let res = await post(`/api/admin/titles/${id}/transcode-episodes`);
-        let data: any = await res.json().catch(() => ({}));
-        if (res.status === 400 && String(data?.error ?? "").includes("séries")) {
-          res = await post(`/api/transcode/hls/${id}`);
-          data = await res.json().catch(() => ({}));
-          if (res.ok && data?.jobId) queued += 1;
-          else failures.push(data?.error ?? `HTTP ${res.status}`);
-          continue;
+    // Todos ao mesmo tempo: as rotas só enfileiram e respondem na hora; a fila faz o resto.
+    await Promise.all(
+      selectedIds.map(async (id) => {
+        try {
+          const type = titleTypes?.[id];
+          const isSeries = type ? type === "SERIES" || type === "ANIME" : true;
+          let res = await post(
+            isSeries ? `/api/admin/titles/${id}/transcode-episodes` : `/api/transcode/hls/${id}`,
+          );
+          let data: any = await res.json().catch(() => ({}));
+          let movie = !isSeries;
+          if (!type && res.status === 400 && String(data?.error ?? "").includes("séries")) {
+            res = await post(`/api/transcode/hls/${id}`);
+            data = await res.json().catch(() => ({}));
+            movie = true;
+          }
+          if (!res.ok) {
+            failures.push(data?.error ?? `HTTP ${res.status}`);
+            return;
+          }
+          if (movie) {
+            if (data?.jobId) queued += 1;
+            return;
+          }
+          queued += data?.background
+            ? Number(data?.episodesWithPrefix ?? 0)
+            : Array.isArray(data?.queued) ? data.queued.length : 0;
+          skipped += Array.isArray(data?.skipped) ? data.skipped.length : 0;
+        } catch (error) {
+          failures.push(error instanceof Error ? error.message : "erro de rede");
         }
-        if (!res.ok) {
-          failures.push(data?.error ?? `HTTP ${res.status}`);
-          continue;
-        }
-        queued += Array.isArray(data?.queued) ? data.queued.length : 0;
-        skipped += Array.isArray(data?.skipped) ? data.skipped.length : 0;
-        if (Array.isArray(data?.errors)) {
-          for (const e of data.errors) failures.push(e?.message ?? "erro no episódio");
-        }
-      } catch (error) {
-        failures.push(error instanceof Error ? error.message : "erro de rede");
-      }
-    }
+      }),
+    );
 
     setLoading(false);
     if (queued > 0) {
       toast.success(
-        `${queued} conversão(ões) na fila.${skipped ? ` ${skipped} ignorada(s).` : ""} Acompanhe em HLS Forge.`,
+        `${queued} conversão(ões) enviadas para a fila.${skipped ? ` ${skipped} ignorada(s).` : ""} Acompanhe em HLS Forge (já na fila não duplica).`,
         { duration: 8000 },
       );
     }

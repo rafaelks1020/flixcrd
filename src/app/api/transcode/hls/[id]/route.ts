@@ -132,10 +132,20 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       );
     }
 
-    const objects = listed.Contents.filter((obj) => obj.Key);
+    const objects = listed.Contents.filter(
+      // Sobras de upload que não terminou (.rclone_temp_multipart_*, *.partial) não são vídeo.
+      (obj) => obj.Key && !/(^|\/)\.rclone_temp|\.partial$/i.test(obj.Key),
+    );
+
+    if (objects.length === 0) {
+      return NextResponse.json(
+        { error: "O upload deste título não terminou. Envie o arquivo de novo." },
+        { status: 404 },
+      );
+    }
 
     let sourceObj = objects.find((obj) =>
-      /\.(mkv|mp4|mov|webm)$/i.test(obj.Key as string),
+      /\.(mkv|mp4|mov|webm|avi|m4v|ts)$/i.test(obj.Key as string),
     );
 
     if (!sourceObj) {

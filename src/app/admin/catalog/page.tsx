@@ -286,12 +286,14 @@ export default function AdminCatalogPage() {
           throw new Error(data?.error ?? "Erro ao enfileirar HLS para episódios.");
         }
 
-        const queued = Array.isArray(data?.queued) ? data.queued.length : 0;
+        const queued = data?.background
+          ? Number(data?.episodesWithPrefix ?? 0)
+          : Array.isArray(data?.queued) ? data.queued.length : 0;
         const skipped = Array.isArray(data?.skipped) ? data.skipped.length : 0;
         const errors = Array.isArray(data?.errors) ? data.errors.length : 0;
 
         const parts: string[] = [];
-        parts.push(`Enfileirados ${queued} episódio(s) para HLS.`);
+        parts.push(`${queued} episódio(s) enviados para a fila (os que já estão na fila não duplicam). Acompanhe em HLS Forge.`);
         if (skipped > 0) parts.push(`${skipped} ignorado(s) sem arquivo de origem.`);
         if (errors > 0)
           parts.push(`${errors} com erro ao criar job (veja logs do transcoder).`);
@@ -957,7 +959,7 @@ export default function AdminCatalogPage() {
           </>
         )}
 
-        <BulkActions selectedIds={selectedIds} onClearSelection={() => setSelectedIds([])} onRefresh={loadTitles} transcodeOptions={{ crf: transcodeCrf, deleteSource: deleteSourceAfterTranscode }} />
+        <BulkActions selectedIds={selectedIds} onClearSelection={() => setSelectedIds([])} onRefresh={loadTitles} transcodeOptions={{ crf: transcodeCrf, deleteSource: deleteSourceAfterTranscode }} titleTypes={Object.fromEntries(titles.map((t) => [t.id, t.type]))} />
       </div>
 
       {showTitleModal && (
