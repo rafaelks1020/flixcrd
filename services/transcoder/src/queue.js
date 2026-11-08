@@ -34,6 +34,7 @@ export class TranscodeQueue {
     leaseMs = 60_000,
     desktopOnlineMs = 30_000,
     monitorIntervalMs = 5_000,
+    vpsAlwaysTake = false,
   }) {
     this.workdir = workdir;
     this.jobsTempRoot = path.join(workdir, "jobs");
@@ -49,6 +50,7 @@ export class TranscodeQueue {
     this.leaseMs = leaseMs;
     this.desktopOnlineMs = desktopOnlineMs;
     this.monitorIntervalMs = monitorIntervalMs;
+    this.vpsAlwaysTake = Boolean(vpsAlwaysTake);
 
     this.jobs = new Map();
     this.workers = new Map();
@@ -570,6 +572,7 @@ export class TranscodeQueue {
   // ---------------------------------------------------------------- execucao na VPS
 
   _vpsMayTake(job, desktopOnline) {
+    if (this.vpsAlwaysTake) return true;
     return !desktopOnline || job.desktop_failures >= DESKTOP_FAILURE_LIMIT;
   }
 

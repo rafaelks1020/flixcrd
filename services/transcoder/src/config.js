@@ -78,6 +78,9 @@ export function loadConfig(env = process.env) {
   const workdir = (env.TRANSCODER_WORKDIR ?? "").trim() || "/var/tmp/pflix-transcoder";
   const concurrency = parsePositiveInt(env.TRANSCODER_CONCURRENCY, 1, "TRANSCODER_CONCURRENCY");
   const threads = parsePositiveInt(env.TRANSCODER_THREADS, 6, "TRANSCODER_THREADS");
+  // true: a VPS converte junto com os trabalhadores remotos (fila andando em paralelo).
+  // false (padrão): a VPS só converte quando nenhum trabalhador remoto está online.
+  const vpsAlwaysTake = /^(1|true|sim|yes)$/i.test((env.TRANSCODER_VPS_ALWAYS ?? "").trim());
 
   // Token do trabalhador remoto (Desktop). Sem ele os endpoints /worker/* respondem 404.
   const workerToken = (env.TRANSCODER_WORKER_TOKEN ?? "").trim() || null;
@@ -90,6 +93,7 @@ export function loadConfig(env = process.env) {
     workdir,
     concurrency,
     threads,
+    vpsAlwaysTake,
     s3: {
       endpoint: pick(env, "S3_ENDPOINT", "WASABI_ENDPOINT"),
       region: pick(env, "S3_REGION", "WASABI_REGION") ?? "us-east-1",

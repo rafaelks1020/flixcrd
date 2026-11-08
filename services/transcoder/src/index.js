@@ -18,6 +18,7 @@ async function main() {
   const queue = new TranscodeQueue({
     workdir: config.workdir,
     concurrency: config.concurrency,
+    vpsAlwaysTake: config.vpsAlwaysTake,
     threads: config.threads,
     s3Client,
   });
@@ -30,7 +31,7 @@ async function main() {
     const addr = server.address();
     const boundPort = typeof addr === "object" && addr ? addr.port : config.port;
     console.log(
-      `[Transcoder] Servico escutando em http://${config.host}:${boundPort} (workdir=${config.workdir}, concurrency=${config.concurrency}, threads=${config.threads})`,
+      `[Transcoder] Servico escutando em http://${config.host}:${boundPort} (workdir=${config.workdir}, concurrency=${config.concurrency}, vpsAlwaysTake=${config.vpsAlwaysTake}, threads=${config.threads})`,
     );
   });
 
