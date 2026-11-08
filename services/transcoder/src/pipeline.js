@@ -321,7 +321,7 @@ export async function runTranscodePipeline({
 
     // Segmentos e legendas em paralelo (cada envio espera a ida e volta ate o storage: um por vez
     // deixava o link parado). Playlists depois, em ordem, e o master por ultimo.
-    const concurrency = Math.max(1, Number(process.env.TRANSCODER_UPLOAD_CONCURRENCY) || 16);
+    const concurrency = Math.max(1, Number(process.env.TRANSCODER_UPLOAD_CONCURRENCY) || 32);
     emitUpload(true);
     let next = 0;
     const runners = Array.from({ length: Math.min(concurrency, segmentsAndSubs.length) }, async () => {
