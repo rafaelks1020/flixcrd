@@ -21,6 +21,27 @@ async function main() {
     vpsAlwaysTake: config.vpsAlwaysTake,
     threads: config.threads,
     s3Client,
+    onJobCompleted: config.doneWebhook
+      ? async ({ dest_prefix }) => {
+          // Tenta algumas vezes: o catálogo só mostra o episódio depois desse aviso
+          // (e a conferência periódica cobre se todas falharem).
+          for (let attempt = 1; attempt <= 4; attempt++) {
+            try {
+              const res = await fetch(config.doneWebhook, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.token}` },
+                body: JSON.stringify({ prefix: dest_prefix }),
+                signal: AbortSignal.timeout(60_000),
+              });
+              if (res.ok) return;
+              console.warn(`[Transcoder] Aviso ao site respondeu ${res.status} (tentativa ${attempt}).`);
+            } catch (err) {
+              console.warn(`[Transcoder] Aviso ao site falhou (tentativa ${attempt}): ${err?.message ?? err}`);
+            }
+            await new Promise((r) => setTimeout(r, attempt * 5000));
+          }
+        }
+      : null,
   });
 
   await queue.init();

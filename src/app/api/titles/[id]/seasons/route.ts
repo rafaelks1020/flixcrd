@@ -4,6 +4,7 @@ import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 
 import { prisma } from "@/lib/prisma";
 import { wasabiClient } from "@/lib/wasabi";
+import { requireAdmin } from "@/lib/require-admin";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -19,12 +20,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
 
-    // Buscar temporadas com episódios
-    const seasons = await prisma.season.findMany({
+    // Fora do admin, só episódios 100% prontos para tocar (e temporadas que tenham algum).
+    const isAdmin = !!(await requireAdmin());
+    const seasonsRaw = await prisma.season.findMany({
       where: { titleId: id },
       orderBy: { seasonNumber: "asc" },
       include: {
         Episode: {
+          where: isAdmin ? undefined : { hlsReady: true },
           orderBy: { episodeNumber: "asc" },
           select: {
             id: true,
@@ -39,6 +42,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
       },
     });
+    const seasons = isAdmin ? seasonsRaw : seasonsRaw.filter((s) => s.Episode.length > 0);
 
     // Se não houver bucket configurado, apenas retorna as temporadas como antes
     if (!WASABI_BUCKET) {

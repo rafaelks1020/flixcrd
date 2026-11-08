@@ -35,6 +35,8 @@ export class TranscodeQueue {
     desktopOnlineMs = 30_000,
     monitorIntervalMs = 5_000,
     vpsAlwaysTake = false,
+    // Chamado (sem aguardar) quando um job termina com sucesso: avisa o site para liberar no catálogo.
+    onJobCompleted = null,
   }) {
     this.workdir = workdir;
     this.jobsTempRoot = path.join(workdir, "jobs");
@@ -51,6 +53,7 @@ export class TranscodeQueue {
     this.desktopOnlineMs = desktopOnlineMs;
     this.monitorIntervalMs = monitorIntervalMs;
     this.vpsAlwaysTake = Boolean(vpsAlwaysTake);
+    this.onJobCompleted = typeof onJobCompleted === "function" ? onJobCompleted : null;
 
     this.jobs = new Map();
     this.workers = new Map();
@@ -60,6 +63,13 @@ export class TranscodeQueue {
     this._monitorTimer = null;
     this._persistChain = Promise.resolve();
     this._lastThrottleSaveMs = 0;
+  }
+
+  _notifyCompleted(job) {
+    if (!this.onJobCompleted) return;
+    Promise.resolve()
+      .then(() => this.onJobCompleted({ id: job.id, bucket: job.bucket, dest_prefix: job.dest_prefix }))
+      .catch((err) => console.warn(`[Transcoder] Aviso de conclusão do job ${job.id} falhou: ${err?.message ?? err}`));
   }
 
   async init() {
@@ -518,6 +528,7 @@ export class TranscodeQueue {
     this._addEvent(job, "desktop", "Desktop concluiu o job");
     await this._persistNow();
     console.log(`[Transcoder] Job ${job.id} concluído pelo trabalhador.`);
+    this._notifyCompleted(job);
     return "ok";
   }
 
@@ -688,6 +699,7 @@ export class TranscodeQueue {
       this._addEvent(job, "vps", `${VPS_NAME} concluiu o job`);
       await this._persistNow();
       console.log(`[Transcoder] Job ${job.id} concluído com sucesso.`);
+      this._notifyCompleted(job);
     } catch (err) {
       if (this.stopping || signal?.aborted) {
         this._endAttempt(job, "lost", "Interrompido no encerramento do serviço");

@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     }
 
     const favorites = await prisma.userFavorite.findMany({
-      where: { profileId },
+      where: { profileId, Title: { hlsReady: true } },
       include: {
         Title: {
           select: {

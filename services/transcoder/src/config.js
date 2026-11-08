@@ -85,6 +85,9 @@ export function loadConfig(env = process.env) {
   // Token do trabalhador remoto (Desktop). Sem ele os endpoints /worker/* respondem 404.
   const workerToken = (env.TRANSCODER_WORKER_TOKEN ?? "").trim() || null;
 
+  // URL do site para avisar que um job terminou (libera no catálogo). Vazio: não avisa.
+  const doneWebhook = (env.TRANSCODER_DONE_WEBHOOK ?? "").trim() || null;
+
   return {
     token,
     workerToken,
@@ -94,6 +97,7 @@ export function loadConfig(env = process.env) {
     concurrency,
     threads,
     vpsAlwaysTake,
+    doneWebhook,
     s3: {
       endpoint: pick(env, "S3_ENDPOINT", "WASABI_ENDPOINT"),
       region: pick(env, "S3_REGION", "WASABI_REGION") ?? "us-east-1",

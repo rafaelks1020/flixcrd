@@ -24,6 +24,7 @@ export default async function BrowsePage() {
   }
 
   const titlesRaw = await prisma.title.findMany({
+    where: { hlsReady: true },
     orderBy: { popularity: "desc" },
     take: 48,
     select: {

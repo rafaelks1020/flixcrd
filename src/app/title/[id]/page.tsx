@@ -56,6 +56,7 @@ export default async function TitleDetailPage({ params }: PageProps) {
         orderBy: { seasonNumber: "asc" },
         include: {
           Episode: {
+            where: isAdmin ? undefined : { hlsReady: true },
             orderBy: { episodeNumber: "asc" },
           },
         },
@@ -63,8 +64,15 @@ export default async function TitleDetailPage({ params }: PageProps) {
     },
   });
 
-  if (!title) {
+  // Fora do admin, só abre o que está 100% pronto para tocar.
+  if (!title || (!isAdmin && !title.hlsReady)) {
     notFound();
+  }
+
+  if (!isAdmin) {
+    (title as any).Season = (title.Season as any[]).filter(
+      (s) => Array.isArray(s.Episode) && s.Episode.length > 0,
+    );
   }
 
   const isFavorite = false;
@@ -132,6 +140,7 @@ export default async function TitleDetailPage({ params }: PageProps) {
     if (primaryGenreId) {
       const genreTitles = await prisma.title.findMany({
         where: {
+          ...(isAdmin ? {} : { hlsReady: true }),
           TitleGenre: {
             some: { genreId: primaryGenreId },
           },

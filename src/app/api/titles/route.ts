@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import cache from "@/lib/cache";
 
-import { adminDenied } from "@/lib/require-admin";
+import { adminDenied, requireAdmin } from "@/lib/require-admin";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -15,8 +15,11 @@ export async function GET(request: NextRequest) {
   const pageSize = Math.min(limit, 200);
   const skip = (page - 1) * pageSize;
 
+  // Admin vê tudo (telas de gestão); o resto só o que está 100% pronto para tocar.
+  const isAdmin = !!(await requireAdmin());
+
   // Create cache key
-  const cacheKey = `titles:${JSON.stringify({ q, type, genre, page, limit })}`;
+  const cacheKey = `titles:${JSON.stringify({ q, type, genre, page, limit, all: isAdmin })}`;
 
   // Try to get from cache first
   const cached = await cache.get(cacheKey);
@@ -26,6 +29,10 @@ export async function GET(request: NextRequest) {
 
   // Catálogo próprio (títulos do banco, HLS no bucket).
   const where: any = {};
+
+  if (!isAdmin) {
+    where.hlsReady = true;
+  }
 
   if (q) {
     where.name = {

@@ -39,7 +39,9 @@ export default async function Home() {
   }
 
   // Buscar top 10 títulos populares para aleatorizar o hero
+  // Só o que está 100% pronto para tocar aparece no catálogo.
   const topTitles = await prisma.title.findMany({
+    where: { hlsReady: true },
     orderBy: { popularity: "desc" },
     take: 10,
     select: {
@@ -61,6 +63,7 @@ export default async function Home() {
 
   const recentTitles = await prisma.title.findMany({
     where: {
+      hlsReady: true,
       createdAt: {
         gte: thirtyDaysAgo,
       },

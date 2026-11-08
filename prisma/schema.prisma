@@ -66,6 +66,7 @@ model Episode {
   runtime          Int?
   stillUrl         String?
   hlsPath          String?
+  hlsReady         Boolean            @default(false)
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   Season           Season             @relation(fields: [seasonId], references: [id], onDelete: Cascade)
@@ -73,6 +74,7 @@ model Episode {
   PlaybackProgress PlaybackProgress[]
 
   @@unique([titleId, seasonNumber, episodeNumber])
+  @@index([titleId, hlsReady])
   @@index([seasonId])
   @@index([titleId])
 }
@@ -387,6 +389,7 @@ model Title {
   backdropUrl         String?
   logoUrl             String?
   hlsPath             String?
+  hlsReady            Boolean            @default(false)
   runtime             Int?
   voteAverage         Float?
   voteCount           Int?
@@ -406,6 +409,8 @@ model Title {
   TitleGenre          TitleGenre[]
   UserFavorite        UserFavorite[]
   Video               Video[]
+
+  @@index([hlsReady])
 }
 
 model TitleGenre {
