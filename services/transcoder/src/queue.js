@@ -133,8 +133,28 @@ export class TranscodeQueue {
       this.jobs.set(job.id, job);
     }
 
-    if (recoveredCount > 0) {
-      console.log(`[Transcoder] ${recoveredCount} job(s) interrompido(s) voltaram para a fila.`);
+    // Remove duplicatas na fila (mesmo arquivo e destino), mantendo a mais antiga.
+    const seen = new Set();
+    let removedDuplicates = 0;
+    const ordered = Array.from(this.jobs.values()).sort((a, b) => a.created_at - b.created_at);
+    for (const job of ordered) {
+      if (job.status !== "queued") continue;
+      const key = `${job.bucket}|${job.source_key}|${job.dest_prefix}`;
+      if (seen.has(key)) {
+        this.jobs.delete(job.id);
+        removedDuplicates += 1;
+      } else {
+        seen.add(key);
+      }
+    }
+
+    if (recoveredCount > 0 || removedDuplicates > 0) {
+      if (recoveredCount > 0) {
+        console.log(`[Transcoder] ${recoveredCount} job(s) interrompido(s) voltaram para a fila.`);
+      }
+      if (removedDuplicates > 0) {
+        console.log(`[Transcoder] ${removedDuplicates} job(s) duplicado(s) removido(s) da fila.`);
+      }
       await this._persistNow();
     }
   }
@@ -253,6 +273,19 @@ export class TranscodeQueue {
     titleId = null,
     episodeId = null,
   }) {
+    // Idempotente: o mesmo arquivo para o mesmo destino já na fila ou convertendo
+    // devolve o job existente (clicar duas vezes no admin não duplica conversão).
+    for (const existing of this.jobs.values()) {
+      if (
+        (existing.status === "queued" || existing.status === "running") &&
+        existing.bucket === bucket &&
+        existing.source_key === sourceKey &&
+        existing.dest_prefix === destPrefix
+      ) {
+        return this.toPublicJob(existing);
+      }
+    }
+
     const now = nowSeconds();
     const id = crypto.randomUUID();
     const job = this._hydrate({
