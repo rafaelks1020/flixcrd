@@ -1,5 +1,15 @@
 import winston from 'winston'
 
+// Na Vercel (e em qualquer serverless) o disco é somente leitura: criar a pasta logs/ derruba a rota.
+const LOG_TO_FILES = !process.env.VERCEL && process.env.LOG_TO_FILES !== 'false'
+
+const fileTransports = LOG_TO_FILES
+  ? [
+      new winston.transports.File({ filename: 'logs/error.log', level: 'error', maxsize: 5242880, maxFiles: 5 }),
+      new winston.transports.File({ filename: 'logs/combined.log', maxsize: 5242880, maxFiles: 10 }),
+    ]
+  : []
+
 // Create logger with structured logging
 export const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -23,20 +33,7 @@ export const logger = winston.createLogger({
     version: process.env.npm_package_version || '0.2.0'
   },
   transports: [
-    // Error logs
-    new winston.transports.File({
-      filename: 'logs/error.log',
-      level: 'error',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
-    // Combined logs
-    new winston.transports.File({
-      filename: 'logs/combined.log',
-      maxsize: 5242880, // 5MB
-      maxFiles: 10,
-    }),
-    // Console for development
+    ...fileTransports,
     new winston.transports.Console({
       format: winston.format.combine(
         winston.format.colorize(),
@@ -44,14 +41,13 @@ export const logger = winston.createLogger({
       )
     })
   ],
-  // Handle uncaught exceptions
-  exceptionHandlers: [
-    new winston.transports.File({ filename: 'logs/exceptions.log' })
-  ],
-  // Handle unhandled promise rejections
-  rejectionHandlers: [
-    new winston.transports.File({ filename: 'logs/rejections.log' })
-  ]
+  // Exceções e rejeições sem tratamento: arquivo só onde o disco permite gravar
+  ...(LOG_TO_FILES
+    ? {
+        exceptionHandlers: [new winston.transports.File({ filename: 'logs/exceptions.log' })],
+        rejectionHandlers: [new winston.transports.File({ filename: 'logs/rejections.log' })],
+      }
+    : {}),
 })
 
 // Create a stream object for Morgan HTTP logging
