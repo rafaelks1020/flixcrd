@@ -4,10 +4,10 @@
  */
 
 export const MULTIPART_PART_SIZE_BYTES = 64 * 1024 * 1024;
-// O storage (rclone serve s3) grava as partes em ordem e segura as que chegam
-// adiantadas; com muita parte simultânea ele responde 503 SlowDown. 3 por vez
-// mantém a banda cheia sem estourar o limite, e o SlowDown é repetido com espera.
-export const MULTIPART_CONCURRENCY = 3;
+// O storage (rclone serve s3) grava as partes em ordem e segura as adiantadas
+// em memória (até 1 GB por upload no servidor). 12 x 64 MB = 768 MB cabe com
+// folga e enche a banda; SlowDown eventual é repetido com espera.
+export const MULTIPART_CONCURRENCY = 12;
 export const MULTIPART_MAX_RETRIES = 8;
 
 function waitBeforeRetry(attempt: number, signal: AbortSignal): Promise<void> {
