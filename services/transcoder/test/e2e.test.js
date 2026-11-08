@@ -11,9 +11,11 @@ import { createStorageClient } from "../src/storage.js";
 import { TranscodeQueue } from "../src/queue.js";
 import { createTranscoderServer } from "../src/server.js";
 import { startMockS3Server } from "./mock-s3.js";
+import { buildVideoEncoderArgs } from "../src/ffmpeg.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INDEX_ENTRY = path.resolve(__dirname, "..", "src", "index.js");
+const WORKER_ENTRY = path.resolve(__dirname, "..", "src", "worker.js");
 
 function execTool(cmd, args) {
   return new Promise((resolve, reject) => {
@@ -378,5 +380,476 @@ test("fluxo ponta a ponta: video 10s 1280x720 -> HLS VOD (master + 720p + 480p +
     }
     await mockS3.close();
     await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+
+// ---------------------------------------------------------------------------
+// Trabalhador remoto, regras da fila e endpoints /worker/*
+// ---------------------------------------------------------------------------
+
+const BUCKET = "pflix-worker-bucket";
+const USER_TOKEN = "token-usuario-e2e";
+const WORKER_TOKEN = "token-trabalhador-e2e";
+
+async function makeSampleVideo(dir, seconds = 4) {
+  await fs.mkdir(dir, { recursive: true });
+  const out = path.join(dir, "sample.mkv");
+  await execTool("ffmpeg", [
+    "-hide_banner",
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    `testsrc=duration=${seconds}:size=1280x720:rate=24`,
+    "-f",
+    "lavfi",
+    "-i",
+    `sine=frequency=440:duration=${seconds}`,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "ultrafast",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    out,
+  ]);
+  return fs.readFile(out);
+}
+
+async function startEnv({ workerToken = WORKER_TOKEN, queueOptions = {} } = {}) {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pflix-transcoder-worker-"));
+  const mockS3 = await startMockS3Server();
+  const config = loadConfig({
+    TRANSCODER_TOKEN: USER_TOKEN,
+    ...(workerToken ? { TRANSCODER_WORKER_TOKEN: workerToken } : {}),
+    TRANSCODER_PORT: "0",
+    TRANSCODER_WORKDIR: path.join(tempRoot, "workdir"),
+    TRANSCODER_THREADS: "2",
+    S3_ENDPOINT: mockS3.endpoint,
+    S3_REGION: "us-east-1",
+    S3_ACCESS_KEY_ID: "minioadmin",
+    S3_SECRET_ACCESS_KEY: "minioadmin",
+    S3_BUCKET_NAME: BUCKET,
+  });
+  const queue = new TranscodeQueue({
+    workdir: config.workdir,
+    concurrency: 1,
+    threads: config.threads,
+    s3Client: createStorageClient(config.s3),
+    ...queueOptions,
+  });
+  await queue.init();
+  const server = createTranscoderServer({ config, queue });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const call = async (method, pathname, { token = USER_TOKEN, body } = {}) => {
+    const res = await fetch(`${baseUrl}${pathname}`, {
+      method,
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        "Content-Type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const text = await res.text();
+    return { status: res.status, json: text ? JSON.parse(text) : null };
+  };
+
+  return {
+    tempRoot,
+    mockS3,
+    queue,
+    server,
+    baseUrl,
+    call,
+    worker: (pathname, body, token = WORKER_TOKEN) => call("POST", pathname, { token, body }),
+    async enqueue(sourceKey, destPrefix) {
+      const res = await call("POST", "/jobs/hls", {
+        body: { bucket: BUCKET, source_key: sourceKey, dest_prefix: destPrefix, crf: 23 },
+      });
+      assert.equal(res.status, 202);
+      return res.json.id;
+    },
+    async job(id) {
+      return (await call("GET", `/jobs/${id}`)).json;
+    },
+    async waitFor(id, predicate, timeoutMs = 60_000) {
+      const deadline = Date.now() + timeoutMs;
+      let last = null;
+      while (Date.now() < deadline) {
+        last = await this.job(id);
+        if (predicate(last)) return last;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      assert.fail(`Tempo esgotado esperando o job. Último estado: ${JSON.stringify(last && { status: last.status, executor: last.executor, failures: last.desktop_failures })}`);
+    },
+    async close() {
+      await new Promise((resolve) => server.close(resolve));
+      await queue.shutdown();
+      await mockS3.close();
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    },
+  };
+}
+
+test("endpoints /worker/* dão 404 sem TRANSCODER_WORKER_TOKEN e 401 com token errado", async () => {
+  const noToken = await startEnv({ workerToken: null, queueOptions: { autoStart: false } });
+  try {
+    const res = await noToken.worker("/worker/heartbeat", { worker_id: "w1" }, "qualquer");
+    assert.equal(res.status, 404);
+    const claim = await noToken.worker("/worker/claim", { worker_id: "w1" }, USER_TOKEN);
+    assert.equal(claim.status, 404);
+  } finally {
+    await noToken.close();
+  }
+
+  const withToken = await startEnv({ queueOptions: { autoStart: false } });
+  try {
+    const wrong = await withToken.worker("/worker/heartbeat", { worker_id: "w1" }, "token-errado");
+    assert.equal(wrong.status, 401);
+    // O token do usuário não vale para o trabalhador e vice-versa
+    const userTokenOnWorker = await withToken.worker("/worker/claim", { worker_id: "w1" }, USER_TOKEN);
+    assert.equal(userTokenOnWorker.status, 401);
+    const workerTokenOnJobs = await withToken.call("GET", "/jobs", { token: WORKER_TOKEN });
+    assert.equal(workerTokenOnJobs.status, 401);
+    const noAuth = await withToken.call("POST", "/worker/claim", { token: null, body: { worker_id: "w1" } });
+    assert.equal(noAuth.status, 401);
+    const ok = await withToken.worker("/worker/heartbeat", { worker_id: "w1", name: "Desktop" });
+    assert.equal(ok.status, 200);
+    assert.deepEqual(ok.json, { ok: true, cancel_job: false });
+  } finally {
+    await withToken.close();
+  }
+});
+
+test("GET /workers lista a VPS sempre e o Desktop após o heartbeat", async () => {
+  const env = await startEnv({ queueOptions: { autoStart: false } });
+  try {
+    const before = await env.call("GET", "/workers");
+    assert.equal(before.status, 200);
+    assert.equal(before.json.workers.length, 1);
+    assert.equal(before.json.workers[0].kind, "vps");
+    assert.equal(before.json.workers[0].online, true);
+    assert.equal(before.json.workers[0].encoder, "libx264");
+
+    await env.worker("/worker/heartbeat", {
+      worker_id: "pc-1",
+      name: "Desktop",
+      gpu: "AMD Radeon RX 7600",
+      encoder: "h264_amf",
+      version: "1.1.0",
+      job_id: null,
+    });
+    const after = await env.call("GET", "/workers");
+    const desktop = after.json.workers.find((w) => w.kind === "desktop");
+    assert.equal(desktop.id, "pc-1");
+    assert.equal(desktop.name, "Desktop");
+    assert.equal(desktop.online, true);
+    assert.equal(desktop.gpu, "AMD Radeon RX 7600");
+    assert.equal(desktop.encoder, "h264_amf");
+    assert.equal(desktop.current_job_id, null);
+  } finally {
+    await env.close();
+  }
+});
+
+test("argumentos de encoder: GPU não usa -preset/-crf do x264 e define -g pelo fps da origem", () => {
+  const x264 = buildVideoEncoderArgs({ encoder: "libx264", crf: 20, fps: 24 });
+  assert.ok(x264.includes("-preset") && x264.includes("-crf") && x264.includes("-sc_threshold"));
+
+  const amf = buildVideoEncoderArgs({ encoder: "h264_amf", crf: 20, fps: 23.976 });
+  assert.equal(amf[amf.indexOf("-qp_i") + 1], "20");
+  assert.equal(amf[amf.indexOf("-qp_p") + 1], "22");
+  assert.equal(amf[amf.indexOf("-qp_b") + 1], "22");
+  assert.equal(amf[amf.indexOf("-g") + 1], "144");
+  assert.ok(!amf.includes("-preset") && !amf.includes("-crf"));
+
+  const nvenc = buildVideoEncoderArgs({ encoder: "h264_nvenc", crf: 21, fps: 30 });
+  assert.equal(nvenc[nvenc.indexOf("-cq") + 1], "21");
+  assert.equal(nvenc[nvenc.indexOf("-g") + 1], "180");
+  assert.ok(nvenc.includes("-forced-idr") && !nvenc.includes("-crf"));
+
+  const qsv = buildVideoEncoderArgs({ encoder: "h264_qsv", crf: 19, fps: 25 });
+  assert.equal(qsv[qsv.indexOf("-global_quality") + 1], "19");
+  assert.equal(qsv[qsv.indexOf("-g") + 1], "150");
+
+  for (const args of [amf, nvenc, qsv]) {
+    assert.equal(args[args.indexOf("-profile:v") + 1], "high");
+    assert.equal(args[args.indexOf("-pix_fmt") + 1], "yuv420p");
+  }
+});
+
+test("trabalhador remoto real: heartbeat, claim, progress, complete; job completed no desktop", async () => {
+  const env = await startEnv({ queueOptions: { desktopOnlineMs: 30_000 } });
+  let child = null;
+  let output = "";
+  try {
+    const sample = await makeSampleVideo(path.join(env.tempRoot, "fixtures"));
+    env.mockS3.putObject(BUCKET, "titles/remoto/original.mkv", sample, "video/x-matroska");
+
+    child = spawn(process.execPath, [WORKER_ENTRY], {
+      env: {
+        PATH: process.env.PATH,
+        TRANSCODER_QUEUE_URL: env.baseUrl,
+        TRANSCODER_WORKER_TOKEN: WORKER_TOKEN,
+        WORKER_NAME: "Desktop",
+        WORKER_ID: "pc-teste",
+        WORKER_ENCODER: "libx264",
+        WORKER_THREADS: "2",
+        WORKER_WORKDIR: path.join(env.tempRoot, "worker-work"),
+        WORKER_GPU: "GPU de teste",
+        S3_ENDPOINT: env.mockS3.endpoint,
+        S3_REGION: "us-east-1",
+        S3_ACCESS_KEY_ID: "minioadmin",
+        S3_SECRET_ACCESS_KEY: "minioadmin",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    child.stdout.on("data", (c) => (output += c.toString()));
+    child.stderr.on("data", (c) => (output += c.toString()));
+
+    // Espera o heartbeat registrar o Desktop antes de enfileirar
+    const deadline = Date.now() + 20_000;
+    while (Date.now() < deadline) {
+      const { json } = await env.call("GET", "/workers");
+      if (json.workers.some((w) => w.kind === "desktop" && w.online)) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+
+    const id = await env.enqueue("titles/remoto/original.mkv", "titles/remoto/");
+    // A VPS não pode pegar: o Desktop está online
+    const final = await env.waitFor(id, (j) => j.status === "completed" || j.status === "error", 90_000);
+    assert.equal(final.status, "completed", `Falhou: ${final.error}\n${output}`);
+    assert.equal(final.executor, "desktop");
+    assert.equal(final.worker_name, "Desktop");
+    assert.equal(final.desktop_failures, 0);
+    assert.equal(final.attempts.length, 1);
+    assert.equal(final.attempts[0].executor, "desktop");
+    assert.equal(final.attempts[0].result, "ok");
+    assert.equal(final.attempts[0].encoder, "libx264");
+    assert.ok(final.attempts[0].ended_at >= final.attempts[0].started_at);
+    assert.ok(final.events.some((e) => /Desktop pegou o job \(tentativa 1\)/.test(e.text)));
+    assert.deepEqual(final.renditions.sort(), ["480p", "720p"]);
+    assert.equal(final.telemetry.phase, "done");
+    assert.equal(final.telemetry.encoder, "libx264");
+    assert.ok(final.telemetry.source.width === 1280 && final.telemetry.source.height === 720);
+
+    assert.ok(env.mockS3.hasObject(BUCKET, "titles/remoto/master.m3u8"));
+    assert.ok(env.mockS3.hasObject(BUCKET, "titles/remoto/720p.m3u8"));
+
+    const workers = (await env.call("GET", "/workers")).json.workers;
+    const desktop = workers.find((w) => w.kind === "desktop");
+    assert.equal(desktop.gpu, "GPU de teste");
+    assert.equal(desktop.encoder, "libx264");
+    assert.equal(desktop.current_job_id, null);
+  } finally {
+    if (child) {
+      child.kill("SIGTERM");
+      await new Promise((resolve) => child.on("close", resolve));
+    }
+    await env.close();
+  }
+});
+
+test("claim, progress com telemetria, 409 ao perder o job e fail devolvendo à fila", async () => {
+  const env = await startEnv({
+    queueOptions: { autoStart: false },
+  });
+  try {
+    const id = await env.enqueue("titles/a/original.mkv", "titles/a/");
+    const idB = await env.enqueue("titles/b/original.mkv", "titles/b/");
+
+    const claim = await env.worker("/worker/claim", { worker_id: "w1" });
+    assert.equal(claim.status, 200);
+    assert.equal(claim.json.job.id, id, "deve entregar o job mais antigo");
+    assert.equal(claim.json.job.bucket, BUCKET);
+    assert.equal(claim.json.job.delete_source, false);
+
+    // Mesmo trabalhador não pega outro job enquanto está ocupado
+    const second = await env.worker("/worker/claim", { worker_id: "w1" });
+    assert.equal(second.status, 204);
+
+    const prog = await env.worker(`/worker/jobs/${id}/progress`, {
+      worker_id: "w1",
+      progress: 42.5,
+      message: "Convertendo 720p (1 de 2)",
+      telemetry: { phase: "transcode", phase_label: "Convertendo 720p (1 de 2)", fps: 55.2, speed_x: 2.3, elapsed_sec: 12 },
+    });
+    assert.equal(prog.status, 200);
+    const running = await env.job(id);
+    assert.equal(running.status, "running");
+    assert.equal(running.progress, 42.5);
+    assert.equal(running.telemetry.phase, "transcode");
+    assert.equal(running.telemetry.fps, 55.2);
+    assert.equal(running.telemetry.speed_x, 2.3);
+    assert.equal(running.telemetry.bytes_done, null);
+
+    // Outro trabalhador não é dono do job
+    const stolen = await env.worker(`/worker/jobs/${id}/progress`, { worker_id: "w2", progress: 1 });
+    assert.equal(stolen.status, 409);
+    const hb = await env.worker("/worker/heartbeat", { worker_id: "w2", name: "Outro", job_id: id });
+    assert.equal(hb.json.cancel_job, true);
+
+    const fail = await env.worker(`/worker/jobs/${id}/fail`, { worker_id: "w1", error: "GPU travou" });
+    assert.equal(fail.status, 200);
+    const afterFail = await env.job(id);
+    assert.equal(afterFail.status, "queued");
+    assert.equal(afterFail.desktop_failures, 1);
+    assert.equal(afterFail.attempts[0].result, "error");
+    assert.equal(afterFail.attempts[0].error, "GPU travou");
+
+    // Depois de falhar, o mesmo job (mais antigo) volta a ser entregue antes do B
+    const again = await env.worker("/worker/claim", { worker_id: "w1" });
+    assert.equal(again.json.job.id, id);
+    assert.equal((await env.job(idB)).status, "queued");
+
+    const late = await env.worker(`/worker/jobs/${id}/complete`, { worker_id: "w2", renditions: [], subtitles: [] });
+    assert.equal(late.status, 409);
+  } finally {
+    await env.close();
+  }
+});
+
+test("com o Desktop online a VPS não pega o job", async () => {
+  const env = await startEnv({
+    queueOptions: { monitorIntervalMs: 100, desktopOnlineMs: 30_000 },
+  });
+  try {
+    await env.worker("/worker/heartbeat", { worker_id: "pc-1", name: "Desktop", encoder: "h264_amf" });
+    const id = await env.enqueue("titles/inexistente/original.mkv", "titles/inexistente/");
+    await new Promise((r) => setTimeout(r, 1200));
+    const job = await env.job(id);
+    assert.equal(job.status, "queued", "a VPS não deve pegar enquanto há Desktop online");
+    assert.equal(job.attempts.length, 0);
+    assert.equal(env.queue.activeControllers.size, 0);
+  } finally {
+    await env.close();
+  }
+});
+
+test("lease vencido conta falha e, após 2 falhas, a VPS pega e conclui", async () => {
+  const env = await startEnv({
+    queueOptions: { leaseMs: 400, monitorIntervalMs: 100, desktopOnlineMs: 30_000 },
+  });
+  try {
+    const sample = await makeSampleVideo(path.join(env.tempRoot, "fixtures"), 3);
+    env.mockS3.putObject(BUCKET, "titles/lease/original.mkv", sample, "video/x-matroska");
+
+    await env.worker("/worker/heartbeat", { worker_id: "pc-1", name: "Desktop" });
+    const id = await env.enqueue("titles/lease/original.mkv", "titles/lease/");
+
+    // Primeira tentativa: o Desktop pega e some
+    const claim1 = await env.worker("/worker/claim", { worker_id: "pc-1" });
+    assert.equal(claim1.status, 200);
+    const afterLost1 = await env.waitFor(id, (j) => j.status === "queued" && j.desktop_failures === 1, 5000);
+    assert.equal(afterLost1.attempts[0].result, "lost");
+    assert.ok(afterLost1.events.some((e) => e.text === "Desktop parou de responder"));
+    assert.ok(!afterLost1.events.some((e) => /Duas falhas/.test(e.text)));
+    // Continua queued: o Desktop ainda conta como online e só tem 1 falha
+    await new Promise((r) => setTimeout(r, 400));
+    assert.equal((await env.job(id)).status, "queued");
+
+    // O trabalhador antigo é avisado com 409 se tentar reportar
+    const staleProgress = await env.worker(`/worker/jobs/${id}/progress`, { worker_id: "pc-1", progress: 5 });
+    assert.equal(staleProgress.status, 409);
+
+    // Segunda tentativa: perde de novo; agora a VPS assume
+    const claim2 = await env.worker("/worker/claim", { worker_id: "pc-1" });
+    assert.equal(claim2.status, 200);
+    const final = await env.waitFor(id, (j) => j.status === "completed" || j.status === "error", 90_000);
+    assert.equal(final.status, "completed", `Falhou: ${final.error}`);
+    assert.equal(final.executor, "vps");
+    assert.equal(final.desktop_failures, 2);
+    assert.deepEqual(
+      final.attempts.map((a) => [a.executor, a.result]),
+      [
+        ["desktop", "lost"],
+        ["desktop", "lost"],
+        ["vps", "ok"],
+      ],
+    );
+    assert.deepEqual(final.attempts.map((a) => a.n), [1, 2, 3]);
+    assert.ok(final.events.some((e) => e.text === "Duas falhas no Desktop: passando para a VPS (Contabo)"));
+    assert.ok(final.events.length <= 60);
+    assert.equal(final.telemetry.phase, "done");
+    assert.ok(env.mockS3.hasObject(BUCKET, "titles/lease/master.m3u8"));
+
+    // A VPS também assume quando o Desktop cai (heartbeat vencido)
+    const workers = (await env.call("GET", "/workers")).json.workers;
+    assert.equal(workers[0].kind, "vps");
+  } finally {
+    await env.close();
+  }
+});
+
+test("VPS assume sozinha quando o Desktop fica offline (heartbeat vencido)", async () => {
+  const env = await startEnv({
+    queueOptions: { monitorIntervalMs: 100, desktopOnlineMs: 500 },
+  });
+  try {
+    const sample = await makeSampleVideo(path.join(env.tempRoot, "fixtures"), 3);
+    env.mockS3.putObject(BUCKET, "titles/offline/original.mkv", sample, "video/x-matroska");
+
+    await env.worker("/worker/heartbeat", { worker_id: "pc-1", name: "Desktop" });
+    const id = await env.enqueue("titles/offline/original.mkv", "titles/offline/");
+    assert.equal((await env.job(id)).status, "queued");
+
+    const final = await env.waitFor(id, (j) => j.status === "completed" || j.status === "error", 90_000);
+    assert.equal(final.status, "completed", `Falhou: ${final.error}`);
+    assert.equal(final.executor, "vps");
+    assert.equal(final.desktop_failures, 0);
+    assert.equal(final.attempts.length, 1);
+  } finally {
+    await env.close();
+  }
+});
+
+test("reinício recupera job do Desktop como queued sem contar falha e com evento", async () => {
+  const tempWorkdir = await fs.mkdtemp(path.join(os.tmpdir(), "pflix-transcoder-restart-"));
+  try {
+    await fs.writeFile(
+      path.join(tempWorkdir, "jobs.json"),
+      JSON.stringify({
+        version: 1,
+        jobs: [
+          {
+            id: "job-desktop",
+            status: "running",
+            progress: 30,
+            message: "x",
+            error: null,
+            bucket: "b",
+            source_key: "a/b.mkv",
+            dest_prefix: "a/",
+            crf: 20,
+            delete_source: false,
+            executor: "desktop",
+            worker_name: "Desktop",
+            worker_id: "pc-1",
+            desktop_failures: 1,
+            attempts: [
+              { n: 1, executor: "desktop", worker_name: "Desktop", encoder: "h264_amf", started_at: 1, ended_at: null, result: "running", error: null },
+            ],
+            events: [],
+            created_at: 1700000000,
+            updated_at: 1700000010,
+          },
+        ],
+      }),
+    );
+    const queue = new TranscodeQueue({ workdir: tempWorkdir, s3Client: null, autoStart: false });
+    await queue.init();
+    const job = queue.getJob("job-desktop");
+    assert.equal(job.status, "queued");
+    assert.equal(job.desktop_failures, 1);
+    assert.equal(job.attempts[0].result, "lost");
+    assert.ok(job.events.some((e) => /reiniciado/i.test(e.text)));
+    assert.equal(job.telemetry, null);
+  } finally {
+    await fs.rm(tempWorkdir, { recursive: true, force: true });
   }
 });

@@ -79,8 +79,12 @@ export function loadConfig(env = process.env) {
   const concurrency = parsePositiveInt(env.TRANSCODER_CONCURRENCY, 1, "TRANSCODER_CONCURRENCY");
   const threads = parsePositiveInt(env.TRANSCODER_THREADS, 6, "TRANSCODER_THREADS");
 
+  // Token do trabalhador remoto (Desktop). Sem ele os endpoints /worker/* respondem 404.
+  const workerToken = (env.TRANSCODER_WORKER_TOKEN ?? "").trim() || null;
+
   return {
     token,
+    workerToken,
     host,
     port,
     workdir,

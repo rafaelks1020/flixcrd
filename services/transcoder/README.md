@@ -53,11 +53,39 @@ journalctl -u pflix-transcoder -f
 | `TRANSCODER_WORKDIR` | `/var/tmp/pflix-transcoder` | Diretorio de trabalho para arquivos temporarios e persistencia da fila (`jobs.json`). |
 | `TRANSCODER_CONCURRENCY` | `1` | Numero maximo de jobs processados simultaneamente. |
 | `TRANSCODER_THREADS` | `6` | Numero de threads passadas para `-threads` do `ffmpeg` (executado com `nice -n 15`). |
+| `TRANSCODER_WORKER_TOKEN` | (vazio) | Habilita os endpoints `/worker/*` do trabalhador remoto. |
 | `S3_ENDPOINT` | `WASABI_ENDPOINT` | Endpoint HTTP/HTTPS do storage compativel com S3. |
 | `S3_REGION` | `us-east-1` (ou `WASABI_REGION`) | Regiao S3. |
 | `S3_ACCESS_KEY_ID` | `WASABI_ACCESS_KEY_ID` | Access Key do storage S3. |
 | `S3_SECRET_ACCESS_KEY` | `WASABI_SECRET_ACCESS_KEY` | Secret Key do storage S3. |
 | `S3_BUCKET_NAME` | `WASABI_BUCKET_NAME` | Bucket padrao quando omitido no corpo da requisicao. |
+
+## Trabalhador remoto (Windows com GPU)
+
+Um PC com GPU (ex.: Windows, AMD Radeon com `h264_amf`) pode puxar jobs da fila da VPS e converter localmente. A VPS só converte quando nenhum trabalhador está online (heartbeat nos últimos 30 s) ou quando o job já falhou 2 vezes no trabalhador.
+
+1. Na VPS, defina `TRANSCODER_WORKER_TOKEN` no `.env` (token diferente do `TRANSCODER_TOKEN`) e reinicie o serviço. Sem essa variável os endpoints `/worker/*` respondem `404`. O serviço precisa ser alcançável pelo PC (túnel, proxy reverso com HTTPS ou VPN).
+2. No Windows, instale Node 20+ e um `ffmpeg` com `h264_amf` (ou `h264_nvenc`/`h264_qsv`) no `PATH`.
+3. Copie esta pasta (`services/transcoder`), rode `npm install` e crie o `.env`:
+
+```env
+TRANSCODER_QUEUE_URL=https://endereco-do-transcoder
+TRANSCODER_WORKER_TOKEN=mesmo-token-da-vps
+WORKER_NAME=Desktop
+WORKER_ENCODER=auto
+S3_ENDPOINT=https://s3.us-east-1.wasabisys.com
+S3_REGION=us-east-1
+S3_ACCESS_KEY_ID=sua-access-key
+S3_SECRET_ACCESS_KEY=sua-secret-key
+```
+
+4. Rode `npm run worker` (equivale a `node src/worker.js`). Ctrl+C encerra de forma limpa e devolve o job em andamento à fila.
+
+Opcionais: `WORKER_ID` (padrão: nome do computador), `FFMPEG_PATH`, `FFPROBE_PATH`, `WORKER_ENCODER` (`auto`, `h264_amf`, `h264_nvenc`, `h264_qsv`, `libx264`; `auto` testa nvenc, amf e qsv nessa ordem), `WORKER_THREADS`, `WORKER_WORKDIR` (padrão `%TEMP%\pflix-worker`), `WORKER_GPU` (texto livre; no Windows é detectado via PowerShell se vazio), `WORKER_NICE=0` (desliga o `nice` no Linux). O bucket vem no próprio job.
+
+Endpoints (Bearer `TRANSCODER_WORKER_TOKEN`): `POST /worker/heartbeat`, `POST /worker/claim` (200 com o job ou 204), `POST /worker/jobs/:id/progress` (409 se o job não é mais deste trabalhador), `POST /worker/jobs/:id/complete`, `POST /worker/jobs/:id/fail`. Lease de 60 s sem progresso nem heartbeat conta uma falha e devolve o job à fila. `GET /workers` (Bearer `TRANSCODER_TOKEN`) lista a VPS e os trabalhadores.
+
+Os jobs públicos ganham `executor`, `worker_name`, `desktop_failures`, `attempts`, `events` (máx. 60) e `telemetry` (fase, encoder, fps, velocidade, bytes, Mbps, ETA).
 
 ## Contrato HTTP
 

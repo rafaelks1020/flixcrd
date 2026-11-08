@@ -87,12 +87,100 @@ function getStreamRotation(videoStream) {
   return 0;
 }
 
+function parseFrameRate(raw) {
+  if (typeof raw !== "string" || !raw.includes("/")) {
+    const direct = Number(raw);
+    return Number.isFinite(direct) && direct > 0 && direct < 1000 ? direct : null;
+  }
+  const [num, den] = raw.split("/").map(Number);
+  if (!Number.isFinite(num) || !Number.isFinite(den) || den <= 0) return null;
+  const value = num / den;
+  return value > 0 && value < 1000 ? value : null;
+}
+
+/**
+ * Monta o comando de uma ferramenta (ffmpeg/ffprobe), com nice apenas quando pedido e fora do Windows.
+ */
+function toolCommand(useNice, toolPath, args) {
+  if (useNice && process.platform !== "win32") {
+    return { command: "nice", args: ["-n", "15", toolPath, ...args] };
+  }
+  return { command: toolPath, args };
+}
+
+export const SUPPORTED_ENCODERS = ["libx264", "h264_amf", "h264_nvenc", "h264_qsv"];
+
+/**
+ * Argumentos de video do encoder escolhido. Encoders de GPU nao usam -preset/-crf do x264
+ * e recebem -g (GOP de 6 s na taxa de quadros da origem) para os segmentos HLS saírem certos.
+ */
+export function buildVideoEncoderArgs({ encoder = "libx264", crf, fps }) {
+  const q = Number(crf);
+  const common = ["-pix_fmt", "yuv420p", "-profile:v", "high", "-force_key_frames", "expr:gte(t,n_forced*6)"];
+  const gop = String(Math.max(1, Math.round((Number.isFinite(fps) && fps > 0 ? fps : 24) * 6)));
+
+  switch (encoder) {
+    case "libx264":
+      return [
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        String(q),
+        ...common,
+        "-sc_threshold",
+        "0",
+      ];
+    case "h264_amf":
+      return [
+        "-c:v",
+        "h264_amf",
+        "-quality",
+        "quality",
+        "-rc",
+        "cqp",
+        "-qp_i",
+        String(q),
+        "-qp_p",
+        String(q + 2),
+        "-qp_b",
+        String(q + 2),
+        ...common,
+        "-g",
+        gop,
+      ];
+    case "h264_nvenc":
+      return [
+        "-c:v",
+        "h264_nvenc",
+        "-preset",
+        "p5",
+        "-rc",
+        "vbr",
+        "-cq",
+        String(q),
+        "-b:v",
+        "0",
+        "-forced-idr",
+        "1",
+        ...common,
+        "-g",
+        gop,
+      ];
+    case "h264_qsv":
+      return ["-c:v", "h264_qsv", "-global_quality", String(q), ...common, "-g", gop];
+    default:
+      throw new Error(`Encoder de video nao suportado: ${encoder}`);
+  }
+}
+
 /**
  * Inspeciona o arquivo de midia local com ffprobe.
  */
-export async function probeMedia(filePath, signal) {
+export async function probeMedia(filePath, signal, { ffprobePath = "ffprobe" } = {}) {
   const { stdout } = await runCommand(
-    "ffprobe",
+    ffprobePath,
     ["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", filePath],
     { signal },
   );
@@ -148,6 +236,7 @@ export async function probeMedia(filePath, signal) {
     width,
     height,
     durationSec,
+    fps: parseFrameRate(videoStream.avg_frame_rate) ?? parseFrameRate(videoStream.r_frame_rate),
     videoStreamIndex: Number(videoStream.index),
     audioStreamIndex: audioStream ? Number(audioStream.index) : null,
     subtitleStreams: subtitleStreams.map((s) => ({
@@ -234,7 +323,15 @@ function buildSubtitleFilename(sub, usedNames) {
 /**
  * Converte faixas de legenda de texto embutidas para arquivos .vtt.
  */
-export async function extractTextSubtitles({ inputPath, subtitleStreams, outputDir, threads, signal }) {
+export async function extractTextSubtitles({
+  inputPath,
+  subtitleStreams,
+  outputDir,
+  threads,
+  signal,
+  ffmpegPath = "ffmpeg",
+  useNice = true,
+}) {
   if (!Array.isArray(subtitleStreams) || subtitleStreams.length === 0) {
     return [];
   }
@@ -247,27 +344,21 @@ export async function extractTextSubtitles({ inputPath, subtitleStreams, outputD
     const outPath = path.join(outputDir, fileName);
 
     try {
-      await runCommand(
-        "nice",
-        [
-          "-n",
-          "15",
-          "ffmpeg",
-          "-hide_banner",
-          "-y",
-          "-nostdin",
-          "-threads",
-          String(threads),
-          "-i",
-          inputPath,
-          "-map",
-          `0:${sub.index}`,
-          "-c:s",
-          "webvtt",
-          outPath,
-        ],
-        { signal },
-      );
+      const cmd = toolCommand(useNice, ffmpegPath, [
+        "-hide_banner",
+        "-y",
+        "-nostdin",
+        "-threads",
+        String(threads),
+        "-i",
+        inputPath,
+        "-map",
+        `0:${sub.index}`,
+        "-c:s",
+        "webvtt",
+        outPath,
+      ]);
+      await runCommand(cmd.command, cmd.args, { signal });
 
       const stat = await fs.stat(outPath).catch(() => null);
       if (stat && stat.size > 0) {
@@ -308,10 +399,10 @@ function parseOutTimeSeconds(progressBlock) {
   return null;
 }
 
-async function probeEncodedResolution(segmentPath, fallbackWidth, fallbackHeight, signal) {
+async function probeEncodedResolution(segmentPath, fallbackWidth, fallbackHeight, signal, ffprobePath = "ffprobe") {
   try {
     const { stdout } = await runCommand(
-      "ffprobe",
+      ffprobePath,
       [
         "-v",
         "quiet",
@@ -350,15 +441,17 @@ export async function transcodeRendition({
   threads,
   signal,
   onProgress,
+  encoder = "libx264",
+  fps = null,
+  ffmpegPath = "ffmpeg",
+  ffprobePath = "ffprobe",
+  useNice = true,
 }) {
   const playlistName = `${rendition.name}.m3u8`;
   const playlistPath = path.join(outputDir, playlistName);
   const segmentPattern = path.join(outputDir, `${rendition.name}_%03d.ts`);
 
   const args = [
-    "-n",
-    "15",
-    "ffmpeg",
     "-hide_banner",
     "-y",
     "-nostdin",
@@ -379,20 +472,7 @@ export async function transcodeRendition({
   args.push(
     "-vf",
     `scale=-2:${rendition.height}`,
-    "-c:v",
-    "libx264",
-    "-preset",
-    "veryfast",
-    "-crf",
-    String(crf),
-    "-pix_fmt",
-    "yuv420p",
-    "-profile:v",
-    "high",
-    "-force_key_frames",
-    "expr:gte(t,n_forced*6)",
-    "-sc_threshold",
-    "0",
+    ...buildVideoEncoderArgs({ encoder, crf, fps }),
   );
 
   if (audioStreamIndex !== null) {
@@ -421,10 +501,12 @@ export async function transcodeRendition({
   );
 
   await new Promise((resolve, reject) => {
-    const child = spawn("nice", args, {
+    const cmd = toolCommand(useNice, ffmpegPath, args);
+    const child = spawn(cmd.command, cmd.args, {
       stdio: ["ignore", "pipe", "pipe"],
     });
 
+    let lastInfo = { fps: null, speed: null, outTimeSec: null };
     let stdoutRemainder = "";
     let stderrTail = "";
     let progressFields = {};
@@ -457,14 +539,19 @@ export async function transcodeRendition({
         progressFields[k] = v;
 
         if (k === "progress") {
+          const outSec = parseOutTimeSeconds(progressFields);
+          const fpsValue = Number.parseFloat(progressFields.fps);
+          const speedValue = Number.parseFloat(String(progressFields.speed ?? "").replace(/x$/, ""));
+          lastInfo = {
+            fps: Number.isFinite(fpsValue) && fpsValue > 0 ? fpsValue : lastInfo.fps,
+            speed: Number.isFinite(speedValue) && speedValue > 0 ? speedValue : lastInfo.speed,
+            outTimeSec: outSec ?? lastInfo.outTimeSec,
+          };
           if (v === "end") {
-            onProgress?.(1);
-          } else if (durationSec > 0) {
-            const outSec = parseOutTimeSeconds(progressFields);
-            if (outSec !== null) {
-              const ratio = Math.min(0.99, Math.max(0, outSec / durationSec));
-              onProgress?.(ratio);
-            }
+            onProgress?.(1, lastInfo);
+          } else if (outSec !== null) {
+            const ratio = durationSec > 0 ? Math.min(0.99, Math.max(0, outSec / durationSec)) : null;
+            onProgress?.(ratio, lastInfo);
           }
           progressFields = {};
         }
@@ -486,7 +573,7 @@ export async function transcodeRendition({
     child.on("close", (code) => {
       if (signal) signal.removeEventListener("abort", onAbort);
       if (code === 0) {
-        onProgress?.(1);
+        onProgress?.(1, lastInfo);
         resolve();
       } else {
         const lastLines = stderrTail.trim().split("\n").slice(-6).join(" | ");
@@ -522,6 +609,7 @@ export async function transcodeRendition({
     rendition.width,
     rendition.height,
     signal,
+    ffprobePath,
   );
 
   return {

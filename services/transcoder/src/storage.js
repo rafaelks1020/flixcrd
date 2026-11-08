@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import fsPromises from "node:fs/promises";
 import path from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -59,8 +60,8 @@ export async function downloadObjectToFile({ s3, bucket, key, destPath, signal, 
   const progressStream = new Transform({
     transform(chunk, _encoding, callback) {
       downloadedBytes += chunk.length;
-      if (onProgress && totalBytes > 0) {
-        onProgress(downloadedBytes / totalBytes);
+      if (onProgress) {
+        onProgress(totalBytes > 0 ? downloadedBytes / totalBytes : null, downloadedBytes, totalBytes);
       }
       callback(null, chunk);
     },
@@ -77,7 +78,7 @@ export async function downloadObjectToFile({ s3, bucket, key, destPath, signal, 
 /**
  * Envia um arquivo local para o bucket S3 usando Upload multipart automatico quando grande.
  */
-export async function uploadFileToS3({ s3, bucket, key, filePath, signal }) {
+export async function uploadFileToS3({ s3, bucket, key, filePath, signal, onBytes }) {
   const uploader = new Upload({
     client: s3,
     params: {
@@ -90,6 +91,12 @@ export async function uploadFileToS3({ s3, bucket, key, filePath, signal }) {
     partSize: 16 * 1024 * 1024,
     leavePartsOnError: false,
   });
+
+  if (onBytes) {
+    uploader.on("httpUploadProgress", (progress) => {
+      if (typeof progress?.loaded === "number") onBytes(progress.loaded);
+    });
+  }
 
   if (signal) {
     if (signal.aborted) {
@@ -109,6 +116,20 @@ export async function uploadFileToS3({ s3, bucket, key, filePath, signal }) {
   }
 
   await uploader.done();
+}
+
+/**
+ * Soma o tamanho em bytes de uma lista de arquivos (retorna mapa nome -> bytes e o total).
+ */
+export async function sumFileSizes(dir, fileNames) {
+  const sizes = new Map();
+  let total = 0;
+  for (const name of fileNames) {
+    const st = await fsPromises.stat(path.join(dir, name));
+    sizes.set(name, st.size);
+    total += st.size;
+  }
+  return { sizes, total };
 }
 
 /**

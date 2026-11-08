@@ -1,29 +1,40 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { downloadObjectToFile, uploadFileToS3, deleteObjectFromS3 } from "./storage.js";
-import {
-  probeMedia,
-  selectRenditions,
-  extractTextSubtitles,
-  transcodeRendition,
-  writeMasterPlaylist,
-} from "./ffmpeg.js";
+import { runTranscodePipeline } from "./pipeline.js";
+import { buildTelemetry, sanitizeTelemetry } from "./telemetry.js";
+import { SERVICE_VERSION } from "./version.js";
+
+const DESKTOP_FAILURE_LIMIT = 2;
+const MAX_EVENTS = 60;
+const MAX_ATTEMPTS = 30;
+const VPS_ID = "vps";
+const VPS_NAME = "VPS (Contabo)";
 
 function nowSeconds() {
   return Date.now() / 1000;
 }
 
-function sanitizeSourceExtension(sourceKey) {
-  const ext = path.extname(sourceKey).toLowerCase();
-  if (/^\.[a-z0-9]{1,8}$/.test(ext)) {
-    return ext;
-  }
-  return ".bin";
+function cleanString(value, max) {
+  return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null;
 }
 
 export class TranscodeQueue {
-  constructor({ workdir, concurrency = 1, threads = 6, s3Client, autoStart = true }) {
+  constructor({
+    workdir,
+    concurrency = 1,
+    threads = 6,
+    s3Client,
+    autoStart = true,
+    encoder = "libx264",
+    ffmpegPath = "ffmpeg",
+    ffprobePath = "ffprobe",
+    useNice = true,
+    // Regras do trabalhador remoto (ajustaveis para testes)
+    leaseMs = 60_000,
+    desktopOnlineMs = 30_000,
+    monitorIntervalMs = 5_000,
+  }) {
     this.workdir = workdir;
     this.jobsTempRoot = path.join(workdir, "jobs");
     this.stateFilePath = path.join(workdir, "jobs.json");
@@ -31,11 +42,20 @@ export class TranscodeQueue {
     this.threads = threads;
     this.s3Client = s3Client;
     this.autoStart = autoStart;
+    this.encoder = encoder;
+    this.ffmpegPath = ffmpegPath;
+    this.ffprobePath = ffprobePath;
+    this.useNice = useNice;
+    this.leaseMs = leaseMs;
+    this.desktopOnlineMs = desktopOnlineMs;
+    this.monitorIntervalMs = monitorIntervalMs;
 
     this.jobs = new Map();
+    this.workers = new Map();
     this.activeControllers = new Map();
     this.activePromises = new Set();
     this.stopping = false;
+    this._monitorTimer = null;
     this._persistChain = Promise.resolve();
     this._lastThrottleSaveMs = 0;
   }
@@ -52,8 +72,22 @@ export class TranscodeQueue {
     await this._loadStateFromDisk();
 
     if (this.autoStart) {
+      this._monitorTimer = setInterval(() => this._tick(), this.monitorIntervalMs);
+      this._monitorTimer.unref?.();
       this._pump();
     }
+  }
+
+  _hydrate(job) {
+    job.executor = job.executor === "desktop" || job.executor === "vps" ? job.executor : null;
+    job.worker_name = typeof job.worker_name === "string" ? job.worker_name : null;
+    job.worker_id = typeof job.worker_id === "string" ? job.worker_id : null;
+    job.desktop_failures = Number.isFinite(job.desktop_failures) ? job.desktop_failures : 0;
+    job.attempts = Array.isArray(job.attempts) ? job.attempts : [];
+    job.events = Array.isArray(job.events) ? job.events : [];
+    job.telemetry = job.telemetry && typeof job.telemetry === "object" ? job.telemetry : null;
+    job.lease_at = Number.isFinite(job.lease_at) ? job.lease_at : null;
+    return job;
   }
 
   async _loadStateFromDisk() {
@@ -80,12 +114,19 @@ export class TranscodeQueue {
 
     for (const item of list) {
       if (!item || typeof item.id !== "string") continue;
-      const job = { ...item };
+      const job = this._hydrate({ ...item });
       if (job.status === "running") {
+        // Reinicio do servico nao conta como falha (nem da VPS nem do Desktop)
+        const previousExecutor = job.executor;
+        this._endAttempt(job, "lost", "Serviço reiniciado");
+        this._addEvent(job, previousExecutor, "Serviço reiniciado: job voltou para a fila");
         job.status = "queued";
         job.progress = 0;
-        job.message = "Reenfileirado apos reinicio do servico";
+        job.message = "Reenfileirado após reinício do serviço";
         job.error = null;
+        job.telemetry = null;
+        job.worker_id = null;
+        job.lease_at = null;
         job.updated_at = nowSeconds();
         recoveredCount += 1;
       }
@@ -123,6 +164,58 @@ export class TranscodeQueue {
     }
   }
 
+  // ---------------------------------------------------------------- eventos e tentativas
+
+  _addEvent(job, executor, text) {
+    job.events.push({ at: nowSeconds(), executor: executor ?? null, text });
+    if (job.events.length > MAX_EVENTS) {
+      job.events.splice(0, job.events.length - MAX_EVENTS);
+    }
+  }
+
+  _beginAttempt(job, { executor, workerName, workerId, encoder }) {
+    const now = nowSeconds();
+    const last = job.attempts[job.attempts.length - 1];
+    const n = (last?.n ?? 0) + 1;
+    job.attempts.push({
+      n,
+      executor,
+      worker_name: workerName ?? null,
+      encoder: encoder ?? null,
+      started_at: now,
+      ended_at: null,
+      result: "running",
+      error: null,
+    });
+    if (job.attempts.length > MAX_ATTEMPTS) {
+      job.attempts.splice(0, job.attempts.length - MAX_ATTEMPTS);
+    }
+    job.status = "running";
+    job.executor = executor;
+    job.worker_name = workerName ?? null;
+    job.worker_id = workerId ?? null;
+    job.progress = 0;
+    job.error = null;
+    job.telemetry = null;
+    job.lease_at = executor === "desktop" ? now : null;
+    job.updated_at = now;
+    return n;
+  }
+
+  _endAttempt(job, result, error = null) {
+    for (let i = job.attempts.length - 1; i >= 0; i -= 1) {
+      const attempt = job.attempts[i];
+      if (attempt.result === "running") {
+        attempt.result = result;
+        attempt.ended_at = nowSeconds();
+        attempt.error = error ? String(error).slice(0, 500) : null;
+        return;
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- publico
+
   toPublicJob(job) {
     return {
       id: job.id,
@@ -142,6 +235,12 @@ export class TranscodeQueue {
       subtitles: Array.isArray(job.subtitles) ? job.subtitles : [],
       created_at: job.created_at,
       updated_at: job.updated_at,
+      executor: job.executor ?? null,
+      worker_name: job.worker_name ?? null,
+      desktop_failures: job.desktop_failures ?? 0,
+      attempts: Array.isArray(job.attempts) ? job.attempts.map((a) => ({ ...a })) : [],
+      events: Array.isArray(job.events) ? job.events.map((e) => ({ ...e })) : [],
+      telemetry: job.telemetry ?? null,
     };
   }
 
@@ -156,11 +255,11 @@ export class TranscodeQueue {
   }) {
     const now = nowSeconds();
     const id = crypto.randomUUID();
-    const job = {
+    const job = this._hydrate({
       id,
       status: "queued",
       progress: 0,
-      message: "Na fila aguardando conversao",
+      message: "Na fila aguardando conversão",
       error: null,
       bucket,
       source_key: sourceKey,
@@ -173,9 +272,10 @@ export class TranscodeQueue {
       subtitles: [],
       created_at: now,
       updated_at: now,
-    };
+    });
 
     this.jobs.set(id, job);
+    this._addEvent(job, null, "Job enfileirado");
     await this._persistNow();
     console.log(`[Transcoder] Job ${id} enfileirado para ${sourceKey} -> ${destPrefix}`);
 
@@ -197,12 +297,289 @@ export class TranscodeQueue {
     return job ? this.toPublicJob(job) : null;
   }
 
+  // ---------------------------------------------------------------- trabalhadores
+
+  isDesktopOnline() {
+    const limit = nowSeconds() - this.desktopOnlineMs / 1000;
+    for (const worker of this.workers.values()) {
+      if (worker.last_seen >= limit) return true;
+    }
+    return false;
+  }
+
+  _touchWorker(workerId, info = {}) {
+    let worker = this.workers.get(workerId);
+    if (!worker) {
+      worker = {
+        id: workerId,
+        name: workerId,
+        gpu: null,
+        encoder: null,
+        version: null,
+        last_seen: 0,
+      };
+      this.workers.set(workerId, worker);
+    }
+    worker.last_seen = nowSeconds();
+    const name = cleanString(info.name, 64);
+    if (name) worker.name = name;
+    if ("gpu" in info) worker.gpu = cleanString(info.gpu, 200);
+    if ("encoder" in info) worker.encoder = cleanString(info.encoder, 40);
+    if ("version" in info) worker.version = cleanString(info.version, 40);
+    return worker;
+  }
+
+  _workerCurrentJob(workerId) {
+    for (const job of this.jobs.values()) {
+      if (job.status === "running" && job.executor === "desktop" && job.worker_id === workerId) {
+        return job;
+      }
+    }
+    return null;
+  }
+
+  _ownedJob(workerId, jobId) {
+    const job = this.jobs.get(jobId);
+    if (!job) return { job: null, owned: false };
+    const owned = job.status === "running" && job.executor === "desktop" && job.worker_id === workerId;
+    return { job, owned };
+  }
+
+  listWorkers() {
+    const now = nowSeconds();
+    const limit = now - this.desktopOnlineMs / 1000;
+
+    const vpsJob = Array.from(this.jobs.values()).find(
+      (j) => j.status === "running" && j.executor === "vps",
+    );
+    const list = [
+      {
+        id: VPS_ID,
+        name: VPS_NAME,
+        kind: "vps",
+        online: true,
+        last_seen: now,
+        gpu: null,
+        encoder: this.encoder || "libx264",
+        version: SERVICE_VERSION,
+        current_job_id: vpsJob ? vpsJob.id : null,
+      },
+    ];
+
+    const desktops = Array.from(this.workers.values()).sort((a, b) => a.name.localeCompare(b.name));
+    for (const worker of desktops) {
+      const current = this._workerCurrentJob(worker.id);
+      list.push({
+        id: worker.id,
+        name: worker.name,
+        kind: "desktop",
+        online: worker.last_seen >= limit,
+        last_seen: worker.last_seen,
+        gpu: worker.gpu,
+        encoder: worker.encoder,
+        version: worker.version,
+        current_job_id: current ? current.id : null,
+      });
+    }
+    return list;
+  }
+
+  /**
+   * Batimento do trabalhador. cancel_job = true quando o job informado nao esta mais com ele.
+   */
+  heartbeat({ workerId, name, gpu, encoder, version, jobId }) {
+    this._touchWorker(workerId, { name, gpu, encoder, version });
+    if (!jobId) return { ok: true, cancel_job: false };
+
+    const { job, owned } = this._ownedJob(workerId, jobId);
+    if (job && owned) {
+      job.lease_at = nowSeconds();
+      return { ok: true, cancel_job: false };
+    }
+    return { ok: true, cancel_job: true };
+  }
+
+  /**
+   * Entrega ao trabalhador o job queued mais antigo com menos de 2 falhas no Desktop.
+   */
+  async claimJob(workerId) {
+    const worker = this._touchWorker(workerId, {});
+    if (this.stopping) return null;
+    if (this._workerCurrentJob(workerId)) return null;
+
+    const next = Array.from(this.jobs.values())
+      .filter(
+        (j) =>
+          j.status === "queued" &&
+          !this.activeControllers.has(j.id) &&
+          j.desktop_failures < DESKTOP_FAILURE_LIMIT,
+      )
+      .sort((a, b) => a.created_at - b.created_at)[0];
+    if (!next) return null;
+
+    // Tudo sincrono ate aqui: dois claims ou a VPS nunca pegam o mesmo job.
+    const n = this._beginAttempt(next, {
+      executor: "desktop",
+      workerName: worker.name,
+      workerId,
+      encoder: worker.encoder,
+    });
+    next.message = "Desktop iniciou o job";
+    this._addEvent(next, "desktop", `Desktop pegou o job (tentativa ${n})`);
+    console.log(`[Transcoder] Job ${next.id} pego pelo trabalhador ${worker.name} (tentativa ${n}).`);
+    await this._persistNow();
+
+    return {
+      id: next.id,
+      bucket: next.bucket,
+      source_key: next.source_key,
+      dest_prefix: next.dest_prefix,
+      crf: next.crf,
+      delete_source: Boolean(next.delete_source),
+    };
+  }
+
+  /**
+   * Retorna "ok", "conflict" (job nao esta mais com o trabalhador) ou "notfound".
+   */
+  workerProgress({ workerId, jobId, progress, message, telemetry }) {
+    const { job, owned } = this._ownedJob(workerId, jobId);
+    if (!job) return "notfound";
+    if (!owned) return "conflict";
+
+    this._touchWorker(workerId, {});
+    const now = nowSeconds();
+    if (Number.isFinite(progress)) {
+      job.progress = Math.min(100, Math.max(0, progress));
+    }
+    if (typeof message === "string") {
+      job.message = message.slice(0, 300);
+    }
+    const clean = sanitizeTelemetry(telemetry);
+    if (clean) job.telemetry = clean;
+    job.lease_at = now;
+    job.updated_at = now;
+    this._persistThrottled();
+    return "ok";
+  }
+
+  async workerComplete({ workerId, jobId, renditions, subtitles }) {
+    const { job, owned } = this._ownedJob(workerId, jobId);
+    if (!job) return "notfound";
+    if (!owned) return "conflict";
+
+    this._touchWorker(workerId, {});
+    this._endAttempt(job, "ok");
+    job.status = "completed";
+    job.progress = 100;
+    job.message = "Conversão HLS concluída";
+    job.error = null;
+    job.renditions = Array.isArray(renditions) ? renditions.filter((r) => typeof r === "string") : [];
+    job.subtitles = Array.isArray(subtitles) ? subtitles : [];
+    job.telemetry = this._finalTelemetry(job, "done", "Concluído");
+    job.worker_id = null;
+    job.lease_at = null;
+    job.updated_at = nowSeconds();
+    this._addEvent(job, "desktop", "Desktop concluiu o job");
+    await this._persistNow();
+    console.log(`[Transcoder] Job ${job.id} concluído pelo trabalhador.`);
+    return "ok";
+  }
+
+  async workerFail({ workerId, jobId, error }) {
+    const { job, owned } = this._ownedJob(workerId, jobId);
+    if (!job) return "notfound";
+    if (!owned) return "conflict";
+
+    this._touchWorker(workerId, {});
+    const text = cleanString(error, 500) ?? "Erro desconhecido no Desktop";
+    this._failDesktop(job, "error", text, `Desktop falhou: ${text}`);
+    await this._persistNow();
+    return "ok";
+  }
+
+  /**
+   * Devolve o job do Desktop para a fila contando a falha. result: "error" ou "lost".
+   */
+  _failDesktop(job, result, errorText, eventText) {
+    this._endAttempt(job, result, errorText);
+    job.desktop_failures += 1;
+    job.status = "queued";
+    job.progress = 0;
+    job.message =
+      result === "lost" ? "Desktop parou de responder; aguardando nova tentativa" : `Falha no Desktop: ${errorText}`;
+    job.error = null;
+    job.telemetry = null;
+    job.worker_id = null;
+    job.lease_at = null;
+    job.updated_at = nowSeconds();
+    this._addEvent(job, "desktop", eventText);
+    if (job.desktop_failures === DESKTOP_FAILURE_LIMIT) {
+      this._addEvent(job, "desktop", "Duas falhas no Desktop: passando para a VPS (Contabo)");
+    }
+    console.warn(`[Transcoder] Job ${job.id}: ${eventText} (falhas no Desktop: ${job.desktop_failures}).`);
+  }
+
+  _finalTelemetry(job, phase, label) {
+    const base = job.telemetry && typeof job.telemetry === "object" ? job.telemetry : {};
+    const attempt = job.attempts[job.attempts.length - 1];
+    return buildTelemetry({
+      ...base,
+      phase,
+      phase_label: label,
+      eta_sec: phase === "done" ? 0 : null,
+      encoder: base.encoder ?? attempt?.encoder ?? null,
+      elapsed_sec: attempt ? nowSeconds() - attempt.started_at : base.elapsed_sec,
+      updated_at: nowSeconds(),
+    });
+  }
+
+  // ---------------------------------------------------------------- execucao na VPS
+
+  _vpsMayTake(job, desktopOnline) {
+    return !desktopOnline || job.desktop_failures >= DESKTOP_FAILURE_LIMIT;
+  }
+
+  /**
+   * Reavalia a cada intervalo: lease vencido do Desktop e job que a VPS pode assumir.
+   */
+  _tick() {
+    if (this.stopping) return;
+    const now = nowSeconds();
+    let changed = false;
+
+    for (const job of this.jobs.values()) {
+      if (job.status !== "running" || job.executor !== "desktop") continue;
+      const lastBeat = job.lease_at ?? job.updated_at;
+      if (now - lastBeat > this.leaseMs / 1000) {
+        this._failDesktop(
+          job,
+          "lost",
+          "Sem progresso nem batimento do Desktop dentro do prazo",
+          "Desktop parou de responder",
+        );
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      void this._persistNow();
+    }
+    this._pump();
+  }
+
   _pump() {
     if (this.stopping) return;
 
     while (this.activeControllers.size < this.concurrency) {
+      const desktopOnline = this.isDesktopOnline();
       const nextJob = Array.from(this.jobs.values())
-        .filter((j) => j.status === "queued" && !this.activeControllers.has(j.id))
+        .filter(
+          (j) =>
+            j.status === "queued" &&
+            !this.activeControllers.has(j.id) &&
+            this._vpsMayTake(j, desktopOnline),
+        )
         .sort((a, b) => a.created_at - b.created_at)[0];
 
       if (!nextJob) break;
@@ -210,209 +587,109 @@ export class TranscodeQueue {
       const controller = new AbortController();
       this.activeControllers.set(nextJob.id, controller);
 
-      const promise = this._executeJob(nextJob, controller.signal)
-        .finally(() => {
-          this.activeControllers.delete(nextJob.id);
-          this.activePromises.delete(promise);
-          if (!this.stopping) {
-            this._pump();
-          }
-        });
+      const promise = this._executeJob(nextJob, controller.signal).finally(() => {
+        this.activeControllers.delete(nextJob.id);
+        this.activePromises.delete(promise);
+        if (!this.stopping) {
+          this._pump();
+        }
+      });
 
       this.activePromises.add(promise);
     }
   }
 
-  _updateJobProgress(job, progress, message) {
+  _applyUpdate(job, { progress, message, telemetry }) {
+    if (job.status !== "running") return;
     job.progress = Math.min(100, Math.max(0, progress));
     if (typeof message === "string") {
       job.message = message;
     }
+    if (telemetry) job.telemetry = telemetry;
     job.updated_at = nowSeconds();
     this._persistThrottled();
   }
 
   async _executeJob(job, signal) {
     const jobDir = path.join(this.jobsTempRoot, job.id);
-    const inputDir = path.join(jobDir, "input");
-    const outputDir = path.join(jobDir, "output");
 
-    job.status = "running";
-    job.progress = 0;
+    // Marca como running de forma sincrona (antes de qualquer await) para nao haver corrida com claim.
+    const attemptNumber = this._beginAttempt(job, {
+      executor: "vps",
+      workerName: VPS_NAME,
+      workerId: VPS_ID,
+      encoder: this.encoder,
+    });
     job.message = "Iniciando download do arquivo de origem";
-    job.error = null;
-    job.updated_at = nowSeconds();
+    this._addEvent(job, "vps", `${VPS_NAME} pegou o job (tentativa ${attemptNumber})`);
     await this._persistNow();
 
-    console.log(`[Transcoder] Iniciando job ${job.id} (${job.source_key})`);
+    console.log(`[Transcoder] Iniciando job ${job.id} (${job.source_key}) na VPS`);
 
     try {
-      await fs.mkdir(inputDir, { recursive: true });
-      await fs.mkdir(outputDir, { recursive: true });
-
-      const inputExt = sanitizeSourceExtension(job.source_key);
-      const localInputPath = path.join(inputDir, `source${inputExt}`);
-
-      // 1. Download do bucket (0% -> 5%)
-      await downloadObjectToFile({
-        s3: this.s3Client,
-        bucket: job.bucket,
-        key: job.source_key,
-        destPath: localInputPath,
+      const result = await runTranscodePipeline({
+        job,
+        s3Client: this.s3Client,
+        workdir: this.jobsTempRoot,
+        threads: this.threads,
+        encoder: this.encoder,
+        ffmpegPath: this.ffmpegPath,
+        ffprobePath: this.ffprobePath,
+        useNice: this.useNice,
         signal,
-        onProgress: (ratio) => {
-          this._updateJobProgress(job, ratio * 5, "Baixando arquivo de origem");
-        },
+        onUpdate: (update) => this._applyUpdate(job, update),
       });
 
-      this._updateJobProgress(job, 5, "Analisando midia com ffprobe");
-
-      // 2. Analise com ffprobe
-      const media = await probeMedia(localInputPath, signal);
-      const renditions = selectRenditions(media.width, media.height);
-      console.log(
-        `[Transcoder] Job ${job.id}: origem ${media.width}x${media.height} (${media.durationSec.toFixed(1)}s), renditions: ${renditions.map((r) => r.name).join(", ")}`,
-      );
-
-      // 3. Extracao de legendas de texto embutidas (.vtt) quando houver (5% -> 8%)
-      let subtitleFiles = [];
-      if (media.subtitleStreams.length > 0) {
-        this._updateJobProgress(job, 6, "Convertendo legendas embutidas para WebVTT");
-        subtitleFiles = await extractTextSubtitles({
-          inputPath: localInputPath,
-          subtitleStreams: media.subtitleStreams,
-          outputDir,
-          threads: this.threads,
-          signal,
-        });
-        job.subtitles = subtitleFiles;
-      }
-
-      // 4. Conversao HLS VOD por rendition (8% -> 90%)
-      const weights = renditions.map((r) => r.height * r.height);
-      const totalWeight = weights.reduce((acc, w) => acc + w, 0) || 1;
-      let completedWeight = 0;
-      const renditionInfos = [];
-
-      for (let i = 0; i < renditions.length; i += 1) {
-        const rendition = renditions[i];
-        const weight = weights[i];
-        this._updateJobProgress(
-          job,
-          8 + (completedWeight / totalWeight) * 82,
-          `Convertendo HLS (${rendition.name})`,
-        );
-
-        const info = await transcodeRendition({
-          inputPath: localInputPath,
-          outputDir,
-          rendition,
-          videoStreamIndex: media.videoStreamIndex,
-          audioStreamIndex: media.audioStreamIndex,
-          durationSec: media.durationSec,
-          crf: job.crf,
-          threads: this.threads,
-          signal,
-          onProgress: (renditionRatio) => {
-            const combined = (completedWeight + weight * renditionRatio) / totalWeight;
-            this._updateJobProgress(
-              job,
-              8 + combined * 82,
-              `Convertendo HLS (${rendition.name})`,
-            );
-          },
-        });
-
-        completedWeight += weight;
-        renditionInfos.push(info);
-      }
-
-      // 5. Geracao do master.m3u8
-      await writeMasterPlaylist(outputDir, renditionInfos, media.audioStreamIndex !== null);
-      job.renditions = renditionInfos.map((r) => r.name);
-
-      // 6. Upload ordenado para o bucket (90% -> 99%): .ts/.vtt primeiro, variantes .m3u8 depois, master.m3u8 por ultimo
-      const allOutputFiles = await fs.readdir(outputDir);
-      const segmentsAndSubs = allOutputFiles
-        .filter((f) => !f.endsWith(".m3u8"))
-        .sort();
-      const variantPlaylists = allOutputFiles
-        .filter((f) => f.endsWith(".m3u8") && f !== "master.m3u8")
-        .sort();
-      const uploadOrder = [
-        ...segmentsAndSubs,
-        ...variantPlaylists,
-        ...(allOutputFiles.includes("master.m3u8") ? ["master.m3u8"] : []),
-      ];
-
-      const uploadedKeys = new Set();
-      for (let idx = 0; idx < uploadOrder.length; idx += 1) {
-        const fileName = uploadOrder[idx];
-        const destKey = `${job.dest_prefix}${fileName}`;
-        const localFilePath = path.join(outputDir, fileName);
-
-        this._updateJobProgress(
-          job,
-          90 + ((idx + 1) / Math.max(1, uploadOrder.length)) * 9,
-          `Enviando arquivos HLS (${idx + 1}/${uploadOrder.length})`,
-        );
-
-        await uploadFileToS3({
-          s3: this.s3Client,
-          bucket: job.bucket,
-          key: destKey,
-          filePath: localFilePath,
-          signal,
-        });
-
-        uploadedKeys.add(destKey);
-      }
-
-      // 7. Remocao opcional do arquivo original no bucket
-      if (job.delete_source && !uploadedKeys.has(job.source_key)) {
-        this._updateJobProgress(job, 99.5, "Removendo arquivo original do bucket");
-        await deleteObjectFromS3({
-          s3: this.s3Client,
-          bucket: job.bucket,
-          key: job.source_key,
-          signal,
-        });
-      }
-
+      job.renditions = result.renditions;
+      job.subtitles = result.subtitles;
+      this._endAttempt(job, "ok");
       job.status = "completed";
       job.progress = 100;
-      job.message = "Conversao HLS concluida";
+      job.message = "Conversão HLS concluída";
       job.error = null;
+      job.telemetry = this._finalTelemetry(job, "done", "Concluído");
       job.updated_at = nowSeconds();
+      this._addEvent(job, "vps", `${VPS_NAME} concluiu o job`);
       await this._persistNow();
-      console.log(`[Transcoder] Job ${job.id} concluido com sucesso.`);
+      console.log(`[Transcoder] Job ${job.id} concluído com sucesso.`);
     } catch (err) {
       if (this.stopping || signal?.aborted) {
+        this._endAttempt(job, "lost", "Interrompido no encerramento do serviço");
         job.status = "queued";
         job.progress = 0;
         job.message = "Interrompido no encerramento; aguardando retomada";
         job.error = null;
+        job.telemetry = null;
+        job.worker_id = null;
         job.updated_at = nowSeconds();
+        this._addEvent(job, "vps", "Interrompido no encerramento do serviço; job voltou para a fila");
         await this._persistNow();
-        console.log(`[Transcoder] Job ${job.id} interrompido por parada do servico e devolvido para a fila.`);
+        console.log(`[Transcoder] Job ${job.id} interrompido por parada do serviço e devolvido para a fila.`);
       } else {
-        const errMessage = err instanceof Error ? err.message : "Erro desconhecido na conversao HLS";
+        const errMessage = err instanceof Error ? err.message : "Erro desconhecido na conversão HLS";
+        this._endAttempt(job, "error", errMessage);
         job.status = "error";
         job.error = errMessage;
         job.message = errMessage;
+        job.telemetry = this._finalTelemetry(job, "error", "Erro na conversão");
         job.updated_at = nowSeconds();
+        this._addEvent(job, "vps", `${VPS_NAME} falhou: ${errMessage}`.slice(0, 600));
         await this._persistNow();
         console.error(`[Transcoder] Job ${job.id} falhou: ${errMessage}`);
       }
     } finally {
       await fs.rm(jobDir, { recursive: true, force: true }).catch((cleanErr) => {
-        console.error(`[Transcoder] Erro ao limpar diretorio temporario ${jobDir}: ${cleanErr.message}`);
+        console.error(`[Transcoder] Erro ao limpar diretório temporário ${jobDir}: ${cleanErr.message}`);
       });
     }
   }
 
   async shutdown() {
     this.stopping = true;
+    if (this._monitorTimer) {
+      clearInterval(this._monitorTimer);
+      this._monitorTimer = null;
+    }
     for (const controller of this.activeControllers.values()) {
       controller.abort();
     }
