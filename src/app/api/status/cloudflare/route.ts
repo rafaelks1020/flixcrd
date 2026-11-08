@@ -1,9 +1,16 @@
 import { storageEnv } from "@/lib/storage-config";
 import { NextResponse } from "next/server";
 
-const CLOUDFLARE_URL = storageEnv.cdnUrl || "https://hlspaelflix.top/";
+const CLOUDFLARE_URL = storageEnv.cdnUrl;
 
 export async function GET() {
+  if (!CLOUDFLARE_URL) {
+    return NextResponse.json({
+      success: true,
+      message: "Sem CDN: o vídeo sai direto do storage com link assinado",
+      url: null,
+    });
+  }
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);

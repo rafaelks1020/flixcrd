@@ -27,15 +27,15 @@ export async function GET(_req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Storage Wasabi online",
+      message: "Storage online",
       objectCount: response.KeyCount ?? 0,
     });
   } catch (error: any) {
-    console.error("[Status] Erro ao testar Wasabi:", error);
+    console.error("[Status] Erro ao testar o storage:", error);
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Erro desconhecido ao acessar Wasabi",
+        error: error.message || "Erro desconhecido ao acessar o storage",
       },
       { status: 500 },
     );
