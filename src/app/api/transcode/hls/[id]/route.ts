@@ -127,7 +127,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
 
     if (!listed.Contents || listed.Contents.length === 0) {
       return NextResponse.json(
-        { error: "Nenhum arquivo encontrado nesse prefixo no storage." },
+        { error: "Sem vídeo no storage: o upload deste título não terminou. Envie o arquivo de novo." },
         { status: 404 },
       );
     }
@@ -139,7 +139,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
 
     if (objects.length === 0) {
       return NextResponse.json(
-        { error: "O upload deste título não terminou. Envie o arquivo de novo." },
+        { error: "Sem vídeo no storage: o upload deste título não terminou. Envie o arquivo de novo." },
         { status: 404 },
       );
     }
