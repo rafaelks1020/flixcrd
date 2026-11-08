@@ -19,8 +19,10 @@ export async function GET() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    const response = await fetch(`${transcoderUrl}/health`, {
+    const token = process.env.TRANSCODER_TOKEN;
+    const response = await fetch(`${transcoderUrl.replace(/\/+$/, "")}/health`, {
       signal: controller.signal,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
 
     clearTimeout(timeoutId);
@@ -30,14 +32,14 @@ export async function GET() {
       return NextResponse.json({
         success: true,
         status: data.status || "ok",
-        url: transcoderUrl,
+        url: null,
       });
     } else {
       return NextResponse.json(
         {
           success: false,
           error: `HTTP ${response.status}`,
-          url: transcoderUrl,
+          url: null,
         },
         { status: 500 }
       );
@@ -47,7 +49,7 @@ export async function GET() {
       {
         success: false,
         error: error.name === "AbortError" ? "Timeout (5s)" : error.message || "Offline",
-        url: transcoderUrl,
+        url: null,
       },
       { status: 500 }
     );
