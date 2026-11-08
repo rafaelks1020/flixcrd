@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { wasabiClient } from "@/lib/wasabi";
 import { adminDenied } from "@/lib/require-admin";
 
+export const maxDuration = 120;
+
 const bucketName = storageEnv.bucket;
 const transcoderBaseUrl = process.env.TRANSCODER_BASE_URL;
 

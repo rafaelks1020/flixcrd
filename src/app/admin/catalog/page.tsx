@@ -957,7 +957,7 @@ export default function AdminCatalogPage() {
           </>
         )}
 
-        <BulkActions selectedIds={selectedIds} onClearSelection={() => setSelectedIds([])} onRefresh={loadTitles} />
+        <BulkActions selectedIds={selectedIds} onClearSelection={() => setSelectedIds([])} onRefresh={loadTitles} transcodeOptions={{ crf: transcodeCrf, deleteSource: deleteSourceAfterTranscode }} />
       </div>
 
       {showTitleModal && (

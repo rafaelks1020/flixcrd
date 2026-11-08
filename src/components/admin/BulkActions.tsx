@@ -7,12 +7,14 @@ interface BulkActionsProps {
   selectedIds: string[];
   onClearSelection: () => void;
   onRefresh: () => void;
+  transcodeOptions?: { crf?: number; deleteSource?: boolean };
 }
 
 export default function BulkActions({
   selectedIds,
   onClearSelection,
   onRefresh,
+  transcodeOptions,
 }: BulkActionsProps) {
   const [loading, setLoading] = useState(false);
 
@@ -43,17 +45,59 @@ export default function BulkActions({
     }
 
     setLoading(true);
-    try {
-      const promises = selectedIds.map((id) =>
-        fetch(`/api/admin/titles/${id}/transcode`, { method: "POST" })
+    const body = JSON.stringify({
+      ...(typeof transcodeOptions?.crf === "number" ? { crf: transcodeOptions.crf } : {}),
+      deleteSource: Boolean(transcodeOptions?.deleteSource),
+    });
+    const post = (url: string) =>
+      fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+
+    let queued = 0;
+    let skipped = 0;
+    const failures: string[] = [];
+
+    // Um título por vez: série chama a rota de episódios; filme cai na rota de título.
+    for (const id of selectedIds) {
+      try {
+        let res = await post(`/api/admin/titles/${id}/transcode-episodes`);
+        let data: any = await res.json().catch(() => ({}));
+        if (res.status === 400 && String(data?.error ?? "").includes("séries")) {
+          res = await post(`/api/transcode/hls/${id}`);
+          data = await res.json().catch(() => ({}));
+          if (res.ok && data?.jobId) queued += 1;
+          else failures.push(data?.error ?? `HTTP ${res.status}`);
+          continue;
+        }
+        if (!res.ok) {
+          failures.push(data?.error ?? `HTTP ${res.status}`);
+          continue;
+        }
+        queued += Array.isArray(data?.queued) ? data.queued.length : 0;
+        skipped += Array.isArray(data?.skipped) ? data.skipped.length : 0;
+        if (Array.isArray(data?.errors)) {
+          for (const e of data.errors) failures.push(e?.message ?? "erro no episódio");
+        }
+      } catch (error) {
+        failures.push(error instanceof Error ? error.message : "erro de rede");
+      }
+    }
+
+    setLoading(false);
+    if (queued > 0) {
+      toast.success(
+        `${queued} conversão(ões) na fila.${skipped ? ` ${skipped} ignorada(s).` : ""} Acompanhe em HLS Forge.`,
+        { duration: 8000 },
       );
-      await Promise.all(promises);
-      toast.success(`✅ ${selectedIds.length} job(s) de transcodificação criado(s)!`);
+    }
+    if (failures.length > 0) {
+      toast.error(`${failures.length} falha(s): ${failures[0]}`, { duration: 10000 });
+    }
+    if (queued === 0 && failures.length === 0) {
+      toast(`Nada para converter.${skipped ? ` ${skipped} ignorado(s) (já convertido ou sem arquivo).` : ""}`);
+    }
+    if (queued > 0) {
       onClearSelection();
-    } catch (error) {
-      toast.error("❌ Erro ao criar jobs");
-    } finally {
-      setLoading(false);
+      onRefresh();
     }
   }
 

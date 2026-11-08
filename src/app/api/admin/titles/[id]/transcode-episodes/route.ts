@@ -7,6 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import { wasabiClient } from "@/lib/wasabi";
 
+export const maxDuration = 300;
+
 const bucketName = storageEnv.bucket;
 const transcoderBaseUrl = process.env.TRANSCODER_BASE_URL;
 
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (!bucketName) {
       return NextResponse.json(
-        { error: "WASABI_BUCKET_NAME não configurado." },
+        { error: "S3_BUCKET_NAME não configurado." },
         { status: 500 },
       );
     }
@@ -106,7 +108,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const baseUrl = transcoderBaseUrl.replace(/\/+$/, "");
 
-    for (const ep of episodesWithPrefix) {
+    // Em paralelo (8 por vez): série com centenas de episódios estourava o tempo da função.
+    const processEpisode = async (ep: (typeof episodesWithPrefix)[number]) => {
       const prefix = ep.hlsPath!.endsWith("/") ? ep.hlsPath! : `${ep.hlsPath}/`;
 
       try {
@@ -118,16 +121,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
         const listed = await wasabiClient.send(listCmd);
         const objects = (listed.Contents ?? []).filter((obj) => obj.Key);
 
+        if (objects.some((obj) => /(^|\/)master\.m3u8$/i.test(obj.Key as string))) {
+          skipped.push({ episodeId: ep.id, reason: "Já convertido (master.m3u8 existe)." });
+          return;
+        }
+
         if (objects.length === 0) {
           skipped.push({
             episodeId: ep.id,
             reason: "Nenhum arquivo encontrado no prefixo do episódio.",
           });
-          continue;
+          return;
         }
 
         let sourceObj = objects.find((obj) =>
-          /\.(mkv|mp4|mov|webm)$/i.test(obj.Key as string),
+          /\.(mkv|mp4|mov|webm|avi|m4v|ts)$/i.test(obj.Key as string),
         );
 
         if (!sourceObj) {
@@ -142,7 +150,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             episodeId: ep.id,
             reason: "Não foi possível determinar o arquivo de origem para transcodificação.",
           });
-          continue;
+          return;
         }
 
         const sourceKey = sourceObj.Key as string;
@@ -170,7 +178,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             (transJson as any)?.error ||
             "Erro ao chamar serviço de transcodificação";
           errors.push({ episodeId: ep.id, message });
-          continue;
+          return;
         }
 
         const jobId = (transJson as any)?.job_id ?? null;
@@ -181,7 +189,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             episodeId: ep.id,
             message: "Serviço de transcodificação não retornou job_id.",
           });
-          continue;
+          return;
         }
 
         queued.push({ episodeId: ep.id, jobId, status });
@@ -191,7 +199,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
           message: err instanceof Error ? err.message : "Erro desconhecido ao enfileirar HLS.",
         });
       }
-    }
+        };
+
+    let cursor = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(8, episodesWithPrefix.length) }, async () => {
+        while (cursor < episodesWithPrefix.length) {
+          const ep = episodesWithPrefix[cursor++];
+          await processEpisode(ep);
+        }
+      }),
+    );
 
     return NextResponse.json({
       ok: true,
