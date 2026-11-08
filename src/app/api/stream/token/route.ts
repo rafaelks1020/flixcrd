@@ -1,3 +1,4 @@
+import { subscriptionRequired } from "@/lib/subscription";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthUser } from "@/lib/auth-mobile";
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
         user.Subscription.currentPeriodEnd > now,
     );
     
-    if (!isAdmin && !hasActiveSubscription) {
+    if (!isAdmin && !hasActiveSubscription && subscriptionRequired()) {
       return NextResponse.json(
         { error: "Assinatura necessária para assistir." },
         { status: 403 }

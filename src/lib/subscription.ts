@@ -6,9 +6,18 @@ import { authOptions } from "./auth";
 import { redirect } from "next/navigation";
 
 /**
- * Verifica se o usuário tem uma assinatura ativa
+ * Cobrança ligada? Com SUBSCRIPTION_REQUIRED diferente de "true", todo usuário logado
+ * (e aprovado, pelo middleware) assiste sem assinatura. Religar: SUBSCRIPTION_REQUIRED=true.
+ */
+export function subscriptionRequired(): boolean {
+  return process.env.SUBSCRIPTION_REQUIRED === "true";
+}
+
+/**
+ * Pode assistir? Assinatura ativa, ou cobrança desligada.
  */
 export async function hasActiveSubscription(userId: string): Promise<boolean> {
+  if (!subscriptionRequired()) return true;
   const subscription = await prisma.subscription.findUnique({
     where: { userId },
   });
