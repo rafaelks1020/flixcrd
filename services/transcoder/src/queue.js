@@ -35,6 +35,9 @@ export class TranscodeQueue {
     desktopOnlineMs = 30_000,
     monitorIntervalMs = 5_000,
     vpsAlwaysTake = false,
+    // Com vpsAlwaysTake: a VPS (CPU, mais lenta) só pega um job depois que ele esperou isso na fila,
+    // dando tempo das vagas livres do Desktop/Notebook (GPU, pedem trabalho a cada 5 s) pegarem antes.
+    vpsGraceMs = 15_000,
     // Chamado (sem aguardar) quando um job termina com sucesso: avisa o site para liberar no catálogo.
     onJobCompleted = null,
   }) {
@@ -53,6 +56,8 @@ export class TranscodeQueue {
     this.desktopOnlineMs = desktopOnlineMs;
     this.monitorIntervalMs = monitorIntervalMs;
     this.vpsAlwaysTake = Boolean(vpsAlwaysTake);
+    this.vpsGraceMs = Math.max(0, Number(vpsGraceMs) || 0);
+    this.startedAtMs = Date.now();
     this.onJobCompleted = typeof onJobCompleted === "function" ? onJobCompleted : null;
 
     this.jobs = new Map();
@@ -133,6 +138,7 @@ export class TranscodeQueue {
         this._endAttempt(job, "lost", "Serviço reiniciado");
         this._addEvent(job, previousExecutor, "Serviço reiniciado: job voltou para a fila");
         job.status = "queued";
+        job.queued_at = nowSeconds();
         job.progress = 0;
         job.message = "Reenfileirado após reinício do serviço";
         job.error = null;
@@ -302,6 +308,7 @@ export class TranscodeQueue {
     const job = this._hydrate({
       id,
       status: "queued",
+      queued_at: nowSeconds(),
       progress: 0,
       message: "Na fila aguardando conversão",
       error: null,
@@ -550,6 +557,7 @@ export class TranscodeQueue {
     this._endAttempt(job, result, errorText);
     job.desktop_failures += 1;
     job.status = "queued";
+    job.queued_at = nowSeconds();
     job.progress = 0;
     job.message =
       result === "lost" ? "Desktop parou de responder; aguardando nova tentativa" : `Falha no Desktop: ${errorText}`;
@@ -582,7 +590,13 @@ export class TranscodeQueue {
   // ---------------------------------------------------------------- execucao na VPS
 
   _vpsMayTake(job, desktopOnline) {
-    if (this.vpsAlwaysTake) return true;
+    if (this.vpsAlwaysTake) {
+      // Logo após iniciar, as vagas remotas ainda não se apresentaram: espera uma rodada de batimentos.
+      if (Date.now() - this.startedAtMs < this.vpsGraceMs + 10_000) return false;
+      if (!desktopOnline || job.desktop_failures >= DESKTOP_FAILURE_LIMIT) return true;
+      const waitedMs = (nowSeconds() - (job.queued_at ?? job.created_at)) * 1000;
+      return waitedMs >= this.vpsGraceMs;
+    }
     return !desktopOnline || job.desktop_failures >= DESKTOP_FAILURE_LIMIT;
   }
 
@@ -703,6 +717,7 @@ export class TranscodeQueue {
       if (this.stopping || signal?.aborted) {
         this._endAttempt(job, "lost", "Interrompido no encerramento do serviço");
         job.status = "queued";
+        job.queued_at = nowSeconds();
         job.progress = 0;
         job.message = "Interrompido no encerramento; aguardando retomada";
         job.error = null;
