@@ -74,6 +74,11 @@ export function validateSourceKey(rawKey) {
   if (key.endsWith("/")) {
     throw new ValidationError("Campo source_key deve apontar para um arquivo, nao um prefixo.");
   }
+  // Saida do proprio conversor (480p_000.ts, playlists, legendas) nunca e origem:
+  // converter um segmento sobrescreve o episodio com poucos segundos.
+  if (/(\.m3u8|\.vtt)$|(^|\/)\d{3,4}p_\d+\.ts$/i.test(key)) {
+    throw new ValidationError("Campo source_key aponta para saida HLS ja convertida, nao para o video de origem.");
+  }
   if (hasUnsafeKeyMarks(key)) {
     throw new ValidationError("Campo source_key contem caracteres ou sequencias invalidas.");
   }

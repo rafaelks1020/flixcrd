@@ -151,7 +151,7 @@ export class TranscodeQueue {
     const ordered = Array.from(this.jobs.values()).sort((a, b) => a.created_at - b.created_at);
     for (const job of ordered) {
       if (job.status !== "queued") continue;
-      const key = `${job.bucket}|${job.source_key}|${job.dest_prefix}`;
+      const key = `${job.bucket}|${job.dest_prefix}`;
       if (seen.has(key)) {
         this.jobs.delete(job.id);
         removedDuplicates += 1;
@@ -285,13 +285,12 @@ export class TranscodeQueue {
     titleId = null,
     episodeId = null,
   }) {
-    // Idempotente: o mesmo arquivo para o mesmo destino já na fila ou convertendo
-    // devolve o job existente (clicar duas vezes no admin não duplica conversão).
+    // Idempotente: um destino já na fila ou convertendo devolve o job existente
+    // (dois jobs gravando no mesmo destino se atropelam, mesmo com origens diferentes).
     for (const existing of this.jobs.values()) {
       if (
         (existing.status === "queued" || existing.status === "running") &&
         existing.bucket === bucket &&
-        existing.source_key === sourceKey &&
         existing.dest_prefix === destPrefix
       ) {
         return this.toPublicJob(existing);

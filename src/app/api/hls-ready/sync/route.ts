@@ -27,15 +27,17 @@ export async function POST(request: NextRequest) {
   }
 
   let prefix: string | undefined;
+  let deep = false;
   try {
-    const body = (await request.json()) as { prefix?: unknown };
+    const body = (await request.json()) as { prefix?: unknown; deep?: unknown };
     if (typeof body?.prefix === "string" && body.prefix.trim()) prefix = body.prefix.trim();
+    deep = body?.deep === true;
   } catch {
     // sem corpo: confere tudo
   }
 
   try {
-    const result = await syncHlsReady({ prefix });
+    const result = await syncHlsReady({ prefix, deep });
     return NextResponse.json({ ok: true, prefix: prefix ?? null, ...result });
   } catch (error) {
     console.error("POST /api/hls-ready/sync error", error);

@@ -5,6 +5,7 @@ import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/prisma";
 import { wasabiClient } from "@/lib/wasabi";
 import { adminDenied } from "@/lib/require-admin";
+import { pickSourceObject, hasConverterOutput } from "@/lib/transcode-source";
 
 export const maxDuration = 120;
 
@@ -144,21 +145,16 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       );
     }
 
-    let sourceObj = objects.find((obj) =>
-      /\.(mkv|mp4|mov|webm|avi|m4v|ts)$/i.test(obj.Key as string),
-    );
-
-    if (!sourceObj) {
-      sourceObj = objects.reduce((acc, obj) => {
-        if (!acc) return obj;
-        return (Number(obj.Size ?? 0) > Number(acc.Size ?? 0) ? obj : acc) as typeof obj;
-      }, objects[0]);
-    }
+    const sourceObj = pickSourceObject(objects);
 
     if (!sourceObj || !sourceObj.Key) {
       return NextResponse.json(
-        { error: "Não foi possível determinar o arquivo de origem para transcodificação." },
-        { status: 400 },
+        {
+          error: hasConverterOutput(objects)
+            ? "Conversão em andamento ou vídeo de origem já apagado. Envie o arquivo de novo."
+            : "Sem vídeo no storage: o upload deste título não terminou. Envie o arquivo de novo.",
+        },
+        { status: 404 },
       );
     }
 

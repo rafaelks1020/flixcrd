@@ -1,4 +1,4 @@
-import { HeadObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -33,6 +33,44 @@ async function masterExists(prefix: string): Promise<boolean> {
     // Erro de rede: não muda o estado (lança para o chamador manter o valor atual).
     throw err;
   }
+}
+
+// Abaixo disso o vídeo está quebrado (em 08/11 um episódio virou 6 s por conversão errada).
+const MIN_PLAYABLE_SECONDS = 30;
+
+async function readText(key: string): Promise<string | null> {
+  const bucket = storageEnv.bucket;
+  if (!bucket) return null;
+  try {
+    const res = await wasabiClient.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    return res.Body ? await res.Body.transformToString("utf-8") : null;
+  } catch (err: unknown) {
+    const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (e?.name === "NoSuchKey" || e?.name === "NotFound" || e?.$metadata?.httpStatusCode === 404) return null;
+    throw err;
+  }
+}
+
+/**
+ * Conferência completa: master existe, cada variante existe, termina com ENDLIST
+ * e tem duração de vídeo de verdade.
+ */
+async function isPlayable(prefix: string): Promise<boolean> {
+  const base = normalizePrefix(prefix);
+  const master = await readText(`${base}master.m3u8`);
+  if (!master) return false;
+  const variants = master
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#") && l.toLowerCase().endsWith(".m3u8"));
+  if (variants.length === 0) return false;
+  for (const v of variants) {
+    const text = await readText(`${base}${v}`);
+    if (!text || !text.includes("#EXT-X-ENDLIST")) return false;
+    const seconds = Array.from(text.matchAll(/#EXTINF:([\d.]+)/g)).reduce((s, m) => s + Number(m[1]), 0);
+    if (seconds < MIN_PLAYABLE_SECONDS) return false;
+  }
+  return true;
 }
 
 async function runLimited<T>(items: T[], worker: (item: T) => Promise<void>) {
@@ -76,7 +114,12 @@ export type HlsReadySyncResult = {
  * - prefix: confere só o que usa esse caminho (chamado pelo conversor ao terminar um job).
  * - sem prefix: confere tudo que tem hlsPath (rede de segurança periódica).
  */
-export async function syncHlsReady(opts: { prefix?: string } = {}): Promise<HlsReadySyncResult> {
+export async function syncHlsReady(opts: { prefix?: string; deep?: boolean } = {}): Promise<HlsReadySyncResult> {
+  // Quem ainda não está pronto (ou tudo, com deep/prefix) passa pela conferência completa;
+  // quem já está pronto só confirma que o master continua lá.
+  const check = (prefix: string, currentlyReady: boolean) =>
+    currentlyReady && !opts.deep && !opts.prefix ? masterExists(prefix) : isPlayable(prefix);
+
   const result: HlsReadySyncResult = { checked: 0, becameReady: 0, becameNotReady: 0, errors: 0 };
 
   const prefixFilter = opts.prefix ? normalizePrefix(opts.prefix) : null;
@@ -101,7 +144,7 @@ export async function syncHlsReady(opts: { prefix?: string } = {}): Promise<HlsR
     if (!ep.hlsPath || !ep.hlsPath.trim()) return;
     result.checked++;
     try {
-      const ready = await masterExists(ep.hlsPath);
+      const ready = await check(ep.hlsPath, ep.hlsReady);
       if (ready !== ep.hlsReady) {
         await prisma.episode.update({ where: { id: ep.id }, data: { hlsReady: ready } });
         if (ready) result.becameReady++;
@@ -117,7 +160,7 @@ export async function syncHlsReady(opts: { prefix?: string } = {}): Promise<HlsR
     if (!t.hlsPath || !t.hlsPath.trim()) return;
     result.checked++;
     try {
-      const ready = await masterExists(t.hlsPath);
+      const ready = await check(t.hlsPath, t.hlsReady);
       if (ready !== t.hlsReady) {
         await prisma.title.update({ where: { id: t.id }, data: { hlsReady: ready } });
         if (ready) result.becameReady++;

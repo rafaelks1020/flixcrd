@@ -6,6 +6,7 @@ import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import { wasabiClient } from "@/lib/wasabi";
+import { pickSourceObject, hasConverterOutput } from "@/lib/transcode-source";
 
 export const maxDuration = 300;
 
@@ -110,13 +111,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     // Fontes que já estão na fila ou convertendo: clicar de novo não duplica.
     const busySources = new Set<string>();
+    const busyPrefixes = new Set<string>();
     try {
       const jobsRes = await fetch(`${baseUrl}/jobs`, { headers: getTranscoderAuthHeaders() });
       if (jobsRes.ok) {
-        const jobs = (await jobsRes.json()) as Array<{ source_key?: string; status?: string }>;
+        const jobs = (await jobsRes.json()) as Array<{ source_key?: string; dest_prefix?: string; status?: string }>;
         for (const j of jobs) {
-          if (j.source_key && (j.status === "queued" || j.status === "running")) {
-            busySources.add(j.source_key);
+          if (j.status === "queued" || j.status === "running") {
+            if (j.source_key) busySources.add(j.source_key);
+            if (j.dest_prefix) busyPrefixes.add(j.dest_prefix);
           }
         }
       }
@@ -145,29 +148,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
           return;
         }
 
-        if (objects.length === 0) {
-          skipped.push({
-            episodeId: ep.id,
-            reason: "Upload do episódio não terminou (sem arquivo de vídeo).",
-          });
+        if (busyPrefixes.has(prefix)) {
+          skipped.push({ episodeId: ep.id, reason: "Já está na fila." });
           return;
         }
 
-        let sourceObj = objects.find((obj) =>
-          /\.(mkv|mp4|mov|webm|avi|m4v|ts)$/i.test(obj.Key as string),
-        );
-
-        if (!sourceObj) {
-          sourceObj = objects.reduce((acc, obj) => {
-            if (!acc) return obj;
-            return (Number(obj.Size ?? 0) > Number(acc.Size ?? 0) ? obj : acc) as typeof obj;
-          }, objects[0]);
-        }
+        const sourceObj = pickSourceObject(objects);
 
         if (!sourceObj || !sourceObj.Key) {
           skipped.push({
             episodeId: ep.id,
-            reason: "Não foi possível determinar o arquivo de origem para transcodificação.",
+            reason: hasConverterOutput(objects)
+              ? "Conversão em andamento ou vídeo de origem já apagado (envie o arquivo de novo)."
+              : "Upload do episódio não terminou (sem arquivo de vídeo).",
           });
           return;
         }
