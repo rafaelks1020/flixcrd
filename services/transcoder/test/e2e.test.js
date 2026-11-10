@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import { loadConfig } from "../src/config.js";
 import { createStorageClient } from "../src/storage.js";
-import { TranscodeQueue } from "../src/queue.js";
+import { TranscodeQueue, isTransientError } from "../src/queue.js";
 import { createTranscoderServer } from "../src/server.js";
 import { startMockS3Server } from "./mock-s3.js";
 import { buildVideoEncoderArgs } from "../src/ffmpeg.js";
@@ -702,10 +702,13 @@ test("claim, progress com telemetria, 409 ao perder o job e fail devolvendo à f
     assert.equal(afterFail.attempts[0].result, "error");
     assert.equal(afterFail.attempts[0].error, "GPU travou");
 
-    // Depois de falhar, o mesmo job (mais antigo) volta a ser entregue antes do B
+    assert.deepEqual(afterFail.failed_workers, ["w1"]);
+
+    // A mesma máquina não repete o job que falhou: pega o B; outra máquina pega o A
     const again = await env.worker("/worker/claim", { worker_id: "w1" });
-    assert.equal(again.json.job.id, id);
-    assert.equal((await env.job(idB)).status, "queued");
+    assert.equal(again.json.job.id, idB);
+    const other = await env.worker("/worker/claim", { worker_id: "w3" });
+    assert.equal(other.json.job.id, id);
 
     const late = await env.worker(`/worker/jobs/${id}/complete`, { worker_id: "w2", renditions: [], subtitles: [] });
     assert.equal(late.status, 409);
@@ -731,7 +734,7 @@ test("com o Desktop online a VPS não pega o job", async () => {
   }
 });
 
-test("lease vencido conta falha e, após 2 falhas, a VPS pega e conclui", async () => {
+test("lease vencido não conta falha; falha real na única máquina online passa para a VPS", async () => {
   const env = await startEnv({
     queueOptions: { leaseMs: 400, monitorIntervalMs: 100, desktopOnlineMs: 30_000 },
   });
@@ -742,48 +745,89 @@ test("lease vencido conta falha e, após 2 falhas, a VPS pega e conclui", async 
     await env.worker("/worker/heartbeat", { worker_id: "pc-1", name: "Desktop" });
     const id = await env.enqueue("titles/lease/original.mkv", "titles/lease/");
 
-    // Primeira tentativa: o Desktop pega e some
+    // Primeira tentativa: o Desktop pega e some (reinício da máquina): não é culpa do vídeo
     const claim1 = await env.worker("/worker/claim", { worker_id: "pc-1" });
     assert.equal(claim1.status, 200);
-    const afterLost1 = await env.waitFor(id, (j) => j.status === "queued" && j.desktop_failures === 1, 5000);
-    assert.equal(afterLost1.attempts[0].result, "lost");
+    const afterLost1 = await env.waitFor(id, (j) => j.status === "queued" && j.attempts.length === 1 && j.attempts[0].result === "lost", 5000);
+    assert.equal(afterLost1.desktop_failures, 0);
+    assert.equal(afterLost1.retry_at, null, "primeira perda volta na hora");
     assert.ok(afterLost1.events.some((e) => e.text === "Desktop parou de responder"));
-    assert.ok(!afterLost1.events.some((e) => /Duas falhas/.test(e.text)));
-    // Continua queued: o Desktop ainda conta como online e só tem 1 falha
     await new Promise((r) => setTimeout(r, 400));
-    assert.equal((await env.job(id)).status, "queued");
+    assert.equal((await env.job(id)).status, "queued", "Desktop online e sem falha real: VPS não pega");
 
-    // O trabalhador antigo é avisado com 409 se tentar reportar
     const staleProgress = await env.worker(`/worker/jobs/${id}/progress`, { worker_id: "pc-1", progress: 5 });
     assert.equal(staleProgress.status, 409);
 
-    // Segunda tentativa: perde de novo; agora a VPS assume
+    // Segunda tentativa: falha de verdade. Única máquina online já falhou: a VPS assume
     const claim2 = await env.worker("/worker/claim", { worker_id: "pc-1" });
     assert.equal(claim2.status, 200);
+    const fail = await env.worker(`/worker/jobs/${id}/fail`, { worker_id: "pc-1", error: "FFmpeg falhou na rendition 480p" });
+    assert.equal(fail.status, 200);
     const final = await env.waitFor(id, (j) => j.status === "completed" || j.status === "error", 90_000);
     assert.equal(final.status, "completed", `Falhou: ${final.error}`);
     assert.equal(final.executor, "vps");
-    assert.equal(final.desktop_failures, 2);
+    assert.equal(final.desktop_failures, 1);
     assert.deepEqual(
       final.attempts.map((a) => [a.executor, a.result]),
       [
         ["desktop", "lost"],
-        ["desktop", "lost"],
+        ["desktop", "error"],
         ["vps", "ok"],
       ],
     );
-    assert.deepEqual(final.attempts.map((a) => a.n), [1, 2, 3]);
-    assert.ok(final.events.some((e) => e.text === "Duas falhas no Desktop: passando para a VPS (Contabo)"));
     assert.ok(final.events.length <= 60);
     assert.equal(final.telemetry.phase, "done");
     assert.ok(env.mockS3.hasObject(BUCKET, "titles/lease/master.m3u8"));
-
-    // A VPS também assume quando o Desktop cai (heartbeat vencido)
-    const workers = (await env.call("GET", "/workers")).json.workers;
-    assert.equal(workers[0].kind, "vps");
   } finally {
     await env.close();
   }
+});
+
+test("máquina que falha 3 jobs seguidos fica de castigo e não manda jobs para a VPS", async () => {
+  const env = await startEnv({ queueOptions: { autoStart: false } });
+  try {
+    const ids = [];
+    for (const n of [1, 2, 3, 4]) ids.push(await env.enqueue(`titles/q${n}/original.mkv`, `titles/q${n}/`));
+    for (let i = 0; i < 3; i++) {
+      const c = await env.worker("/worker/claim", { worker_id: "note" });
+      assert.equal(c.json.job.id, ids[i]);
+      await env.worker(`/worker/jobs/${ids[i]}/fail`, { worker_id: "note", error: "Driver does not support the required nvenc API version" });
+    }
+    const blocked = await env.worker("/worker/claim", { worker_id: "note" });
+    assert.equal(blocked.status, 204, "em castigo não recebe job");
+    for (const id of ids.slice(0, 3)) assert.equal((await env.job(id)).desktop_failures, 1);
+    const note = (await env.call("GET", "/workers")).json.workers.find((w) => w.id === "note");
+    assert.ok(note.quarantined_until > Date.now() / 1000);
+    // Outra máquina saudável pega o job que o Notebook falhou
+    const ok = await env.worker("/worker/claim", { worker_id: "pc-2" });
+    assert.equal(ok.json.job.id, ids[0]);
+  } finally {
+    await env.close();
+  }
+});
+
+test("erro passageiro no Desktop (disco cheio) não conta falha e volta com espera", async () => {
+  const env = await startEnv({ queueOptions: { autoStart: false } });
+  try {
+    const id = await env.enqueue("titles/disco/original.mkv", "titles/disco/");
+    await env.worker("/worker/claim", { worker_id: "pc-1" });
+    await env.worker(`/worker/jobs/${id}/fail`, { worker_id: "pc-1", error: "ENOSPC: no space left on device, write" });
+    const j = await env.job(id);
+    assert.equal(j.status, "queued");
+    assert.equal(j.desktop_failures, 0);
+    assert.ok(j.retry_at > Date.now() / 1000, "tem espera antes da nova tentativa");
+    const early = await env.worker("/worker/claim", { worker_id: "pc-2" });
+    assert.equal(early.status, 204, "não entrega antes da hora");
+  } finally {
+    await env.close();
+  }
+});
+
+test("classificação de erro passageiro", () => {
+  for (const t of ["The specified bucket does not exist", "ENOSPC: no space left on device", "socket hang up", "read ECONNRESET"])
+    assert.ok(isTransientError(t), t);
+  for (const t of ["FFmpeg falhou na rendition 480p (codigo 1): Invalid data found", "UnknownError", "frame=503 fps=24"])
+    assert.ok(!isTransientError(t), t);
 });
 
 test("VPS assume sozinha quando o Desktop fica offline (heartbeat vencido)", async () => {

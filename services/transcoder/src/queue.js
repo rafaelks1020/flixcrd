@@ -10,6 +10,21 @@ const MAX_EVENTS = 60;
 const MAX_ATTEMPTS = 30;
 const VPS_ID = "vps";
 const VPS_NAME = "VPS (Contabo)";
+// Máquina que falha esse número de jobs seguidos fica de castigo (não recebe job) por um tempo.
+const WORKER_FAIL_STREAK_LIMIT = 3;
+const WORKER_QUARANTINE_SEC = 30 * 60;
+// Erro passageiro (storage fora, disco cheio, rede, máquina reiniciada) volta para a fila com espera.
+const MAX_TRANSIENT_RETRIES = 6;
+const TRANSIENT_RE =
+  /bucket does not exist|NoSuchBucket|ENOSPC|no space left|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|EPIPE|socket hang up|network|timeout|timed out|SlowDown|ServiceUnavailable|InternalError/i;
+
+export function isTransientError(text) {
+  return typeof text === "string" && TRANSIENT_RE.test(text);
+}
+
+function transientDelaySec(n) {
+  return Math.min(15 * 60, 60 * 2 ** Math.max(0, n - 1));
+}
 
 function nowSeconds() {
   return Date.now() / 1000;
@@ -104,6 +119,9 @@ export class TranscodeQueue {
     job.events = Array.isArray(job.events) ? job.events : [];
     job.telemetry = job.telemetry && typeof job.telemetry === "object" ? job.telemetry : null;
     job.lease_at = Number.isFinite(job.lease_at) ? job.lease_at : null;
+    job.failed_workers = Array.isArray(job.failed_workers) ? job.failed_workers.filter((w) => typeof w === "string") : [];
+    job.retry_at = Number.isFinite(job.retry_at) ? job.retry_at : null;
+    job.transient_retries = Number.isFinite(job.transient_retries) ? job.transient_retries : 0;
     return job;
   }
 
@@ -276,6 +294,8 @@ export class TranscodeQueue {
       executor: job.executor ?? null,
       worker_name: job.worker_name ?? null,
       desktop_failures: job.desktop_failures ?? 0,
+      retry_at: job.retry_at ?? null,
+      failed_workers: Array.isArray(job.failed_workers) ? [...job.failed_workers] : [],
       attempts: Array.isArray(job.attempts) ? job.attempts.map((a) => ({ ...a })) : [],
       events: Array.isArray(job.events) ? job.events.map((e) => ({ ...e })) : [],
       telemetry: job.telemetry ?? null,
@@ -368,6 +388,8 @@ export class TranscodeQueue {
         encoder: null,
         version: null,
         last_seen: 0,
+        fail_streak: 0,
+        quarantined_until: 0,
       };
       this.workers.set(workerId, worker);
     }
@@ -387,6 +409,25 @@ export class TranscodeQueue {
       }
     }
     return null;
+  }
+
+  _isQuarantined(worker) {
+    return Boolean(worker && worker.quarantined_until > nowSeconds());
+  }
+
+  _isDue(job) {
+    return !job.retry_at || job.retry_at <= nowSeconds();
+  }
+
+  /** Há alguma vaga remota online, fora de castigo, que ainda não falhou este job? */
+  _hasEligibleWorkerOnline(job) {
+    const limit = nowSeconds() - this.desktopOnlineMs / 1000;
+    for (const worker of this.workers.values()) {
+      if (worker.last_seen < limit || this._isQuarantined(worker)) continue;
+      if (job.failed_workers.includes(worker.id)) continue;
+      return true;
+    }
+    return false;
   }
 
   _ownedJob(workerId, jobId) {
@@ -430,6 +471,8 @@ export class TranscodeQueue {
         encoder: worker.encoder,
         version: worker.version,
         current_job_id: current ? current.id : null,
+        fail_streak: worker.fail_streak ?? 0,
+        quarantined_until: this._isQuarantined(worker) ? worker.quarantined_until : null,
       });
     }
     return list;
@@ -457,12 +500,15 @@ export class TranscodeQueue {
     const worker = this._touchWorker(workerId, {});
     if (this.stopping) return null;
     if (this._workerCurrentJob(workerId)) return null;
+    if (this._isQuarantined(worker)) return null;
 
     const next = Array.from(this.jobs.values())
       .filter(
         (j) =>
           j.status === "queued" &&
           !this.activeControllers.has(j.id) &&
+          this._isDue(j) &&
+          !j.failed_workers.includes(workerId) &&
           j.desktop_failures < DESKTOP_FAILURE_LIMIT,
       )
       .sort((a, b) => a.created_at - b.created_at)[0];
@@ -519,9 +565,11 @@ export class TranscodeQueue {
     if (!job) return "notfound";
     if (!owned) return "conflict";
 
-    this._touchWorker(workerId, {});
+    const worker = this._touchWorker(workerId, {});
+    worker.fail_streak = 0;
     this._endAttempt(job, "ok");
     job.status = "completed";
+    job.retry_at = null;
     job.progress = 100;
     job.message = "Conversão HLS concluída";
     job.error = null;
@@ -554,10 +602,35 @@ export class TranscodeQueue {
    * Devolve o job do Desktop para a fila contando a falha. result: "error" ou "lost".
    */
   _failDesktop(job, result, errorText, eventText) {
+    const now = nowSeconds();
+    const workerId = job.worker_id;
+    const worker = workerId ? this.workers.get(workerId) : null;
     this._endAttempt(job, result, errorText);
-    job.desktop_failures += 1;
+
+    // Máquina que falha seguido vai para o castigo e para de queimar a fila.
+    if (worker && result === "error") {
+      worker.fail_streak = (worker.fail_streak ?? 0) + 1;
+      if (worker.fail_streak >= WORKER_FAIL_STREAK_LIMIT && !this._isQuarantined(worker)) {
+        worker.quarantined_until = now + WORKER_QUARANTINE_SEC;
+        console.warn(
+          `[Transcoder] ${worker.name} falhou ${worker.fail_streak} jobs seguidos: sem jobs por ${WORKER_QUARANTINE_SEC / 60} min.`,
+        );
+      }
+    }
+
+    const transient = result === "lost" || isTransientError(errorText);
+    if (transient && job.transient_retries < MAX_TRANSIENT_RETRIES) {
+      // Problema do ambiente, não do vídeo: não conta como falha do job.
+      job.transient_retries += 1;
+      job.retry_at = result === "lost" && job.transient_retries === 1 ? null : now + transientDelaySec(job.transient_retries);
+    } else {
+      // Falha de verdade só conta uma vez por máquina: uma máquina quebrada sozinha não manda o job para a VPS.
+      if (workerId && !job.failed_workers.includes(workerId)) job.failed_workers.push(workerId);
+      job.desktop_failures = Math.max(job.desktop_failures, job.failed_workers.length);
+      job.retry_at = null;
+    }
     job.status = "queued";
-    job.queued_at = nowSeconds();
+    job.queued_at = now;
     job.progress = 0;
     job.message =
       result === "lost" ? "Desktop parou de responder; aguardando nova tentativa" : `Falha no Desktop: ${errorText}`;
@@ -567,8 +640,10 @@ export class TranscodeQueue {
     job.lease_at = null;
     job.updated_at = nowSeconds();
     this._addEvent(job, "desktop", eventText);
-    if (job.desktop_failures === DESKTOP_FAILURE_LIMIT) {
-      this._addEvent(job, "desktop", "Duas falhas no Desktop: passando para a VPS (Contabo)");
+    if (job.desktop_failures >= DESKTOP_FAILURE_LIMIT && !transient) {
+      this._addEvent(job, "desktop", "Falhou em duas máquinas: passando para a VPS (Contabo)");
+    } else if (job.retry_at) {
+      this._addEvent(job, "desktop", `Erro passageiro: nova tentativa em ${Math.round(job.retry_at - now)} s`);
     }
     console.warn(`[Transcoder] Job ${job.id}: ${eventText} (falhas no Desktop: ${job.desktop_failures}).`);
   }
@@ -590,14 +665,16 @@ export class TranscodeQueue {
   // ---------------------------------------------------------------- execucao na VPS
 
   _vpsMayTake(job, desktopOnline) {
+    if (!this._isDue(job)) return false;
+    const noRemote = !desktopOnline || job.desktop_failures >= DESKTOP_FAILURE_LIMIT || !this._hasEligibleWorkerOnline(job);
     if (this.vpsAlwaysTake) {
       // Logo após iniciar, as vagas remotas ainda não se apresentaram: espera uma rodada de batimentos.
       if (Date.now() - this.startedAtMs < this.vpsGraceMs + 10_000) return false;
-      if (!desktopOnline || job.desktop_failures >= DESKTOP_FAILURE_LIMIT) return true;
+      if (noRemote) return true;
       const waitedMs = (nowSeconds() - (job.queued_at ?? job.created_at)) * 1000;
       return waitedMs >= this.vpsGraceMs;
     }
-    return !desktopOnline || job.desktop_failures >= DESKTOP_FAILURE_LIMIT;
+    return noRemote;
   }
 
   /**
@@ -730,6 +807,22 @@ export class TranscodeQueue {
       } else {
         const errMessage = err instanceof Error ? err.message : "Erro desconhecido na conversão HLS";
         this._endAttempt(job, "error", errMessage);
+        if (isTransientError(errMessage) && job.transient_retries < MAX_TRANSIENT_RETRIES) {
+          job.transient_retries += 1;
+          const delay = transientDelaySec(job.transient_retries);
+          job.retry_at = nowSeconds() + delay;
+          job.status = "queued";
+          job.queued_at = nowSeconds();
+          job.progress = 0;
+          job.message = `Erro passageiro (${errMessage.slice(0, 120)}); nova tentativa em ${Math.round(delay / 60)} min`;
+          job.error = null;
+          job.telemetry = null;
+          job.updated_at = nowSeconds();
+          this._addEvent(job, "vps", `${VPS_NAME}: erro passageiro, nova tentativa em ${delay} s: ${errMessage}`.slice(0, 600));
+          await this._persistNow();
+          console.warn(`[Transcoder] Job ${job.id}: erro passageiro, nova tentativa em ${delay} s: ${errMessage}`);
+          return;
+        }
         job.status = "error";
         job.error = errMessage;
         job.message = errMessage;
